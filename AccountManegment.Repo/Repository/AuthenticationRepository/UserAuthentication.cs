@@ -197,8 +197,6 @@ namespace AccountManagement.Repository.Repository.AuthenticationRepository
             claims.Add(new Claim(JwtRegisteredClaimNames.Sub, model.UserName));
             claims.Add(new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()));
             claims.Add(new Claim("UserName", model.UserName));
-            claims.Add(new Claim("Password", model.Password));
-
             var securitykey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Configuration["Jwt:Key"]));
             var credentials = new SigningCredentials(securitykey, SecurityAlgorithms.HmacSha256);
             var token = new JwtSecurityToken(Configuration["Jwt:Issuer"], Configuration["Jwt:Audience"], claims: claims.ToArray(),

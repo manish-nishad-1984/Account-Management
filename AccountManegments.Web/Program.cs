@@ -1,4 +1,4 @@
-using AccountManegments.Web.Helper;
+﻿using AccountManegments.Web.Helper;
 using AccountManegments.Web.Models;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using System.Net;
@@ -30,11 +30,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 
 
         });
-builder.Services.ConfigureApplicationCookie(options =>
-{
-    options.Cookie.Name = "UserName";
-    options.Cookie.Expiration = TimeSpan.FromMinutes(1);
-});
+
 builder.Services.AddSession(option =>
 {
     option.IdleTimeout = TimeSpan.FromHours(8);

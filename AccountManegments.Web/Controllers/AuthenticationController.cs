@@ -198,7 +198,12 @@ namespace AccountManegments.Web.Controllers
 
                 var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
                 var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-                await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, claimsPrincipal);
+                await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, claimsPrincipal, new AuthenticationProperties
+                {
+                    IsPersistent = true, // 🔥 THIS IS THE MAIN FIX
+                    ExpiresUtc = DateTime.UtcNow.AddHours(8),
+                    AllowRefresh = true
+                });
 
                 return RedirectToAction("Index", "Home");
             }
