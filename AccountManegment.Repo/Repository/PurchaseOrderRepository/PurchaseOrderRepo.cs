@@ -22,7 +22,7 @@ using AccountManagement.DBContext.Models.ViewModels.InvoiceMaster;
 using AccountManagement.Repository.Interface.Repository.InvoiceMaster;
 using AccountManagement.Repository.Services.PurchaseOrder;
 using Azure;
-using AccountManagement.DBContext.DBContext;
+//using AccountManagement.DBContext.DBContext;
 
 namespace AccountManagement.Repository.Repository.PurchaseOrderRepository
 {

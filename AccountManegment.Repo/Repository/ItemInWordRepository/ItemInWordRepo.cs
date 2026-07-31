@@ -1,10 +1,10 @@
 ﻿using AccountManagement.API;
-using AccountManagement.DBContext.DBContext;
+//using AccountManagement.DBContext.DBContext;
 using AccountManagement.DBContext.Models.API;
 using AccountManagement.DBContext.Models.ViewModels.ItemInWord;
 using AccountManagement.DBContext.Models.ViewModels.ItemMaster;
 using AccountManagement.DBContext.Models.ViewModels.PurchaseRequest;
-using AccountManagement.Repository.Interface.Repository.IItemInWord;
+//using AccountManagement.Repository.Interface.Repository.IItemInWord;
 using AccountManagement.Repository.Interface.Repository.PurchaseOrder;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -13,6 +13,7 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
+using AccountManagement.Repository.Interface.Repository.IItemInWord;
 
 namespace AccountManagement.Repository.Repository.ItemInWordRepository
 {
