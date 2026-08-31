@@ -98,6 +98,16 @@ builder.Services.AddScoped<ISupplierInvoiceDetailsService, SupplierInvoiceDetail
 builder.Services.AddScoped<IFormMasterServices, FormMasterService>();
 builder.Services.AddScoped<ISalesInvoiceService, SalesInvoiceService>();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins("https://out.kriviinfotech.com")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
 {
@@ -153,7 +163,7 @@ builder.Services.AddSession(options =>
 builder.Services.AddEndpointsApiExplorer();
 
 var app = builder.Build();
-
+app.UseCors("AllowFrontend");
 app.UseSwagger();
 app.UseSwaggerUI(options => options.SwaggerEndpoint("/swagger/v2/swagger.json", "Account"));
 app.MapControllers();
