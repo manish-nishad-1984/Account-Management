@@ -1,6 +1,7 @@
 ﻿using AccountManegments.Web.Helper;
 using AccountManegments.Web.Models;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -40,6 +41,15 @@ builder.Services.AddSession(option =>
 });
 
 var app = builder.Build();
+
+// Honour X-Forwarded-Proto/For so that, behind a TLS-terminating reverse proxy,
+// the app knows the original request was HTTPS. Without this, UseHttpsRedirection
+// sees http:// on every proxied request and redirects in a loop.
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");

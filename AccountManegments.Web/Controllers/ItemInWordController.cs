@@ -10,6 +10,7 @@ using Aspose.Pdf.Operators;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
+using ClosedXML.Excel;
 
 namespace AccountManegments.Web.Controllers
 {
@@ -71,9 +72,103 @@ namespace AccountManegments.Web.Controllers
             }
             catch (Exception ex)
             {
-
                 return BadRequest(new { Message = $"An error occurred: {ex.Message}" });
             }
+
+
+        }
+
+        [FormPermissionAttribute("Inward Challan-View")]
+        [HttpGet]
+        public async Task<IActionResult> ExportItemInWordCsv(string? supplier, string? itemname, DateTime? startDate, DateTime? enddate, string? sortBy, Guid? SiteId)
+        {
+            try
+            {
+                Guid? siteId = string.IsNullOrEmpty(UserSession.SiteId) ? null : new Guid(UserSession.SiteId);
+                var request = new InwardListRequestModel
+                {
+                    itemname = itemname,
+                    supplier = supplier,
+                    startDate = startDate,
+                    enddate = enddate,
+                    sortBy = sortBy,
+                    siteId = siteId
+                };
+
+                ApiResponseModel res = await APIServices.PostAsync(request, "ItemInWord/GetItemInWordList");
+                if (res.code != 200)
+                {
+                    return BadRequest("Failed to retrieve data for export.");
+                }
+
+                if (res.data == null)
+                {
+                    // no data returned from API - return header-only CSV
+                    var emptySb = new System.Text.StringBuilder();
+                    emptySb.AppendLine("Item,Date,Quantity,Unit,Site,Supplier,InvoiceNo,VehicleNumber,ReceiverName,IsApproved");
+                    var emptyBytes = System.Text.Encoding.UTF8.GetPreamble().Concat(System.Text.Encoding.UTF8.GetBytes(emptySb.ToString())).ToArray();
+                    var emptyFile = $"ItemInWordExport_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+                    return File(emptyBytes, "text/csv", emptyFile);
+                }
+
+                string jsonData;
+                // res.data might be JArray/JObject or a string
+                if (res.data is string)
+                    jsonData = res.data as string;
+                else
+                    jsonData = JsonConvert.SerializeObject(res.data);
+
+                var list = JsonConvert.DeserializeObject<List<ItemInWordModel>>(jsonData ?? "[]");
+                var sb = new System.Text.StringBuilder();
+
+                // CSV Header
+                sb.AppendLine("Item,Date,Quantity,Unit,Site,Supplier,InvoiceNo,VehicleNumber,ReceiverName,IsApproved");
+
+                foreach (var r in list)
+                {
+                    string date;
+                    if (r.Date is DateTime dt && dt != default(DateTime))
+                    {
+                        date = dt.ToString("yyyy-MM-dd");
+                    }
+                    else
+                    {
+                        date = string.Empty;
+                    }
+                    var unit = r.UnitName ?? string.Empty;
+                    var site = r.SiteName ?? string.Empty;
+                    var supplierName = r.SupplierName ?? string.Empty;
+                    var invoice = r.InvoiceNo ?? string.Empty;
+                    var vehicle = r.VehicleNumber ?? string.Empty;
+                    var receiver = r.ReceiverName ?? string.Empty;
+                    var isApproved = r.IsApproved.HasValue && r.IsApproved.Value ? "Yes" : "No";
+
+                    // Escape commas and quotes
+                    string Escape(string s) => string.IsNullOrEmpty(s) ? "" : '"' + s.Replace("\"", "\"\"") + '"';
+
+                    sb.AppendLine(string.Join(",", new[] {
+                        Escape(r.Item ?? string.Empty),
+                        Escape(date),
+                        Escape(r.Quantity.ToString()),
+                        Escape(unit),
+                        Escape(site),
+                        Escape(supplierName),
+                        Escape(invoice),
+                        Escape(vehicle),
+                        Escape(receiver),
+                        Escape(isApproved)
+                    }));
+                }
+
+                var csvBytes = System.Text.Encoding.UTF8.GetPreamble().Concat(System.Text.Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+                var fileName = $"ItemInWordExport_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+                return File(csvBytes, "text/csv", fileName);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = ex.Message });
+            }
+
         }
 
         [FormPermissionAttribute("Inward Challan-Add")]

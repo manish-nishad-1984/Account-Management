@@ -1,4 +1,5 @@
 ﻿using AccountManagement.API;
+using AccountManagement.Repository.Domain;
 using AccountManagement.DBContext.Models.ViewModels.InvoiceMaster;
 using AccountManagement.DBContext.Models.ViewModels.SalesMaster;
 using AccountManagement.DBContext.Models.API;
@@ -40,7 +41,7 @@ namespace AccountManagement.Repository.Repository.SalesRepository
                         .FirstOrDefault();
 
                     var currentDate = DateTime.Now;
-                    int currentYear = currentDate.Month > 4 ? currentDate.Year + 1 : currentDate.Year;
+                    int currentYear = FinancialYear.CurrentAsProduced(currentDate).EndYear;
                     int lastYear = currentYear - 1;
 
                     string SalesInvoiceId;

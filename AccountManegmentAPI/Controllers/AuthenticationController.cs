@@ -32,14 +32,21 @@ namespace AccountManagement.API.Controllers
                 if (result != null && result.Data != null)
                 {
                     var token = Authentication.GenerateToken(login);
-                    loginresponsemodel.Code = (int)HttpStatusCode.OK;
+                    // preserve service status code/message when available
+                    loginresponsemodel.Code = result.Code != 0 ? result.Code : (int)HttpStatusCode.OK;
                     loginresponsemodel.Data = result.Data;
                     loginresponsemodel.Message = result.Message;
                 }
+                else if (result != null)
+                {
+                    // preserve service-provided failure code and message
+                    loginresponsemodel.Message = result.Message;
+                    loginresponsemodel.Code = result.Code != 0 ? result.Code : (int)HttpStatusCode.NotFound;
+                }
                 else
                 {
-                    loginresponsemodel.Message = result.Message;
-                    loginresponsemodel.Code = (int)HttpStatusCode.NotFound;
+                    loginresponsemodel.Message = "Authentication service returned no result.";
+                    loginresponsemodel.Code = (int)HttpStatusCode.InternalServerError;
                 }
             }
             catch (Exception ex)

@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, NewDev2 ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore AccountManagement.sln
+
+      - name: Build
+        run: dotnet build AccountManagement.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test AccountManagement.sln --configuration Release --no-build --verbosity normal
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  node:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: node
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install
+        run: npm ci
+
+      # apps/api resolves @accountmanagement/domain types from its dist output,
+      # so the domain package must be built before anything is typechecked.
+      - name: Build
+        run: npm run --workspaces --if-present build
+
+      - name: Typecheck
+        run: npm run --workspaces --if-present typecheck
+
+      - name: Test
+        run: npm run --workspaces --if-present test

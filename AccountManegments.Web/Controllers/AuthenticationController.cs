@@ -209,7 +209,9 @@ namespace AccountManegments.Web.Controllers
             }
             catch (Exception ex)
             {
-                ViewBag.LoginError = "Login failed due to an unexpected error.";
+                Console.WriteLine(ex.ToString());
+
+                ViewBag.LoginError = ex.Message;
                 return View(login);
             }
         }
