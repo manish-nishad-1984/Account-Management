@@ -23,7 +23,16 @@ interface AuthState {
   logout: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthState | null>(null);
+/**
+ * Exported so a test can supply a signed-in user directly.
+ *
+ * The provider deliberately has no way to seed one — the token lives in a ref
+ * and only `login` sets it — which is right for production and leaves screens
+ * whose UI depends on `usePermission` untestable. Supplying the context value is
+ * better than a test-only prop on the provider, and better than mocking
+ * `lib/permissions`, which would stub the very thing some of those tests assert.
+ */
+export const AuthContext = createContext<AuthState | null>(null);
 
 /**
  * Holds the access token IN MEMORY only.

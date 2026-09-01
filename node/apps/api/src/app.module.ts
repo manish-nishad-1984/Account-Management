@@ -12,6 +12,8 @@ import { UsersModule } from "./modules/users/users.module";
 import { CompaniesModule } from "./modules/companies/companies.module";
 import { SitesModule } from "./modules/sites/sites.module";
 import { SiteGroupsModule } from "./modules/site-groups/site-groups.module";
+import { SuppliersModule } from "./modules/suppliers/suppliers.module";
+import { ItemsModule } from "./modules/items/items.module";
 
 const env = loadEnv();
 
@@ -33,6 +35,8 @@ const env = loadEnv();
     CompaniesModule,
     SitesModule,
     SiteGroupsModule,
+    SuppliersModule,
+    ItemsModule,
   ],
   providers: [
     // Order matters: authenticate, then authorise.

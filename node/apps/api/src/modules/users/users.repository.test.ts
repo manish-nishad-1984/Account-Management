@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { listQuerySchema } from "@accountmanagement/contracts";
 import { UsersRepository } from "./users.repository";
+import { PasswordService } from "../auth/password.service";
 import * as schema from "../../db/schema";
 import { freshDatabase } from "../../test/fresh-database";
 import type { Database } from "../../db/database";
@@ -13,7 +14,7 @@ describe("UsersRepository — keyset pagination (real PostgreSQL)", () => {
 
   beforeEach(async () => {
     db = await freshDatabase();
-    repo = new UsersRepository(db);
+    repo = new UsersRepository(db, new PasswordService());
 
     // 25 users, deliberately including duplicate last names so the tiebreaker
     // actually gets exercised.

@@ -1,13 +1,47 @@
-import { Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
+import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, count, eq, ilike, or, sql } from "drizzle-orm";
-import type { ListQuery, SortDirection } from "@accountmanagement/contracts";
+import type {
+  CreateSite,
+  ListQuery,
+  SiteDetail,
+  SortDirection,
+  UpdateSite,
+} from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
 import { siteGroupSites, sites, userSites } from "../../db/schema";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
+import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
+import { writing } from "../../common/db-errors";
 
 const SORTABLE = {
   name: sites.name,
   createdAt: sites.createdAt,
+} as const;
+
+/**
+ * The detail projection. `company_id` is absent on purpose: there is no
+ * Company-to-Site relationship in the source schema, the column was invented by
+ * an earlier session, and nothing derives it from production data. Exposing it
+ * would let a form write a relationship the business has never confirmed exists.
+ */
+const DETAIL_COLUMNS = {
+  id: sites.id,
+  name: sites.name,
+  isActive: sites.isActive,
+  contactPersonName: sites.contactPersonName,
+  contactPersonPhoneNo: sites.contactPersonPhoneNo,
+  address: sites.address,
+  area: sites.area,
+  cityId: sites.cityId,
+  stateId: sites.stateId,
+  countryId: sites.countryId,
+  pincode: sites.pincode,
+  shippingAddress: sites.shippingAddress,
+  shippingArea: sites.shippingArea,
+  shippingCityId: sites.shippingCityId,
+  shippingStateId: sites.shippingStateId,
+  shippingCountryId: sites.shippingCountryId,
+  shippingPincode: sites.shippingPincode,
 } as const;
 
 export type SiteSortKey = keyof typeof SORTABLE;
@@ -25,16 +59,9 @@ export interface SiteListRow {
 }
 
 @Injectable()
-export class SitesRepository {
-  constructor(@Inject(DATABASE) private readonly injected: Database | null) {}
-
-  private get db(): Database {
-    if (!this.injected) {
-      throw new ServiceUnavailableException(
-        "No database is configured. Set DATABASE_URL to use this endpoint.",
-      );
-    }
-    return this.injected;
+export class SitesRepository extends BaseRepository {
+  constructor(@Inject(DATABASE) database: Database | null) {
+    super(database);
   }
 
   private searchFilter(search: string | undefined) {
@@ -117,5 +144,98 @@ export class SitesRepository {
     }
     const [row] = await this.db.select({ value: count() }).from(sites).where(and(...filters));
     return row?.value ?? 0;
+  }
+
+  /** One site, or 404. A soft-deleted site is a 404, not a hidden but editable row. */
+  async findById(id: string): Promise<SiteDetail> {
+    const [row] = await this.db
+      .select(DETAIL_COLUMNS)
+      .from(sites)
+      .where(and(eq(sites.id, id), eq(sites.isDeleted, false)))
+      .limit(1);
+
+    if (!row) {
+      throw new NotFoundException("Site not found");
+    }
+    return row;
+  }
+
+  async create(input: CreateSite, actorId: string): Promise<SiteDetail> {
+    const [row] = await writing(() =>
+      this.db
+        .insert(sites)
+        .values({ ...input, ...createdBy(actorId) })
+        .returning(DETAIL_COLUMNS),
+    );
+    return row!;
+  }
+
+  async update(id: string, input: UpdateSite, actorId: string): Promise<SiteDetail> {
+    const [row] = await writing(() =>
+      this.db
+        .update(sites)
+        .set({ ...input, ...updatedBy(actorId) })
+        .where(and(eq(sites.id, id), eq(sites.isDeleted, false)))
+        .returning(DETAIL_COLUMNS),
+    );
+
+    if (!row) {
+      throw new NotFoundException("Site not found");
+    }
+    return row;
+  }
+
+  /**
+   * Soft delete, refused while anything still points at the site.
+   *
+   * Two references matter and neither is cleaned up by a soft delete, because a
+   * soft delete fires no cascade:
+   *
+   *  - `user_sites` — the assignments would survive and every affected user's
+   *    access token would keep carrying the id in `siteIds`, which is what site
+   *    scoping is read from.
+   *  - `site_group_sites` — the group would keep a member no screen can show,
+   *    and site groups are read-only in this app (only `Group-View` exists), so
+   *    nobody could remove it afterwards even if they noticed.
+   *
+   * Both counts are gathered before refusing, so the message can say what is
+   * actually in the way rather than making the user rediscover it one at a time.
+   */
+  async remove(id: string, actorId: string): Promise<void> {
+    const [[assignedUsers], [memberOfGroups]] = await Promise.all([
+      this.db.select({ value: count() }).from(userSites).where(eq(userSites.siteId, id)),
+      this.db
+        .select({ value: count() })
+        .from(siteGroupSites)
+        .where(eq(siteGroupSites.siteId, id)),
+    ]);
+
+    const blockers: string[] = [];
+    const users = assignedUsers?.value ?? 0;
+    const groups = memberOfGroups?.value ?? 0;
+    if (users > 0) {
+      blockers.push(`${users} assigned ${users === 1 ? "user" : "users"}`);
+    }
+    if (groups > 0) {
+      blockers.push(`${groups} site ${groups === 1 ? "group" : "groups"}`);
+    }
+
+    if (blockers.length > 0) {
+      throw new ConflictException(
+        `This site still has ${blockers.join(" and ")}. Detach ${
+          blockers.length === 1 ? "it" : "them"
+        } before deleting it.`,
+      );
+    }
+
+    const [row] = await this.db
+      .update(sites)
+      .set({ isDeleted: true, ...updatedBy(actorId) })
+      .where(and(eq(sites.id, id), eq(sites.isDeleted, false)))
+      .returning({ id: sites.id });
+
+    if (!row) {
+      throw new NotFoundException("Site not found");
+    }
   }
 }

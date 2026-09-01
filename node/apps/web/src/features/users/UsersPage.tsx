@@ -1,38 +1,21 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import {
-  DEFAULT_PAGE_SIZE,
-  USER_SORT_FIELDS,
-  type SortDirection,
-  type UserRow,
-} from "@accountmanagement/contracts";
-import { Pencil, Plus, Trash2 } from "lucide-react";
-import { DataGrid } from "../../components/DataGrid";
-import { Badge, Button, PageHeader } from "../../components/ui";
-import { useUserList } from "./api";
-import { ApiError } from "../../lib/api-client";
+import { USER_SORT_FIELDS, type UserRow } from "@accountmanagement/contracts";
+import { Plus } from "lucide-react";
+import { DataGrid, RowActions } from "../../components/DataGrid";
+import { Badge, Button, ConfirmDialog, PageHeader } from "../../components/ui";
+import { useDeleteUser, useUserList } from "./api";
+import { UserFormDialog } from "./UserFormDialog";
 import { usePermission } from "../../lib/permissions";
+import { useMasterScreen } from "../../lib/use-master-screen";
 
 export function UsersPage() {
-  const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<string>("userName");
-  const [sortDir, setSortDir] = useState<SortDirection>("asc");
   const canAdd = usePermission("user", "add");
+  const screen = useMasterScreen<UserRow>({ defaultSortBy: "userName" });
+  const query = useUserList(screen.listParams);
+  const remove = useDeleteUser();
 
-  // Cursors are a stack: each page pushes the cursor that produced it, so
-  // "Previous" pops rather than re-querying from the start.
-  const [cursors, setCursors] = useState<string[]>([]);
-  const cursor = cursors[cursors.length - 1];
-
-  const query = useUserList({
-    limit: DEFAULT_PAGE_SIZE,
-    cursor,
-    sortBy,
-    sortDir,
-    search: search.trim() || undefined,
-  });
-
-  const resetPaging = () => setCursors([]);
+  const { openEdit, askDelete } = screen;
 
   const columns = useMemo<ColumnDef<UserRow, unknown>[]>(
     () => [
@@ -63,7 +46,11 @@ export function UsersPage() {
       {
         id: "siteCount",
         header: "Sites",
-        cell: ({ row }) => <span className="tabular inline-flex min-w-6 justify-center rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">{row.original.siteCount}</span>,
+        cell: ({ row }) => (
+          <span className="tabular inline-flex min-w-6 justify-center rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">
+            {row.original.siteCount}
+          </span>
+        ),
       },
       {
         id: "status",
@@ -76,7 +63,7 @@ export function UsersPage() {
             {row.original.passwordIsLegacy && (
               <Badge
                 tone="warning"
-                title="Password is still the plaintext value migrated from SQL Server. It is hashed automatically the next time this user signs in."
+                title="Password is still the plaintext value migrated from SQL Server. It is hashed on this user's next successful sign-in, or when an administrator sets a new one."
               >
                 Legacy password
               </Badge>
@@ -88,22 +75,16 @@ export function UsersPage() {
         id: "actions",
         header: "",
         cell: ({ row }) => (
-          <div className="flex justify-end gap-1">
-            {row.original.capabilities.canEdit && (
-              <Button variant="ghost" icon={Pencil} className="px-2 py-1 text-xs" aria-label={`Edit ${row.original.userName}`}>
-                Edit
-              </Button>
-            )}
-            {row.original.capabilities.canDelete && (
-              <Button variant="ghost" icon={Trash2} className="px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700" aria-label={`Delete ${row.original.userName}`}>
-                Delete
-              </Button>
-            )}
-          </div>
+          <RowActions
+            capabilities={row.original.capabilities}
+            label={row.original.userName}
+            onEdit={() => openEdit(row.original.id)}
+            onDelete={() => askDelete(row.original)}
+          />
         ),
       },
     ],
-    [],
+    [openEdit, askDelete],
   );
 
   return (
@@ -111,44 +92,54 @@ export function UsersPage() {
       <PageHeader
         title="Users"
         description="System users, their sites and permissions"
-        actions={canAdd ? <Button icon={Plus}>Add user</Button> : undefined}
+        actions={
+          canAdd ? (
+            <Button icon={Plus} onClick={screen.openCreate}>
+              Add user
+            </Button>
+          ) : undefined
+        }
       />
 
       <DataGrid<UserRow>
         columns={columns}
-        rows={query.data?.rows ?? []}
-        total={query.data?.total ?? null}
-        isLoading={query.isLoading}
         searchPlaceholder="Search name, username or email"
-        error={
-          query.error
-            ? query.error instanceof ApiError
-              ? query.error.message
-              : "Could not load users"
-            : null
-        }
-        search={search}
-        onSearchChange={(value) => {
-          setSearch(value);
-          resetPaging();
-        }}
-        sortBy={sortBy}
-        sortDir={sortDir}
         sortableFields={USER_SORT_FIELDS}
-        onSortChange={(field, direction) => {
-          setSortBy(field);
-          setSortDir(direction);
-          resetPaging();
-        }}
-        pageIndex={cursors.length}
-        canGoBack={cursors.length > 0}
-        canGoForward={Boolean(query.data?.nextCursor)}
-        onPrevious={() => setCursors((stack) => stack.slice(0, -1))}
-        onNext={() => {
-          const next = query.data?.nextCursor;
-          if (next) setCursors((stack) => [...stack, next]);
-        }}
         emptyMessage="No users match this search"
+        {...screen.gridProps(query)}
+      />
+
+      <UserFormDialog
+        open={screen.isFormOpen}
+        userId={screen.editingId}
+        onClose={screen.closeForm}
+      />
+
+      <ConfirmDialog
+        open={screen.deleteTarget !== null}
+        onClose={screen.cancelDelete}
+        onConfirm={() => screen.runDelete(remove.mutateAsync)}
+        pending={remove.isPending}
+        error={screen.deleteError}
+        title="Delete user"
+        body={
+          <>
+            <p>
+              Delete{" "}
+              <span className="font-medium text-slate-900">{screen.deleteTarget?.userName}</span>?
+            </p>
+            {/*
+              Say that sign-out is not immediate. A soft delete revokes the
+              refresh token, but an access token already issued runs to expiry —
+              that is the accepted cost of stateless auth, and it is better said
+              here than discovered.
+            */}
+            <p className="mt-2 text-xs text-slate-500">
+              The account is deactivated and hidden, and its refresh tokens are
+              revoked. An access token already issued stays valid until it expires.
+            </p>
+          </>
+        }
       />
     </>
   );

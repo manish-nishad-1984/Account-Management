@@ -239,10 +239,13 @@ export function Alert({
   children,
   tone = "danger",
   icon: Icon,
+  className,
 }: {
   children: ReactNode;
   tone?: Tone;
   icon?: LucideIcon;
+  /** For grid placement — an Alert inside a two-column FormSection spans both. */
+  className?: string;
 }) {
   return (
     <div
@@ -250,6 +253,7 @@ export function Alert({
       className={clsx(
         "flex items-start gap-2 rounded-lg px-3 py-2.5 text-sm ring-1 ring-inset",
         BADGE_STYLES[tone],
+        className,
       )}
     >
       {Icon && <Icon aria-hidden className="mt-0.5 size-4 shrink-0" />}
@@ -257,3 +261,16 @@ export function Alert({
     </div>
   );
 }
+
+// The dialog and form controls live in their own files — this module is already
+// long — but re-exported here so screens import from one place.
+export { Modal } from "./Modal";
+export { FormDialog } from "./FormDialog";
+export { ConfirmDialog } from "./ConfirmDialog";
+export {
+  SelectField,
+  TextAreaField,
+  CheckboxField,
+  MultiSelectField,
+  FormSection,
+} from "./fields";

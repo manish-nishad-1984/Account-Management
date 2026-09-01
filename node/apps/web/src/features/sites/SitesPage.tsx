@@ -1,38 +1,23 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import {
-  DEFAULT_PAGE_SIZE,
-  SITE_SORT_FIELDS,
-  type SiteRow,
-  type SortDirection,
-} from "@accountmanagement/contracts";
-import { Pencil, Plus, Trash2 } from "lucide-react";
-import { DataGrid } from "../../components/DataGrid";
-import { Badge, Button, PageHeader } from "../../components/ui";
-import { useSiteList } from "./api";
-import { ApiError } from "../../lib/api-client";
+import { SITE_SORT_FIELDS, type SiteRow } from "@accountmanagement/contracts";
+import { Plus } from "lucide-react";
+import { DataGrid, RowActions } from "../../components/DataGrid";
+import { Badge, Button, ConfirmDialog, PageHeader } from "../../components/ui";
+import { useDeleteSite, useSiteList } from "./api";
+import { SiteFormDialog } from "./SiteFormDialog";
 import { usePermission } from "../../lib/permissions";
+import { useMasterScreen } from "../../lib/use-master-screen";
 
 const Absent = () => <span className="text-slate-300">—</span>;
 
 export function SitesPage() {
-  const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<string>("name");
-  const [sortDir, setSortDir] = useState<SortDirection>("asc");
   const canAdd = usePermission("site", "add");
+  const screen = useMasterScreen<SiteRow>({ defaultSortBy: "name" });
+  const query = useSiteList(screen.listParams);
+  const remove = useDeleteSite();
 
-  const [cursors, setCursors] = useState<string[]>([]);
-  const cursor = cursors[cursors.length - 1];
-
-  const query = useSiteList({
-    limit: DEFAULT_PAGE_SIZE,
-    cursor,
-    sortBy,
-    sortDir,
-    search: search.trim() || undefined,
-  });
-
-  const resetPaging = () => setCursors([]);
+  const { openEdit, askDelete } = screen;
 
   const columns = useMemo<ColumnDef<SiteRow, unknown>[]>(
     () => [
@@ -108,32 +93,16 @@ export function SitesPage() {
         id: "actions",
         header: "",
         cell: ({ row }) => (
-          <div className="flex justify-end gap-1">
-            {row.original.capabilities.canEdit && (
-              <Button
-                variant="ghost"
-                icon={Pencil}
-                className="px-2 py-1 text-xs"
-                aria-label={`Edit ${row.original.name}`}
-              >
-                Edit
-              </Button>
-            )}
-            {row.original.capabilities.canDelete && (
-              <Button
-                variant="ghost"
-                icon={Trash2}
-                className="px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                aria-label={`Delete ${row.original.name}`}
-              >
-                Delete
-              </Button>
-            )}
-          </div>
+          <RowActions
+            capabilities={row.original.capabilities}
+            label={row.original.name}
+            onEdit={() => openEdit(row.original.id)}
+            onDelete={() => askDelete(row.original)}
+          />
         ),
       },
     ],
-    [],
+    [openEdit, askDelete],
   );
 
   return (
@@ -141,44 +110,53 @@ export function SitesPage() {
       <PageHeader
         title="Sites"
         description="Project sites, their contacts and the groups they belong to"
-        actions={canAdd ? <Button icon={Plus}>Add site</Button> : undefined}
+        actions={
+          canAdd ? (
+            <Button icon={Plus} onClick={screen.openCreate}>
+              Add site
+            </Button>
+          ) : undefined
+        }
       />
 
       <DataGrid<SiteRow>
         columns={columns}
-        rows={query.data?.rows ?? []}
-        total={query.data?.total ?? null}
-        isLoading={query.isLoading}
         searchPlaceholder="Search site, area or contact"
-        error={
-          query.error
-            ? query.error instanceof ApiError
-              ? query.error.message
-              : "Could not load sites"
-            : null
-        }
-        search={search}
-        onSearchChange={(value) => {
-          setSearch(value);
-          resetPaging();
-        }}
-        sortBy={sortBy}
-        sortDir={sortDir}
         sortableFields={SITE_SORT_FIELDS}
-        onSortChange={(field, direction) => {
-          setSortBy(field);
-          setSortDir(direction);
-          resetPaging();
-        }}
-        pageIndex={cursors.length}
-        canGoBack={cursors.length > 0}
-        canGoForward={Boolean(query.data?.nextCursor)}
-        onPrevious={() => setCursors((stack) => stack.slice(0, -1))}
-        onNext={() => {
-          const next = query.data?.nextCursor;
-          if (next) setCursors((stack) => [...stack, next]);
-        }}
         emptyMessage="No sites match this search"
+        {...screen.gridProps(query)}
+      />
+
+      <SiteFormDialog
+        open={screen.isFormOpen}
+        siteId={screen.editingId}
+        onClose={screen.closeForm}
+      />
+
+      <ConfirmDialog
+        open={screen.deleteTarget !== null}
+        onClose={screen.cancelDelete}
+        onConfirm={() => screen.runDelete(remove.mutateAsync)}
+        pending={remove.isPending}
+        error={screen.deleteError}
+        title="Delete site"
+        body={
+          <>
+            <p>
+              Delete <span className="font-medium text-slate-900">{screen.deleteTarget?.name}</span>?
+            </p>
+            {/*
+              Worth stating up front: this delete is refused outright while users
+              are assigned or the site belongs to a group, and site groups are
+              read-only in this app, so a group membership has to be cleared in
+              the database rather than on a screen.
+            */}
+            <p className="mt-2 text-xs text-slate-500">
+              The site is marked deleted and hidden from every list. It is refused
+              while users are assigned to it, or while it belongs to a site group.
+            </p>
+          </>
+        }
       />
     </>
   );

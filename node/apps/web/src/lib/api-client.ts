@@ -28,22 +28,26 @@ export const setAccessTokenProvider = (provider: () => string | null) => {
 };
 
 interface RequestOptions<T> {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   schema: z.ZodType<T>;
   signal?: AbortSignal;
 }
 
-export async function apiRequest<T>(path: string, options: RequestOptions<T>): Promise<T> {
+/** The one place a failed response becomes an ApiError, shared by both helpers. */
+async function send(
+  path: string,
+  init: { method: string; body?: unknown; signal?: AbortSignal },
+): Promise<Response> {
   const token = accessTokenProvider();
   const response = await fetch(`${BASE}${path}`, {
-    method: options.method ?? "GET",
+    method: init.method,
     headers: {
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(init.body ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-    signal: options.signal,
+    body: init.body ? JSON.stringify(init.body) : undefined,
+    signal: init.signal,
   });
 
   if (!response.ok) {
@@ -55,9 +59,30 @@ export async function apiRequest<T>(path: string, options: RequestOptions<T>): P
     );
   }
 
+  return response;
+}
+
+export async function apiRequest<T>(path: string, options: RequestOptions<T>): Promise<T> {
+  const response = await send(path, {
+    method: options.method ?? "GET",
+    body: options.body,
+    signal: options.signal,
+  });
+
   if (response.status === 204) {
     return options.schema.parse(undefined);
   }
 
   return options.schema.parse(await response.json());
+}
+
+/**
+ * A DELETE, which answers 204 with no body.
+ *
+ * Separate from `apiRequest` because that helper's schema is mandatory, and
+ * making every delete pass `z.void()` to describe "there is nothing here" is
+ * ceremony that hides what the call does. The error handling is shared.
+ */
+export async function deleteRequest(path: string): Promise<void> {
+  await send(path, { method: "DELETE" });
 }

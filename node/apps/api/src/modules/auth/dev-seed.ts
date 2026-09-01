@@ -5,10 +5,13 @@ import { DATABASE, type Database } from "../../db/database";
 import {
   companies,
   forms,
+  items,
   siteGroupAddresses,
   siteGroupSites,
   siteGroups,
   sites,
+  suppliers,
+  units,
   userCompanies,
   userFormPermissions,
   users,
@@ -148,7 +151,64 @@ export class DevSeed implements OnModuleInit {
       { id: 4, formName: "Company", formGroup: "Masters", isActive: true },
       { id: 5, formName: "Site", formGroup: "Masters", isActive: true },
       { id: 6, formName: "Group", formGroup: "Masters", isActive: true },
+      { id: 7, formName: "Supplier", formGroup: "Masters", isActive: true },
+      { id: 8, formName: "Item", formGroup: "Masters", isActive: true },
     ]);
+
+    // Units first: items reference them, and the foreign key is real.
+    const insertedUnits = await db
+      .insert(units)
+      .values(UNIT_NAMES.map((name) => ({ name })))
+      .returning({ id: units.id, name: units.name });
+
+    await db.insert(suppliers).values(
+      SUPPLIER_NAMES.map((name, i) => ({
+        name,
+        mobile: "9" + String(700000000 + i * 137),
+        email: name.toLowerCase().replace(/[^a-z0-9]+/g, ".") + "@example.com",
+        gstNo: "24" + panFor(i + 40) + "1Z" + GST_CHECK[i % GST_CHECK.length],
+        buildingName: "Unit " + (i + 1) + ", " + AREAS[i % AREAS.length] + " Complex",
+        area: AREAS[i % AREAS.length]!,
+        cityId: 1 + (i % 5),
+        stateId: 24,
+        pincode: String(380001 + i * 3),
+        bankName: BANKS[i % BANKS.length]!,
+        bankBranch: AREAS[(i + 2) % AREAS.length]!,
+        accountNo: String(50200000000000 + i),
+        ifscCode: BANK_CODES[i % BANK_CODES.length] + "0" + String(2000 + i),
+        // A third unapproved, so the flag is visible on the grid rather than
+        // being a column that is always the same.
+        isApproved: i % 3 !== 0,
+        // Money is a STRING all the way through — see the note in fields.ts.
+        openingBalance: (i % 4 === 0 ? null : String(12500 + i * 1375) + ".00") as string | null,
+        openingBalanceDate: i % 4 === 0 ? null : new Date("2025-04-01T00:00:00Z"),
+      })),
+    );
+
+    await db.insert(items).values(
+      ITEM_NAMES.map((name, i) => {
+        const withGst = i % 4 !== 0;
+        const price = String(150 + i * 37) + ".00";
+        const percent = GST_RATES[i % GST_RATES.length]!;
+        return {
+          name,
+          unitId: insertedUnits[i % insertedUnits.length]!.id,
+          pricePerUnit: price,
+          isWithGst: withGst,
+          /**
+           * The GST amount is seeded as a plain percentage of the price, and that
+           * is a seed convenience rather than a ruling. Which of the three jQuery
+           * calculators is correct is still an open business question (assessment
+           * finding B-2, `07-Business-Rule-Inventory.md`), and the API stores what
+           * it is given rather than arbitrating.
+           */
+          gstPercent: withGst ? percent : null,
+          gstAmount: withGst ? ((Number(price) * Number(percent)) / 100).toFixed(2) : null,
+          hsnCode: String(3917 + (i % 40) * 7).padStart(4, "0"),
+          isApproved: i % 5 !== 0,
+        };
+      }),
+    );
 
     // One administrator plus 40 others, so the grid has several pages to walk.
     const seeded = await db
@@ -195,6 +255,19 @@ export class DevSeed implements OnModuleInit {
        * would paper over that, so the Site Groups grid shows no row actions.
        */
       { userId: admin.id, formId: 6, isViewAllow: true },
+      /**
+       * Supplier gets all four rights, though only `Supplier-View` and
+       * `Supplier-Add` exist as attributes in the .NET code.
+       *
+       * `UpdateSupplierDetails` and `DeleteSupplierDetails` carry NO
+       * `[FormPermissionAttribute]` at all, so they are reachable by anyone —
+       * assessment finding C-6, the hole the default-deny guard exists to close,
+       * not a business rule. The port guards both, which means the rights have to
+       * be grantable, and the dev administrator holds them.
+       */
+      { userId: admin.id, formId: 7, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
+      // Item has View/Add/Edit/Delete attributes in ItemMasterController.
+      { userId: admin.id, formId: 8, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
     ]);
 
     await db.insert(userSites).values(
@@ -358,4 +431,112 @@ const GROUP_NAMES = [
   "Private Housing",
   "Solar Division",
   "Port Works",
+];
+
+/**
+ * Units of measure, as a construction supplier would actually use them. Short
+ * enough that the Items grid's unit column stays readable at a glance.
+ */
+const UNIT_NAMES = [
+  "Nos",
+  "Kg",
+  "Ton",
+  "Meter",
+  "Sq. Meter",
+  "Cu. Meter",
+  "Litre",
+  "Bag",
+  "Bundle",
+  "Roll",
+  "Box",
+  "Set",
+];
+
+/** The four GST slabs in force in India. */
+const GST_RATES = ["5.00", "12.00", "18.00", "28.00"];
+
+const SUPPLIER_NAMES = [
+  "Ambica Steel Traders",
+  "Bhagwati Cement Agency",
+  "Chamunda Hardware",
+  "Dev Electricals",
+  "Ekta Sanitary Stores",
+  "Gayatri Timber Mart",
+  "Harsh Paint House",
+  "Ishwar Tiles and Marbles",
+  "Jay Ambe Iron Works",
+  "Kailash Plywood",
+  "Laxmi Pipe Suppliers",
+  "Mahadev Glass House",
+  "Navkar Aggregates",
+  "Om Sai Ready Mix",
+  "Patel Brick Works",
+  "Radhika Electricals",
+  "Sagar Steel Corporation",
+  "Tirupati Hardware Mart",
+  "Umiya Cement Depot",
+  "Vishwakarma Fabricators",
+  "Yogeshwar Waterproofing",
+  "Zenith Safety Products",
+  "Anmol Adhesives",
+  "Bajrang Transport and Supply",
+  "Chirag Lighting House",
+  "Dhanlaxmi Sand Suppliers",
+  "Everest Roofing Solutions",
+  "Falcon Tools and Machinery",
+  "Ganpati Steel Rolling",
+  "Hariom Construction Chemicals",
+];
+
+const ITEM_NAMES = [
+  "OPC 53 Grade Cement",
+  "PPC Cement",
+  "TMT Bar 8mm",
+  "TMT Bar 10mm",
+  "TMT Bar 12mm",
+  "TMT Bar 16mm",
+  "TMT Bar 20mm",
+  "River Sand",
+  "M Sand",
+  "20mm Aggregate",
+  "10mm Aggregate",
+  "Red Clay Brick",
+  "AAC Block 600x200x100",
+  "Fly Ash Brick",
+  "Ready Mix Concrete M20",
+  "Ready Mix Concrete M25",
+  "Binding Wire",
+  "MS Angle 50x50",
+  "MS Channel 100mm",
+  "GI Pipe 25mm",
+  "CPVC Pipe 20mm",
+  "PVC Pipe 110mm",
+  "Vitrified Tile 600x600",
+  "Ceramic Wall Tile 300x600",
+  "Granite Slab",
+  "Marble Slab",
+  "Plywood 19mm BWP",
+  "Teak Wood Plank",
+  "Door Frame Sal Wood",
+  "Flush Door 32mm",
+  "Emulsion Paint Interior",
+  "Enamel Paint",
+  "Wall Putty",
+  "Waterproofing Compound",
+  "Tile Adhesive",
+  "White Cement",
+  "Copper Wire 2.5 sq mm",
+  "MCB 32A Single Pole",
+  "Distribution Board 8 Way",
+  "LED Panel Light 18W",
+  "Modular Switch 6A",
+  "Ceiling Fan 1200mm",
+  "Wash Basin Ceramic",
+  "EWC Toilet Seat",
+  "CP Bib Cock",
+  "Stainless Steel Sink",
+  "Scaffolding Pipe",
+  "Safety Helmet",
+  "Safety Harness",
+  "Shuttering Plywood 12mm",
 ];

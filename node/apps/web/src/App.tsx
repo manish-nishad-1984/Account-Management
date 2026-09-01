@@ -10,18 +10,31 @@ import { UsersPage } from "./features/users/UsersPage";
 import { CompaniesPage } from "./features/companies/CompaniesPage";
 import { SitesPage } from "./features/sites/SitesPage";
 import { SiteGroupsPage } from "./features/site-groups/SiteGroupsPage";
+import { SuppliersPage } from "./features/suppliers/SuppliersPage";
+import { ItemsPage } from "./features/items/ItemsPage";
+import { PermissionsPage } from "./features/users/PermissionsPage";
 import { createQueryClient } from "./lib/query-client";
 import { NAV } from "./navigation/nav";
 
 const queryClient = createQueryClient();
 
-/** Screens with a real implementation; everything else in NAV gets a placeholder. */
+/**
+ * Screens with a real implementation; everything else in NAV gets a placeholder.
+ *
+ * Keep this in step with `status: "ready"` in nav.ts — a route that is `ready`
+ * in the nav but missing here renders the placeholder under a menu entry that
+ * promises a working screen, which is the one thing the "soon" chip exists to
+ * avoid.
+ */
 const IMPLEMENTED: Record<string, React.ComponentType> = {
   "/": DashboardPage,
   "/users": UsersPage,
+  "/permissions": PermissionsPage,
   "/companies": CompaniesPage,
   "/sites": SitesPage,
   "/site-groups": SiteGroupsPage,
+  "/suppliers": SuppliersPage,
+  "/items": ItemsPage,
 };
 
 export function App() {

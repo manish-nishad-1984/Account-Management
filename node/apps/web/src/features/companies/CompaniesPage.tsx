@@ -1,39 +1,24 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import {
-  COMPANY_SORT_FIELDS,
-  DEFAULT_PAGE_SIZE,
-  type CompanyRow,
-  type SortDirection,
-} from "@accountmanagement/contracts";
-import { Pencil, Plus, Trash2 } from "lucide-react";
-import { DataGrid } from "../../components/DataGrid";
-import { Button, PageHeader } from "../../components/ui";
-import { useCompanyList } from "./api";
-import { ApiError } from "../../lib/api-client";
+import { COMPANY_SORT_FIELDS, type CompanyRow } from "@accountmanagement/contracts";
+import { Plus } from "lucide-react";
+import { DataGrid, RowActions } from "../../components/DataGrid";
+import { Button, ConfirmDialog, PageHeader } from "../../components/ui";
+import { useCompanyList, useDeleteCompany } from "./api";
+import { CompanyFormDialog } from "./CompanyFormDialog";
 import { usePermission } from "../../lib/permissions";
+import { useMasterScreen } from "../../lib/use-master-screen";
 
 /** Renders a value that the source data is allowed to be missing, without lying. */
 const Absent = () => <span className="text-slate-300">—</span>;
 
 export function CompaniesPage() {
-  const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<string>("name");
-  const [sortDir, setSortDir] = useState<SortDirection>("asc");
   const canAdd = usePermission("company", "add");
+  const screen = useMasterScreen<CompanyRow>({ defaultSortBy: "name" });
+  const query = useCompanyList(screen.listParams);
+  const remove = useDeleteCompany();
 
-  const [cursors, setCursors] = useState<string[]>([]);
-  const cursor = cursors[cursors.length - 1];
-
-  const query = useCompanyList({
-    limit: DEFAULT_PAGE_SIZE,
-    cursor,
-    sortBy,
-    sortDir,
-    search: search.trim() || undefined,
-  });
-
-  const resetPaging = () => setCursors([]);
+  const { openEdit, askDelete } = screen;
 
   const columns = useMemo<ColumnDef<CompanyRow, unknown>[]>(
     () => [
@@ -110,32 +95,16 @@ export function CompaniesPage() {
         id: "actions",
         header: "",
         cell: ({ row }) => (
-          <div className="flex justify-end gap-1">
-            {row.original.capabilities.canEdit && (
-              <Button
-                variant="ghost"
-                icon={Pencil}
-                className="px-2 py-1 text-xs"
-                aria-label={`Edit ${row.original.name}`}
-              >
-                Edit
-              </Button>
-            )}
-            {row.original.capabilities.canDelete && (
-              <Button
-                variant="ghost"
-                icon={Trash2}
-                className="px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                aria-label={`Delete ${row.original.name}`}
-              >
-                Delete
-              </Button>
-            )}
-          </div>
+          <RowActions
+            capabilities={row.original.capabilities}
+            label={row.original.name}
+            onEdit={() => openEdit(row.original.id)}
+            onDelete={() => askDelete(row.original)}
+          />
         ),
       },
     ],
-    [],
+    [openEdit, askDelete],
   );
 
   return (
@@ -143,44 +112,53 @@ export function CompaniesPage() {
       <PageHeader
         title="Companies"
         description="Billing entities — GST registration, invoice prefix and bank details"
-        actions={canAdd ? <Button icon={Plus}>Add company</Button> : undefined}
+        actions={
+          canAdd ? (
+            <Button icon={Plus} onClick={screen.openCreate}>
+              Add company
+            </Button>
+          ) : undefined
+        }
       />
 
       <DataGrid<CompanyRow>
         columns={columns}
-        rows={query.data?.rows ?? []}
-        total={query.data?.total ?? null}
-        isLoading={query.isLoading}
         searchPlaceholder="Search name, GST or PAN"
-        error={
-          query.error
-            ? query.error instanceof ApiError
-              ? query.error.message
-              : "Could not load companies"
-            : null
-        }
-        search={search}
-        onSearchChange={(value) => {
-          setSearch(value);
-          resetPaging();
-        }}
-        sortBy={sortBy}
-        sortDir={sortDir}
         sortableFields={COMPANY_SORT_FIELDS}
-        onSortChange={(field, direction) => {
-          setSortBy(field);
-          setSortDir(direction);
-          resetPaging();
-        }}
-        pageIndex={cursors.length}
-        canGoBack={cursors.length > 0}
-        canGoForward={Boolean(query.data?.nextCursor)}
-        onPrevious={() => setCursors((stack) => stack.slice(0, -1))}
-        onNext={() => {
-          const next = query.data?.nextCursor;
-          if (next) setCursors((stack) => [...stack, next]);
-        }}
         emptyMessage="No companies match this search"
+        {...screen.gridProps(query)}
+      />
+
+      <CompanyFormDialog
+        open={screen.isFormOpen}
+        companyId={screen.editingId}
+        onClose={screen.closeForm}
+      />
+
+      <ConfirmDialog
+        open={screen.deleteTarget !== null}
+        onClose={screen.cancelDelete}
+        onConfirm={() => screen.runDelete(remove.mutateAsync)}
+        pending={remove.isPending}
+        error={screen.deleteError}
+        title="Delete company"
+        body={
+          <>
+            <p>
+              Delete <span className="font-medium text-slate-900">{screen.deleteTarget?.name}</span>?
+            </p>
+            {/*
+              Say what a delete here actually does. It is a soft delete — the row
+              is flagged, not removed — and it is refused outright while users
+              are still assigned, which is worth knowing before clicking rather
+              than after.
+            */}
+            <p className="mt-2 text-xs text-slate-500">
+              The company is marked deleted and hidden from every list. Historic
+              invoices that reference it are unaffected.
+            </p>
+          </>
+        }
       />
     </>
   );
