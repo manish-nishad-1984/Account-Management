@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+/*
+  Account Book design tokens.
+
+  Restrained on purpose: this is a ledger, and colour here carries meaning rather
+  than decoration. Indigo is the single action colour; emerald and rose are
+  reserved for money received and money owed, so they never appear as styling.
+*/
+@theme {
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", monospace;
+
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #3730a3;
+  --color-brand-900: #312e81;
+
+  /* Sidebar: a cool near-black that keeps indigo legible on top of it. */
+  --color-shell-800: #1a2233;
+  --color-shell-900: #141b29;
+  --color-shell-950: #0d121c;
+
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
+  --shadow-raised: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 6px -2px rgb(15 23 42 / 0.06);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-700 antialiased;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Money, quantities and identifiers must align digit-for-digit down a column. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Headings carry slightly tighter tracking; body text stays at default. */
+.heading {
+  @apply font-semibold tracking-[-0.011em] text-slate-900;
+}
+
+/* A quiet scrollbar for the sidebar, so it does not fight the dark surface. */
+.scroll-subtle {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 0.12) transparent;
+}
+.scroll-subtle::-webkit-scrollbar {
+  width: 6px;
+}
+.scroll-subtle::-webkit-scrollbar-thumb {
+  background-color: rgb(255 255 255 / 0.12);
+  border-radius: 9999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,10 +1,12 @@
 import { Module } from "@nestjs/common";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
+import { DevSeed } from "./dev-seed";
+import { DrizzleUserRepository } from "./drizzle-user.repository";
 import { PasswordService } from "./password.service";
 import { TokenService } from "./token.service";
 import { InMemoryUserRepository, UserRepository } from "./user.repository";
-import { DevSeed } from "./dev-seed";
+import { DATABASE, type Database } from "../../db/database";
 
 @Module({
   controllers: [AuthController],
@@ -12,10 +14,13 @@ import { DevSeed } from "./dev-seed";
     AuthService,
     PasswordService,
     TokenService,
-    // TODO(db): swap for the Drizzle-backed adapter once the PostgreSQL schema
-    // lands. The schema is blocked on the orphan census (assessment blocker 4).
-    { provide: UserRepository, useClass: InMemoryUserRepository },
     DevSeed,
+    {
+      provide: UserRepository,
+      inject: [DATABASE],
+      useFactory: (db: Database | null) =>
+        db ? new DrizzleUserRepository(db) : new InMemoryUserRepository(),
+    },
   ],
   exports: [TokenService, AuthService, PasswordService, UserRepository],
 })

@@ -405,8 +405,13 @@ FodyWeavers.xsd
 /.vs/AccountManegmentAPI/v17/fileList.bin
 bin/
 obj/
-/AccountManegment.DBContext
-/AccountManegment.Repo
-/AccountManegmentAPI
-/AccountManegments.Web
+# The four lines that used to be here ignored the entire source projects
+# (/AccountManegment.DBContext, /AccountManegment.Repo, /AccountManegmentAPI and
+# /AccountManegments.Web), so every NEW source file inside them was invisible to
+# git — that is how AccountManegment.Repo/Domain/FinancialYear.cs came to be left
+# out of the commit that ships the tests for it. Ignore the outputs instead.
+**/Publish/
+**/Properties/PublishProfiles/
+**/dotnet-tools.json
+AccountManegmentAPI/web.config
 /AccountManegments.Web/Views/InvoiceMaster/_DocumentListPartial.cshtml

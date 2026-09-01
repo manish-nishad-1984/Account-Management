@@ -11,7 +11,12 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 
-  DATABASE_URL: z.string().url().optional(),
+  // An unset variable and one set to "" mean the same thing to a deployment
+  // script, so treat them the same rather than failing .url() on empty.
+  DATABASE_URL: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().url().optional(),
+  ),
 
   /**
    * RS256 key pair in PEM form. Asymmetric so that verifiers never hold signing
@@ -41,6 +46,14 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   }
 
   const env = parsed.data;
+  if (env.NODE_ENV === "production" && !env.DATABASE_URL) {
+    throw new Error(
+      "Invalid environment configuration:\n" +
+        "  DATABASE_URL is required when NODE_ENV=production. Without it the API " +
+        "would silently fall back to the in-memory repository and lose every write.",
+    );
+  }
+
   if (env.NODE_ENV === "production" && (!env.JWT_PRIVATE_KEY || !env.JWT_PUBLIC_KEY)) {
     throw new Error(
       "Invalid environment configuration:\n" +

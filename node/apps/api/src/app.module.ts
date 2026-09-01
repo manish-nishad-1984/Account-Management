@@ -4,15 +4,18 @@ import { LoggerModule } from "nestjs-pino";
 import { AuthGuard } from "./common/auth/auth.guard";
 import { PermissionsGuard } from "./common/auth/permissions.guard";
 import { ConfigModule } from "./config/config.module";
+import { DatabaseModule } from "./db/database.module";
 import { loadEnv } from "./config/env";
 import { AuthModule } from "./modules/auth/auth.module";
 import { HealthModule } from "./modules/health/health.module";
+import { UsersModule } from "./modules/users/users.module";
 
 const env = loadEnv();
 
 @Module({
   imports: [
     ConfigModule,
+    DatabaseModule,
     LoggerModule.forRoot({
       pinoHttp: {
         level: env.LOG_LEVEL,
@@ -23,6 +26,7 @@ const env = loadEnv();
     }),
     AuthModule,
     HealthModule,
+    UsersModule,
   ],
   providers: [
     // Order matters: authenticate, then authorise.
