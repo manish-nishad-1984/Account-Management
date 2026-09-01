@@ -1,6 +1,7 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
-**Written:** 1 September 2026 (supersedes the earlier handoff of the same name).
+**Written:** 1 September 2026, after the CRUD session (supersedes all earlier
+handoffs of the same name).
 Read this first, then `README.md`, then `Migration-Assessment/01-Executive-Summary.md`
 and `18-GO-NO-GO-Assessment.md`.
 
@@ -51,11 +52,11 @@ AC/
     ├── packages/domain/           shared business rules (12 tests)
     ├── packages/contracts/        Zod schemas shared by API and web
     └── apps/
-        ├── api/                   NestJS + Fastify + Drizzle (95 tests)
-        └── web/                   React 19 + Vite + Tailwind (37 tests)
+        ├── api/                   NestJS + Fastify + Drizzle (166 tests)
+        └── web/                   React 19 + Vite + Tailwind (77 tests)
 ```
 
-**156 tests pass** (12 .NET + 12 domain + 95 API + 37 web).
+**267 tests pass** (12 .NET + 12 domain + 166 API + 77 web).
 
 ### Verify everything
 
@@ -77,8 +78,9 @@ Open **http://localhost:5180/**, sign in as **`devuser` / `DevPassword1`**.
 
 With no `DATABASE_URL`, development starts an **embedded in-memory PostgreSQL**
 (PGlite) and applies the real migration SQL, then seeds 41 users, 30 companies,
-45 sites and 12 site groups. Data is lost on restart. Port 5173 is occupied by
-another of the user's apps (ShreeHari Solar) — use 5180, and do not kill 5173.
+45 sites, 12 site groups, 30 suppliers, 50 items and 12 units. Data is lost on
+restart. Port 5173 is occupied by another of the user's apps (ShreeHari Solar) —
+use 5180, and do not kill 5173.
 
 **Stale dev servers are a recurring nuisance.** Check ports 3000 and 5180 before
 starting; a previous session's process often still holds them and serves stale
@@ -88,19 +90,16 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 
 ## 4. Repository state
 
-Branch **`main`**. HEAD builds and all 156 tests pass.
+Branch **`main`**. HEAD builds and all **267 tests pass**
+(12 .NET + 12 domain + 166 API + 77 web).
 
 - `b8d03922` completed the broken commit `6cefc164` (see §5).
 - `f0f69f95` merged `newNode` into `main`, resolving 3 conflicts.
-- **`main` is 10 commits ahead of `origin/main`. Nothing has been pushed.**
-  `git push origin main` was blocked by the permission classifier; the user
-  approved pushing, so it still needs doing — either a Bash permission rule for
-  `git push`, or the user runs it.
-- **The Companies / Sites / Site Groups work of §6 is UNCOMMITTED** in the working
-  tree. Commit it before doing anything else.
-
-`SESSION-HANDOFF.md` (this file) is untracked but no longer contains any
-credential, so it is safe to commit if wanted.
+- `566b28ab` committed the Companies / Sites / Site Groups work of §6.
+- **`main` was pushed to `origin/main`** (`216067a4..dcefd442`). The working
+  tree is clean and `origin` is current.
+- `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
+  credential is in the HISTORY, not the working tree. Rotation is the fix.
 
 ---
 
@@ -146,7 +145,83 @@ narrowed to build output only. If a new file mysteriously does not appear in
 
 ---
 
-## 6. What this session built (UNCOMMITTED)
+## 5b. The CRUD session (committed)
+
+Write endpoints and forms for every master, two new masters, and the permission
+matrix. Node tests went 144 → 255.
+
+- **Companies, Sites, Users** — full CRUD. The create/edit dialog fetches the
+  full record because the list withholds bank details; `PATCH` is partial;
+  delete is soft.
+- **Suppliers, Items, Units** — new masters, end to end (schema, migration
+  `0003`, contracts, API module, web feature, nav).
+- **Permissions matrix** at `/permissions`, replacing
+  `/User/UserwisePermission`. Roles are absent and the screen says why.
+- Shared code: API `common/{base.repository,db-errors,actor}.ts`; web
+  `lib/{crud,use-master-screen,format,form-values}.ts`,
+  `components/ui/{Modal,FormDialog,ConfirmDialog,fields}.tsx`,
+  `components/DataGrid/RowActions.tsx`, `test/render.tsx`.
+
+### Decisions worth knowing
+1. **Supplier edit and delete are guarded here, though the source guards
+   neither.** `SupplierController.UpdateSupplierDetails` (line 108) and
+   `DeleteSupplierDetails` (line 130) carry no `[FormPermissionAttribute]` at
+   all — finding C-6 again, not a business rule. The convention that ported
+   rules keep their defects covers BUSINESS rules; it does not extend to
+   reproducing a missing authorization check. **This changes who can edit
+   suppliers on day one — whoever does it today needs the Edit box ticked.**
+2. **GST is stored, never computed.** `gstAmount` is entered and persisted as
+   given. Deriving it would silently pick a winner among the three disagreeing
+   jQuery calculators of finding B-2, in a master screen, months before the
+   business decides. A test asserts the value is sent unchanged.
+3. **Money is a decimal string end to end** — `numeric` in PostgreSQL, string
+   through Drizzle, string on the wire, string in the input (never
+   `type="number"`, which returns a float). Displayed with Indian digit
+   grouping: 12,34,567.89, not 1,234,567.89.
+4. **Deletes are refused, not cascaded.** A company with users, a site with
+   users or group memberships, a unit with items: 409 naming the count. A soft
+   delete fires no `on delete cascade`, so the assignments would otherwise
+   survive pointing at a hidden row. Suppliers and items have NO such check yet,
+   because the tables that would reference them are not migrated and a count
+   against an empty table passes every time while looking like a guard. Both
+   `remove` methods say so; add the checks with purchase orders.
+5. **Units have no soft delete and no nav entry.** No `unit` permission exists
+   anywhere in the .NET solution, so units are guarded by the ITEM rights and
+   managed from a dialog on the Items screen. A unit in use is refused outright,
+   which beats hiding a row that items still point at.
+6. `AuthContext` is exported so `test/render.tsx` can supply a signed-in user.
+   Screens gate UI on `usePermission`, which was untestable before — every such
+   test silently asserted against a logged-out, read-only page.
+
+### Two real bugs the tests caught
+- **Editing a user was impossible without changing their password.** An
+  untouched password input submits `""`, not `undefined`, so
+  `passwordSchema.optional()` ran the 12-character policy against the empty
+  string and failed on a field nobody touched. `optionalPassword` in
+  `contracts/users.ts` normalises `""` to absent first.
+- **A validation error on an array ELEMENT rendered nowhere.** `siteIds.0`
+  failing the uuid check leaves `errors.siteIds.message` undefined, so Save did
+  nothing with no message anywhere on screen. `unshownValidationMessage` in
+  `lib/crud.ts` is the backstop, passed as `handleSubmit`'s onInvalid by every
+  dialog.
+
+### The API suite was not flaky — it was oversubscribed
+Two or three arbitrary tests failed per run with assertion-shaped output, and
+re-running appeared to fix it. The cause was memory: vitest sizes its pool from
+the core count (16 here) and every worker holds its own PGlite, a whole
+PostgreSQL compiled to WASM. Workers were OOM-killed — `Worker exited
+unexpectedly`, `[vitest-worker]: Timeout calling "resolveId"`.
+`apps/api/vitest.config.ts` now pins `pool: "forks"` with `maxForks: 4`. The
+suite went green **and got faster**: 241s → 147s.
+
+**The trap:** configuring `poolOptions.threads` does nothing. Vitest 2's default
+pool is `forks`, so the threads settings are accepted and silently ignored, and
+the only clue is `ChildProcess` in the stack of a pool that should be threads.
+`pool` is now named explicitly so the config cannot miss again.
+
+---
+
+## 6. The Companies / Sites / Site Groups session (committed as `566b28ab`)
 
 **Companies, Sites and Site Groups master screens**, end to end:
 schema, migration, contracts, API module, web feature, nav.
@@ -244,6 +319,47 @@ additive columns first, then the drop as its own migration.
 ### 7.5 Long heredocs through the Bash tool get truncated
 Writing a large file with `cat > file <<EOF` fails with "unexpected EOF" once the
 command grows past roughly 150 lines. Split it, or use the Write tool.
+There is **no Python** on this machine, so no `python - <<PY` either.
+
+### 7.6 Drizzle wraps every driver error, so read `cause` before `code`
+A failed query arrives as a `DrizzleQueryError` — "Failed query: insert into …" —
+with the real PostgreSQL error hanging off `.cause`. Reading `error.code` from
+the top level finds nothing, so a unique-violation handler falls through and
+every constraint violation becomes a 500. `common/db-errors.ts` walks the cause
+chain. The constraint NAME also moves: postgres.js calls it `constraint_name`,
+PGlite calls it `constraint`, so reading only one gives helpful messages in
+exactly the environment that does not need them.
+
+### 7.7 A Zod schema has TWO types, and forms need both
+`z.input` is what the form holds — strings, including `""`. `z.output` is what
+the API receives — nulls where a field was blank. Type the form as
+`useForm<z.input<S>, unknown, z.output<S>>` and `handleSubmit` hands over the
+transformed value with no casts anywhere. Getting this wrong shows up as a wall
+of `as unknown as` and, eventually, `null` reaching an input and React quietly
+switching it to uncontrolled.
+
+Two specific traps, both of which shipped bugs before being caught:
+- `passwordSchema.optional()` does NOT make a password optional on a form. An
+  untouched input submits `""`, not `undefined`, so the policy runs against the
+  empty string and the save is refused on a field nobody touched. Normalise
+  `""` to `undefined` first.
+- A validation error on an array ELEMENT (`siteIds.0`) renders NOWHERE, because
+  the field only reads `errors.siteIds.message`. The form silently refuses to
+  submit. `unshownValidationMessage` in `web/src/lib/crud.ts` is the backstop;
+  pass it as `handleSubmit`'s second argument on every new form.
+
+### 7.8 Cap the vitest pool — PGlite is a whole database per worker
+See §5b. `pool: "forks"` with `maxForks: 4` in `apps/api/vitest.config.ts`.
+Raising it brings back OOM-killed workers that look exactly like flaky tests.
+Configuring `poolOptions.threads` does nothing, because the default pool is
+forks — the setting is accepted and ignored.
+
+### 7.9 Mock `fetch` per route, not with one `mockResolvedValue`
+A `Response` body can be read only once. Screens that make two requests — a list
+plus a lookup for a dropdown — get the same Response twice, the second read
+throws, and the grid shows a generic "could not load" that points nowhere near
+the cause. `web/src/test/render.tsx` has `routeFetch`, plus `renderWithAuth` for
+the screens whose UI is gated on `usePermission`.
 
 ---
 
@@ -254,8 +370,8 @@ command grows past roughly 150 lines. Split it, or use the Write tool.
 | **`Migration-Assessment/db-extract/` is empty** | The 3 read-only scripts in `Migration-Assessment/tools/` have never been run. Until then the orphan volume across ~62 unconstrained FK columns is unknown, and no schema can be *finalised*. About a day in SSMS. **This is the binding constraint.** |
 | **10 business-rule questions unanswered** | `07-Business-Rule-Inventory.md`. 2-4 week lead time — the longest pole. The money calculator cannot start without them. |
 | **Credentials not rotated** | The `sa` account on `srv1925876.hstgr.cloud` is still live, and its password is still in git history in earlier commits of `appsettings.json`. Removing it from the file did not remove it from history. `gitleaks` in CI will fail on the first push, correctly. **Rotation is the fix, not a history rewrite.** |
-| **Which of 3 jQuery money calculators is correct** | Blocks all invoicing work (Phase 4, the risk centre). |
-| **`git push origin main`** | The user approved it; the tool call was blocked by the permission classifier. 10 commits are still local. |
+| **Which of 3 jQuery money calculators is correct** | Blocks all invoicing work (Phase 4, the risk centre). The Items screen stores the GST amount as entered rather than deriving it, precisely so this stays an open question rather than being answered by implication. |
+| **Supplier edit/delete permission change** | The port guards `supplier.edit` and `supplier.delete`; the source guards neither (§5b decision 1). Whoever edits suppliers today needs those boxes ticked before cutover, or they lose the ability. Needs a decision, not code. |
 
 ---
 
@@ -266,9 +382,17 @@ command grows past roughly 150 lines. Split it, or use the Write tool.
   cannot join, and neither table is referenced anywhere in the repository layer.
   Deliberately **not** ported. Worth confirming with the business.
 - **Site groups have no write permission at all** (section 6, choice 3) — C-6.
+- **Supplier update and delete have no permission attribute at all** —
+  `SupplierController.cs:108` and `:130`, plus `ActiveDeactiveSupplier` at `:150`.
+  Anyone who can reach the site can edit or delete any supplier. C-6 again, and
+  the port closes it (§5b decision 1).
 - **Site group to document links are by name string** (section 6).
 - `AccountManegments.Web/Models/Common.cs:28` and `:61` use obsolete
   `RijndaelManaged` for encryption.
+- `ItemMasterController.cs` and `SupplierController.cs` use `OleDb` for their
+  Excel import, which is Windows-only — the build emits CA1416 for it on every
+  compile. It will not run on a Linux container, which matters whenever the .NET
+  side is containerised.
 
 ---
 
@@ -290,18 +414,36 @@ command grows past roughly 150 lines. Split it, or use the Write tool.
 
 ## 11. Suggested next steps
 
-1. **Commit the section 6 work**, then get `git push origin main` through.
-2. **Rotate the SQL Server password.** It is live, it is in git history, and
-   pushing to GitHub widens the exposure.
-3. **Get the user to run the 3 census scripts** — everything data-shaped is
-   blocked on them.
-4. Then one of:
-   - **More masters** — Suppliers and Items follow exactly the pattern of the
-     three just built (`contracts/*.ts`, `api/modules/*`, `web/features/*`), and
-     are unblocked; or
-   - **Write endpoints** for the masters that actually have Add/Edit/Delete
-     permissions (Company and Site do; Group does not); or
-   - **The ETL** from SQL Server to PostgreSQL for `users` (will surface orphans); or
-   - **.NET Phase 0 performance work** — pagination on the top 5 lists and the 6
-     bulk-approve full-table loads. Visible to users next week, on the system they
-     actually use today.
+The masters are done. Everything below is either blocked on the business or is
+the next tranche of build.
+
+1. **Rotate the SQL Server password.** Still the top item. It is live, it is in
+   git history, and the repository has now been pushed to GitHub — the exposure
+   is wider than it was. Rotation is the fix; removing it from the working tree
+   already happened and did not help.
+2. **Get the 3 census scripts run** (`Migration-Assessment/tools/`, about a day
+   in SSMS). Everything data-shaped is blocked on them: the orphan volume across
+   ~62 unconstrained FK columns is still unknown, so no schema can be finalised
+   and the ETL cannot be written. **This is the binding constraint.**
+3. **Put the 10 business-rule questions to the business**
+   (`07-Business-Rule-Inventory.md`). 2-4 week lead time, and the money
+   calculator — the risk centre of the whole migration — cannot start without
+   the answers.
+4. **Confirm the supplier permission change** (§5b decision 1) with the
+   business. It is the one thing in this session that alters who can do what.
+
+Then, in rough order of value:
+
+- **The ETL for `users`, `companies`, `sites`** — the first real data movement,
+  and the thing that will surface the orphans the census counts. Do it after
+  step 2, not before.
+- **Purchase requests and purchase orders** — the next module, and the first
+  with header/detail writes. Two conventions become load-bearing there:
+  everything in a transaction (§7.6), and the in-use delete checks that
+  suppliers and items are currently missing (§5b decision 4) can finally be
+  written against real tables.
+- **.NET Phase 0 performance work** — pagination on the top 5 lists and the 6
+  bulk-approve full-table loads. Visible to users next week, on the system they
+  actually use today, and independent of every blocker above.
+- **Look at the UI.** Nobody has (§10). Five master screens, five dialogs and a
+  permission matrix have now been written without anyone seeing them render.
