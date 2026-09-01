@@ -33,22 +33,116 @@ import {
  * carry the defect forward.
  */
 
-export const companies = pgTable("companies", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  isActive: boolean("is_active").notNull().default(true),
-  isDeleted: boolean("is_deleted").notNull().default(false),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+/**
+ * Companies. 20 columns in SQL Server (assessment 04 §`Company`), reproduced here.
+ *
+ * Deliberate departures:
+ *  - `IsDelete` is spelled `is_deleted`, as on every other table. The source is
+ *    inconsistent — `Company` and `SupplierMaster` say `IsDelete`, the rest say
+ *    `IsDeleted` — and one spelling has to win.
+ *  - `Iffccode` is `ifsc_code`. The source name is a typo for the Indian bank
+ *    routing code IFSC; nothing reads it by name outside the repository layer.
+ *  - `city_id`, `state_id` and `country_id` are integers with NO foreign key yet.
+ *    The source has 3 orphan geography references on this table and the lookup
+ *    tables have not been extracted, so a real FK would refuse rows the ETL must
+ *    still carry. They become FKs once the census in Migration-Assessment/tools/
+ *    has run and the orphans have an agreed disposition.
+ *
+ * There is no `is_active`: the source table has no such column. A company is
+ * either present or soft-deleted.
+ */
+export const companies = pgTable(
+  "companies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
 
-export const sites = pgTable("sites", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  companyId: uuid("company_id").references(() => companies.id),
-  isActive: boolean("is_active").notNull().default(true),
-  isDeleted: boolean("is_deleted").notNull().default(false),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+    /** Prefix stamped on invoice numbers for this company (`InvoicePef`). */
+    invoicePrefix: text("invoice_prefix"),
+    gstNo: text("gst_no"),
+    panNo: text("pan_no"),
+
+    address: text("address"),
+    area: text("area"),
+    cityId: integer("city_id"),
+    stateId: integer("state_id"),
+    countryId: integer("country_id"),
+    pincode: text("pincode"),
+
+    bankName: text("bank_name"),
+    bankBranch: text("bank_branch"),
+    accountNo: text("account_no"),
+    ifscCode: text("ifsc_code"),
+
+    isDeleted: boolean("is_deleted").notNull().default(false),
+    createdBy: uuid("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid("updated_by"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }),
+  },
+  (table) => [
+    // GST numbers identify a legal entity; two companies cannot share one. Not
+    // enforced in SQL Server. Partial, because the column is nullable and the
+    // source holds blanks.
+    uniqueIndex("companies_gst_no_key")
+      .on(sql`upper(${table.gstNo})`)
+      .where(sql`${table.gstNo} is not null and ${table.isDeleted} = false`),
+  ],
+);
+
+/**
+ * Sites. 22 columns in SQL Server, with a billing address and a shipping address
+ * held as two parallel column sets — reproduced rather than normalised, because
+ * `SiteAddress` already exists for additional shipping addresses and collapsing
+ * both into one structure is a business decision, not a mechanical one.
+ *
+ * Deliberate departures:
+ *  - `ContectPersonName` / `ContectPersonPhoneNo` are spelled correctly here.
+ *    Both are misspellings in the source (assessment 04 §`Site`).
+ *  - Geography stays integer-without-FK for now: this table alone carries 6
+ *    orphan geography references, the largest single block of them.
+ *
+ * `company_id` is NOT in the source schema. There is no Company↔Site relationship
+ * in SQL Server at all — the two are associated only indirectly, through the CSV
+ * `User.CompanyId`/`User.SiteId` columns and through `SalesInvoice`. It is kept
+ * because the seed and the user↔site fixtures already use it, but nothing derives
+ * it from production data, so no screen displays it. Confirm with the business
+ * before treating it as meaningful.
+ */
+export const sites = pgTable(
+  "sites",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    companyId: uuid("company_id").references(() => companies.id),
+
+    isActive: boolean("is_active").notNull().default(true),
+
+    contactPersonName: text("contact_person_name"),
+    contactPersonPhoneNo: text("contact_person_phone_no"),
+
+    address: text("address"),
+    area: text("area"),
+    cityId: integer("city_id"),
+    stateId: integer("state_id"),
+    countryId: integer("country_id"),
+    pincode: text("pincode"),
+
+    shippingAddress: text("shipping_address"),
+    shippingArea: text("shipping_area"),
+    shippingCityId: integer("shipping_city_id"),
+    shippingStateId: integer("shipping_state_id"),
+    shippingCountryId: integer("shipping_country_id"),
+    shippingPincode: text("shipping_pincode"),
+
+    isDeleted: boolean("is_deleted").notNull().default(false),
+    createdBy: uuid("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid("updated_by"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }),
+  },
+  (table) => [index("sites_is_active_idx").on(table.isActive)],
+);
 
 export const users = pgTable(
   "users",

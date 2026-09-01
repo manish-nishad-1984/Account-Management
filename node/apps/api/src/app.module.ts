@@ -9,6 +9,9 @@ import { loadEnv } from "./config/env";
 import { AuthModule } from "./modules/auth/auth.module";
 import { HealthModule } from "./modules/health/health.module";
 import { UsersModule } from "./modules/users/users.module";
+import { CompaniesModule } from "./modules/companies/companies.module";
+import { SitesModule } from "./modules/sites/sites.module";
+import { SiteGroupsModule } from "./modules/site-groups/site-groups.module";
 
 const env = loadEnv();
 
@@ -27,6 +30,9 @@ const env = loadEnv();
     AuthModule,
     HealthModule,
     UsersModule,
+    CompaniesModule,
+    SitesModule,
+    SiteGroupsModule,
   ],
   providers: [
     // Order matters: authenticate, then authorise.

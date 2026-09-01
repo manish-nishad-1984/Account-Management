@@ -8,6 +8,20 @@
       "when": 1788250221574,
       "tag": "0000_gray_madame_hydra",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788256949519,
+      "tag": "0001_masters_expand",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788256957657,
+      "tag": "0002_companies_drop_is_active",
+      "breakpoints": true
     }
   ]
 }

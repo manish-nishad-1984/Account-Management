@@ -1,9 +1,9 @@
 import { Global, Logger, Module } from "@nestjs/common";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { DATABASE } from "./database";
+import { applyMigrations } from "./migrations";
 import * as schema from "./schema";
 import { ENV, type Env } from "../config/env";
 
@@ -44,20 +44,11 @@ import { ENV, type Env } from "../config/env";
         const { drizzle: drizzlePglite } = await import("drizzle-orm/pglite");
         const client = await PGlite.create();
 
-        // Exactly the migration SQL a real server would run.
-        const dir = join(__dirname, "../../drizzle");
-        const file = readdirSync(dir).find((name) => name.endsWith(".sql"));
-        if (!file) {
-          throw new Error(`No migration SQL found in ${dir}. Run: npm run db:generate`);
-        }
-        for (const statement of readFileSync(join(dir, file), "utf8").split(
-          "--> statement-breakpoint",
-        )) {
-          if (statement.trim()) {
-            await client.exec(statement);
-          }
-        }
-        logger.log(`Embedded PostgreSQL ready (applied ${file})`);
+        // Exactly the migration SQL a real server would run, all of it, in order.
+        const applied = await applyMigrations(join(__dirname, "../../drizzle"), (statement) =>
+          client.exec(statement),
+        );
+        logger.log(`Embedded PostgreSQL ready (applied ${applied} statements)`);
 
         return drizzlePglite(client, { schema });
       },

@@ -1,7 +1,3 @@
-import { PGlite } from "@electric-sql/pglite";
-import { drizzle } from "drizzle-orm/pglite";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AuthService } from "./auth.service";
 import { DrizzleUserRepository } from "./drizzle-user.repository";
@@ -9,30 +5,8 @@ import { PasswordService } from "./password.service";
 import { TokenService } from "./token.service";
 import { loadEnv } from "../../config/env";
 import * as schema from "../../db/schema";
+import { freshDatabase } from "../../test/fresh-database";
 import type { Database } from "../../db/database";
-
-const MIGRATIONS_DIR = join(__dirname, "../../../drizzle");
-
-/**
- * Runs against real PostgreSQL (PGlite is Postgres compiled to WASM), applying the
- * SAME generated migration SQL that production will run. Foreign keys, unique
- * constraints and defaults are therefore genuinely exercised — a schema that would
- * fail to create in production fails here first.
- */
-async function freshDatabase(): Promise<Database> {
-  const client = await PGlite.create();
-  const file = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith(".sql"));
-  if (!file) {
-    throw new Error(`No migration SQL found in ${MIGRATIONS_DIR}`);
-  }
-  const ddl = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
-  for (const statement of ddl.split("--> statement-breakpoint")) {
-    if (statement.trim()) {
-      await client.exec(statement);
-    }
-  }
-  return drizzle(client, { schema }) as unknown as Database;
-}
 
 describe("DrizzleUserRepository (real PostgreSQL)", () => {
   let db: Database;

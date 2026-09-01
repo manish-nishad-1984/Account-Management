@@ -1,25 +1,9 @@
-import { PGlite } from "@electric-sql/pglite";
-import { drizzle } from "drizzle-orm/pglite";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { listQuerySchema } from "@accountmanagement/contracts";
 import { UsersRepository } from "./users.repository";
 import * as schema from "../../db/schema";
+import { freshDatabase } from "../../test/fresh-database";
 import type { Database } from "../../db/database";
-
-const MIGRATIONS_DIR = join(__dirname, "../../../drizzle");
-
-async function freshDatabase(): Promise<Database> {
-  const client = await PGlite.create();
-  const file = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith(".sql"))!;
-  for (const statement of readFileSync(join(MIGRATIONS_DIR, file), "utf8").split(
-    "--> statement-breakpoint",
-  )) {
-    if (statement.trim()) await client.exec(statement);
-  }
-  return drizzle(client, { schema }) as unknown as Database;
-}
 
 const query = (overrides: Record<string, unknown> = {}) => listQuerySchema.parse(overrides);
 

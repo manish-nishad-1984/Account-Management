@@ -7,6 +7,9 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { LoginPage } from "./features/auth/LoginPage";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { UsersPage } from "./features/users/UsersPage";
+import { CompaniesPage } from "./features/companies/CompaniesPage";
+import { SitesPage } from "./features/sites/SitesPage";
+import { SiteGroupsPage } from "./features/site-groups/SiteGroupsPage";
 import { createQueryClient } from "./lib/query-client";
 import { NAV } from "./navigation/nav";
 
@@ -16,6 +19,9 @@ const queryClient = createQueryClient();
 const IMPLEMENTED: Record<string, React.ComponentType> = {
   "/": DashboardPage,
   "/users": UsersPage,
+  "/companies": CompaniesPage,
+  "/sites": SitesPage,
+  "/site-groups": SiteGroupsPage,
 };
 
 export function App() {

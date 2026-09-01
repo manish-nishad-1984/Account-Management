@@ -13,6 +13,14 @@ import type { SortDirection } from "@accountmanagement/contracts";
  * A tiebreaker is mandatory: sorting by a non-unique column alone (userName,
  * createdAt) makes row order undefined between equal values, and rows can be
  * skipped or repeated across pages. Every cursor therefore carries the primary key.
+ *
+ * LIMITATION — the sort column must be NOT NULL. In PostgreSQL every comparison
+ * against NULL is itself NULL, so `sortColumn > cursorValue` excludes NULL rows
+ * entirely while ORDER BY still places them last: paging by a nullable column
+ * silently drops every row that has no value, and the row count never adds up.
+ * Sortable fields are therefore restricted to non-nullable columns on every list
+ * endpoint. Supporting a nullable sort means coalescing the column identically in
+ * BOTH the ORDER BY and the WHERE, which these helpers do not do yet.
  */
 
 export interface Cursor {
