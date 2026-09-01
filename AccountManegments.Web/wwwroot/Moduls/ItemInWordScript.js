@@ -372,6 +372,17 @@ function setTodaysDate() {
 function fn_ResetAllInwardDropdown() {
     window.location = '/ItemInWord/ItemInWord';
 }
+
+function exportItemInWord() {
+    var supplier = $('#textInwardSupplierNameHidden').val() || '';
+    var itemname = $('#textInwardItemNameHidden').val() || '';
+    var startDate = $('#InwardstartDate').val() || '';
+    var enddate = $('#InwardendDate').val() || '';
+    var sortBy = $('#ItemInWordSortBy').val() || '';
+
+    var query = $.param({ supplier: supplier, itemname: itemname, startDate: startDate, enddate: enddate, sortBy: sortBy });
+    window.location = '/ItemInWord/ExportItemInWordCsv?' + query;
+}
 function GetSiteList() {
     $.ajax({
         url: '/SiteMaster/GetSiteNameList',

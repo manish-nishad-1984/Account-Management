@@ -1,4 +1,5 @@
 ﻿using AccountManagement.API;
+using AccountManagement.Repository.Domain;
 using AccountManagement.DBContext.Models.API;
 using AccountManagement.DBContext.Models.Common;
 using AccountManagement.DBContext.Models.DataTableParameters;
@@ -892,7 +893,7 @@ namespace AccountManagement.Repository.Repository.InvoiceMasterRepository
                         .FirstOrDefault();
 
                     var currentDate = DateTime.Now;
-                    int currentYear = currentDate.Month > 4 ? currentDate.Year + 1 : currentDate.Year;
+                    int currentYear = FinancialYear.CurrentAsProduced(currentDate).EndYear;
                     int lastYear = currentYear - 1;
 
                     string supplierInvoiceId;

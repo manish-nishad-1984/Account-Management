@@ -53,7 +53,23 @@ namespace AccountManegments.Web.Helper
                 var response = await client.GetAsync(url);
                 var responseContent = await response.Content.ReadAsStringAsync();
                 var obj = JsonConvert.DeserializeObject<object>(responseContent);
-                model = JsonConvert.DeserializeObject<ApiResponseModel>(responseContent);
+
+                try
+                {
+                    model = JsonConvert.DeserializeObject<ApiResponseModel>(responseContent);
+                }
+                catch
+                {
+                    // fallback: wrap raw response
+                    model = new ApiResponseModel { data = null, message = responseContent, code = (int)response.StatusCode };
+                }
+
+                // Ensure model is not null even if deserializer returned null
+                if (model == null)
+                {
+                    model = new ApiResponseModel { data = null, message = responseContent, code = (int)response.StatusCode };
+                }
+
                 model.code = (int)response.StatusCode;
                 return model;
             }
@@ -91,7 +107,23 @@ namespace AccountManegments.Web.Helper
                 var response = await client.GetAsync(url);
                 var responseContent = await response.Content.ReadAsStringAsync();
                 var obj = JsonConvert.DeserializeObject<object>(responseContent);
-                model = JsonConvert.DeserializeObject<ApiResponseModel>(responseContent);
+
+                try
+                {
+                    model = JsonConvert.DeserializeObject<ApiResponseModel>(responseContent);
+                }
+                catch
+                {
+                    // fallback: wrap raw response
+                    model = new ApiResponseModel { data = null, message = responseContent, code = (int)response.StatusCode };
+                }
+
+                // Ensure model is not null even if deserializer returned null
+                if (model == null)
+                {
+                    model = new ApiResponseModel { data = null, message = responseContent, code = (int)response.StatusCode };
+                }
+
                 model.code = (int)response.StatusCode;
                 return model;
 
@@ -133,14 +165,31 @@ namespace AccountManegments.Web.Helper
                 var response = await client.PostAsync(url, data);
                 var responseContent = await response.Content.ReadAsStringAsync();
 
-                model = JsonConvert.DeserializeObject<ApiResponseModel>(responseContent);
-                model.code = (int)response.StatusCode;
+                try
+                {
+                    model = JsonConvert.DeserializeObject<ApiResponseModel>(responseContent);
+                }
+                catch
+                {
+                    // fallback: wrap raw response
+                    model = new ApiResponseModel { data = null, message = responseContent, code = (int)response.StatusCode };
+                }
+
+                // Ensure model is not null even if deserializer returned null
+                if (model == null)
+                {
+                    model = new ApiResponseModel { data = null, message = responseContent, code = (int)response.StatusCode };
+                }
+
+                model.code = (int)response.StatusCode;    
+
+
 
                 return model;
             }
             catch (Exception ex)
             {
-                throw ex;
+                return new ApiResponseModel { code = 500, message = ex.Message, data = null };
             }
         }
     }

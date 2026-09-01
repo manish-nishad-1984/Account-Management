@@ -1,5 +1,6 @@
 ﻿using AccountManagement.API;
-using AccountManagement.DBContext.DBContext;
+//using AccountManagement.DBContext.DBContext;
+using AccountManagement.Repository.Domain;
 using AccountManagement.DBContext.Models.API;
 using AccountManagement.DBContext.Models.ViewModels.PurchaseOrder;
 using AccountManagement.DBContext.Models.ViewModels.PurchaseRequest;
@@ -31,20 +32,9 @@ namespace AccountManagement.Repository.Repository.PurchaseRequestRepository
                 var LastPr = Context.PurchaseRequests.OrderByDescending(e => e.CreatedOn).FirstOrDefault();
                 var currentDate = DateTime.Now;
 
-                int currentYear;
-                int lastYear;
-                if (currentDate.Month > 4)
-                {
-
-                    currentYear = currentDate.Year + 1;
-                    lastYear = currentDate.Year;
-                }
-                else
-                {
-
-                    currentYear = currentDate.Year;
-                    lastYear = currentDate.Year - 1;
-                }
+                var financialYear = FinancialYear.CurrentAsProduced(currentDate);
+                int currentYear = financialYear.EndYear;
+                int lastYear = financialYear.StartYear;
 
                 string PurchaseRequestId;
                 if (LastPr == null)

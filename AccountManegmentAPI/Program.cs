@@ -51,7 +51,7 @@ using AccountManagement.Repository.Interface.Repository.Sales;
 using AccountManagement.Repository.Repository.SalesRepository;
 using AccountManagement.Repository.Interface.Services.SalesIInvoiceService;
 using AccountManagement.Repository.Services.Sales;
-using AccountManagement.DBContext.DBContext;
+//using AccountManagement.DBContext.DBContext;
 using AccountManagement.Repository.Interface.Repository.IItemInWord;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -60,8 +60,27 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 
+// Secrets come from user-secrets (dev) or environment variables (servers), never appsettings.json.
+var accDbConn = builder.Configuration.GetConnectionString("ACCDbconn");
+if (string.IsNullOrWhiteSpace(accDbConn))
+{
+    throw new InvalidOperationException(
+        "Connection string 'ACCDbconn' is not configured. Set it with " +
+        "dotnet user-secrets set \"ConnectionStrings:ACCDbconn\" \"<value>\" --project AccountManegmentAPI, " +
+        "or set the environment variable ConnectionStrings__ACCDbconn. See README.md.");
+}
+
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey))
+{
+    throw new InvalidOperationException(
+        "'Jwt:Key' is not configured. Set it with " +
+        "dotnet user-secrets set \"Jwt:Key\" \"<value>\" --project AccountManegmentAPI, " +
+        "or set the environment variable Jwt__Key. See README.md.");
+}
+
 builder.Services.AddDbContext<DbaccManegmentContext>(option =>
-option.UseSqlServer(builder.Configuration.GetConnectionString("ACCDbconn")));
+option.UseSqlServer(accDbConn));
 
 
 builder.Services.AddScoped<IAuthentication, UserAuthentication>();
@@ -98,6 +117,17 @@ builder.Services.AddScoped<ISupplierInvoiceDetailsService, SupplierInvoiceDetail
 builder.Services.AddScoped<IFormMasterServices, FormMasterService>();
 builder.Services.AddScoped<ISalesInvoiceService, SalesInvoiceService>();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins("https://avfast.in", "https://www.avfast.in")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
+
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
 {
@@ -108,7 +138,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
         ValidateLifetime = true,
         ValidIssuer = builder.Configuration["Jwt:Issuer"],
         ValidAudience = builder.Configuration["Jwt:Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
     };
 });
 
@@ -153,7 +183,7 @@ builder.Services.AddSession(options =>
 builder.Services.AddEndpointsApiExplorer();
 
 var app = builder.Build();
-
+app.UseCors("AllowFrontend");
 app.UseSwagger();
 app.UseSwaggerUI(options => options.SwaggerEndpoint("/swagger/v2/swagger.json", "Account"));
 app.MapControllers();

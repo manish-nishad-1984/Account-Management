@@ -198,13 +198,20 @@ namespace AccountManegments.Web.Controllers
 
                 var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
                 var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-                await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, claimsPrincipal);
+                await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, claimsPrincipal, new AuthenticationProperties
+                {
+                    IsPersistent = true, // 🔥 THIS IS THE MAIN FIX
+                    ExpiresUtc = DateTime.UtcNow.AddHours(8),
+                    AllowRefresh = true
+                });
 
                 return RedirectToAction("Index", "Home");
             }
             catch (Exception ex)
             {
-                ViewBag.LoginError = "Login failed due to an unexpected error.";
+                Console.WriteLine(ex.ToString());
+
+                ViewBag.LoginError = ex.Message;
                 return View(login);
             }
         }

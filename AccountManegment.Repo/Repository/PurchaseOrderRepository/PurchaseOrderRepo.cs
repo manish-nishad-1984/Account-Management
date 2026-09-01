@@ -1,4 +1,5 @@
 ﻿using AccountManagement.API;
+using AccountManagement.Repository.Domain;
 using AccountManagement.DBContext.Models.API;
 using AccountManagement.DBContext.Models.ViewModels.ItemMaster;
 using AccountManagement.DBContext.Models.ViewModels.PurchaseOrder;
@@ -22,7 +23,7 @@ using AccountManagement.DBContext.Models.ViewModels.InvoiceMaster;
 using AccountManagement.Repository.Interface.Repository.InvoiceMaster;
 using AccountManagement.Repository.Services.PurchaseOrder;
 using Azure;
-using AccountManagement.DBContext.DBContext;
+//using AccountManagement.DBContext.DBContext;
 
 namespace AccountManagement.Repository.Repository.PurchaseOrderRepository
 {
@@ -82,7 +83,7 @@ namespace AccountManagement.Repository.Repository.PurchaseOrderRepository
                     var LastPO = Context.PurchaseOrders.Where(a => a.ToCompanyId == CompanyId).OrderByDescending(e => e.CreatedOn).FirstOrDefault();
 
                     var currentDate = DateTime.Now;
-                    int currentYear = currentDate.Month > 4 ? currentDate.Year + 1 : currentDate.Year;
+                    int currentYear = FinancialYear.CurrentAsProduced(currentDate).EndYear;
                     int lastYear = currentYear - 1;
 
                     string PurchaseOrderId;

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+
+# The root .gitignore has `**/[Pp]ackages/*` (the NuGet package-restore rule from
+# the Visual Studio template). It also matches the npm workspaces below, which is
+# why packages/domain and packages/contracts were never committed. Re-include them;
+# the node_modules/ and dist/ rules above still apply inside them.
+!packages/*
+
+# tsc --build fingerprints
+*.tsbuildinfo

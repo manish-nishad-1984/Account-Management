@@ -35,7 +35,8 @@ namespace AccountManegments.Web.Controllers
             {
 
                 Guid? siteId = string.IsNullOrEmpty(UserSession.SiteId) ? null : new Guid(UserSession.SiteId);
-                string apiUrl = $"PurchaseRequest/GetPurchaseRequestList?searchText={searchText}&searchBy={searchBy}&sortBy={sortBy}&&siteId={siteId}";
+                string apiUrl = $"PurchaseRequest/GetPurchaseRequestList?searchText={searchText}&searchBy={searchBy}&sortBy={sortBy}&siteId={siteId}";
+                // API endpoint requires POST (not GET)
                 ApiResponseModel res = await APIServices.PostAsync("", apiUrl);
 
                 if (res.code == 200)
