@@ -19,7 +19,14 @@ import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS_DIR = join(HERE, "..", "..", "apps", "api", "drizzle");
+
+/**
+ * Defaults to the repo layout. MIGRATIONS_DIR overrides it, because a deployed
+ * release has no `apps/api` above it — the drizzle folder sits beside the
+ * compiled output instead.
+ */
+const MIGRATIONS_DIR =
+  process.env.MIGRATIONS_DIR ?? join(HERE, "..", "..", "apps", "api", "drizzle");
 
 const PGURL = process.env.PGURL;
 if (!PGURL) {

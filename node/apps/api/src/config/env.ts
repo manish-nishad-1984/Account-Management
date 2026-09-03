@@ -9,6 +9,14 @@ import { z } from "zod";
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(3000),
+
+  /**
+   * Bind address. Defaults to 0.0.0.0 so a container is reachable from outside
+   * itself. Behind a reverse proxy set it to 127.0.0.1 — otherwise the API is
+   * also reachable DIRECTLY on its port, bypassing the proxy and whatever the
+   * proxy is there to enforce.
+   */
+  HOST: z.string().default("0.0.0.0"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 
   // An unset variable and one set to "" mean the same thing to a deployment

@@ -596,22 +596,113 @@ try {
     });
   }
 
+  // ── uniqueness the target enforces and the source does not ───────────────
+  //
+  // Seven unique indexes exist in the target. A duplicate aborts the entire
+  // load, and letting ON CONFLICT DO NOTHING swallow it would leave a grid that
+  // looks complete and is not. So drop the later row and SAY SO.
+  //
+  //   users.lower(user_name)        already handled above
+  //   site_groups.lower(name)       already handled above
+  //   companies.upper(gst_no)
+  //   suppliers.upper(gst_no)
+  //   suppliers.lower(name)
+  //   items.lower(name)
+  //   units.lower(name)
+  const enforceUnique = (rows, index, keyOf, nameOf) => {
+    const seen = new Map();
+    const kept = [];
+    const dropped = [];
+    for (const r of rows) {
+      const key = keyOf(r);
+      if (key === null || key === undefined || key === "") {
+        kept.push(r);
+        continue;
+      }
+      if (seen.has(key)) {
+        dropped.push(r);
+        report.notes.push(
+          `${index}: ${JSON.stringify(nameOf(r))} collides with ` +
+            `${JSON.stringify(nameOf(seen.get(key)))} on ${JSON.stringify(key)} ` +
+            `— NOT imported, the target forbids the duplicate`,
+        );
+        continue;
+      }
+      seen.set(key, r);
+      kept.push(r);
+    }
+    return { kept, dropped, seen };
+  };
+
+  const upperOrNull = (v) => (v === null || v === undefined ? null : String(v).toUpperCase().trim());
+  const lowerOrNull = (v) => (v === null || v === undefined ? null : String(v).toLowerCase().trim());
+
+  // Units first: items reference them, so a dropped unit must not orphan items.
+  // Two units with the same name ARE the same unit, so remap rather than lose
+  // the items.
+  const unitsUnique = enforceUnique(
+    outUnits,
+    "units_name_lower_key",
+    (r) => lowerOrNull(r.name),
+    (r) => r.name,
+  );
+  const unitRemap = new Map();
+  for (const d of unitsUnique.dropped) {
+    const winner = unitsUnique.seen.get(lowerOrNull(d.name));
+    if (winner) unitRemap.set(d.id, winner.id);
+  }
+  const finalUnits = unitsUnique.kept;
+
+  let finalItems = outItems.map((it) =>
+    unitRemap.has(it.unit_id) ? { ...it, unit_id: unitRemap.get(it.unit_id) } : it,
+  );
+  finalItems = enforceUnique(
+    finalItems,
+    "items_name_lower_key",
+    (r) => lowerOrNull(r.name),
+    (r) => r.name,
+  ).kept;
+
+  const finalCompanies = enforceUnique(
+    outCompanies,
+    "companies_gst_no_key",
+    (r) => upperOrNull(r.gst_no),
+    (r) => r.name,
+  ).kept;
+
+  let finalSuppliers = enforceUnique(
+    outSuppliers,
+    "suppliers_gst_no_key",
+    (r) => upperOrNull(r.gst_no),
+    (r) => r.name,
+  ).kept;
+  finalSuppliers = enforceUnique(
+    finalSuppliers,
+    "suppliers_name_lower_key",
+    (r) => lowerOrNull(r.name),
+    (r) => r.name,
+  ).kept;
+
+  // Anything referencing a company that just went must go with it.
+  const keptCompanyIds = new Set(finalCompanies.map((c) => c.id));
+  const finalUserCompanies = outUserCompanies.filter((uc) => keptCompanyIds.has(uc.company_id));
+
   // ── report ───────────────────────────────────────────────────────────────
   console.log("\n" + "=".repeat(72));
   console.log("WHAT WOULD BE LOADED");
   console.log("=".repeat(72));
   const plan = [
-    ["units", outUnits],
-    ["companies", outCompanies],
+    ["units", finalUnits],
+    ["companies", finalCompanies],
     ["sites", outSites],
-    ["suppliers", outSuppliers],
-    ["items", outItems],
+    ["suppliers", finalSuppliers],
+    ["items", finalItems],
     ["site_groups", outGroups],
     ["site_group_sites", outGroupSites],
     ["site_group_addresses", outGroupAddresses],
     ["users", outUsers],
     ["user_sites", outUserSites],
-    ["user_companies", outUserCompanies],
+    ["user_companies", finalUserCompanies],
     ["forms", outForms],
     ["user_form_permissions", outPermissions],
   ];
