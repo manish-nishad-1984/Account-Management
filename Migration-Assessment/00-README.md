@@ -31,6 +31,7 @@ Read in this order. Documents 01 and 18 are the ones to read if you only read tw
 | [16](16-Technology-Stack.md) | Technology Stack | Final recommended stack with reasons |
 | [17](17-Risk-Register.md) | Risk Register | Risks, likelihood, impact, mitigation |
 | [18](18-GO-NO-GO-Assessment.md) | **GO / NO-GO** | **Whether to start, and what must be resolved first** |
+| [19](19-Business-Decisions-Required.md) | **Business Decisions** | **The 11 questions for the business, written to be sent to them** |
 
 ---
 
@@ -70,14 +71,23 @@ Specifically **UNKNOWN** until the extraction scripts are run:
 
 Three read-only scripts are in [`tools/`](tools/). They change nothing.
 
+```powershell
+cd tools
+.\run-db-extract.ps1
+```
+
+That runs all three and writes the output into [`db-extract/`](db-extract/), then
+prints a summary of every non-zero orphan count. See
+[`db-extract/README.md`](db-extract/README.md) for options and for the manual SSMS
+procedure if `sqlcmd` is not available.
+
 ```
 tools/01-extract-mssql-schema.sql        → db-extract/01-schema.txt
 tools/02-extract-perf-dmv.sql            → db-extract/02-perf.txt
 tools/03-orphan-and-duplicate-census.sql → db-extract/03-census.txt
 ```
 
-Each script has run instructions in its header. Drop the three output files into
-a `db-extract` folder next to this one and the assessment can be completed —
+Once the three output files are in `db-extract/`, the assessment can be completed —
 in particular documents 04, 05, 09 and 14, and the effort estimates in 13.
 
 Script 03 is the important one. It measures the gap between the ~25 foreign keys
