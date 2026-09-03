@@ -1,9 +1,15 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
-**Written:** 2 September 2026, after the unblocking session (supersedes all earlier
-handoffs of the same name).
+**Written:** 2 September 2026, after the unblocking session; extended 3 September
+2026 with the deployment session (§5e). Supersedes all earlier handoffs of the
+same name.
 Read this first, then `README.md`, then `Migration-Assessment/01-Executive-Summary.md`
 and `18-GO-NO-GO-Assessment.md`.
+
+**The new app is live at https://avfast.in** with real master data — read §5e
+before touching nginx or the server. The live ASP.NET app now answers on
+**https://www.avfast.in**, and it is **broken for reasons that predate this
+work** (§5e, "The live MVC app is down").
 
 ---
 
@@ -52,11 +58,11 @@ AC/
     ├── packages/domain/           shared business rules (12 tests)
     ├── packages/contracts/        Zod schemas shared by API and web
     └── apps/
-        ├── api/                   NestJS + Fastify + Drizzle (166 tests)
-        └── web/                   React 19 + Vite + Tailwind (77 tests)
+        ├── api/                   NestJS + Fastify + Drizzle (188 tests)
+        └── web/                   React 19 + Vite + Tailwind (91 tests)
 ```
 
-**288 tests pass** (19 .NET + 12 domain + 166 API + 91 web).
+**310 tests pass** (19 .NET + 12 domain + 188 API + 91 web).
 
 ### Verify everything
 
@@ -98,18 +104,16 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 
 ## 4. Repository state
 
-Branch **`main`**. HEAD builds and all **288 tests pass**
-(19 .NET + 12 domain + 166 API + 91 web).
-
-> ⚠️ **The §5c work is UNCOMMITTED.** It sits in the working tree and was left
-> for the user to review rather than committed. `git status` is not clean, and
-> `origin/main` is still at `af0d5014`.
+Branch **`main`**. HEAD builds and all **310 tests pass**
+(19 .NET + 12 domain + 188 API + 91 web).
 
 - `b8d03922` completed the broken commit `6cefc164` (see §5).
 - `f0f69f95` merged `newNode` into `main`, resolving 3 conflicts.
 - `566b28ab` committed the Companies / Sites / Site Groups work of §6.
-- **`main` was pushed to `origin/main`** (`216067a4..dcefd442`). The working
-  tree is clean and `origin` is current.
+- `410e3198` deployed to the VPS and added `/deploy`. The §5c work went in with
+  it, so it is no longer uncommitted.
+- The domain move, the systemd PEM fix and the real-data import followed (§5e).
+- **`main` is pushed to `origin/main`** and the working tree is clean.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
   credential is in the HISTORY, not the working tree. Rotation is the fix.
 
@@ -352,6 +356,96 @@ into a directory the runner could resolve it from; it is NOT in the repo.
 
 ---
 
+## 5e. The deployment session (3 Sep 2026) — it is live on the domain
+
+**https://avfast.in now serves the new React app, with real master data.**
+Use `/deploy`; the skill at `.claude/skills/deploy/SKILL.md` carries the full
+procedure and every trap below.
+
+### The hostname split
+
+| Hostname | Goes to |
+|---|---|
+| `avfast.in` | **the new React app** — static build + `/api/` → `127.0.0.1:3101` |
+| `www.avfast.in` | the live ASP.NET MVC app → `127.0.0.1:8080`. `default_server`. |
+| `api.avfast.in` | the live ASP.NET API → `127.0.0.1:7251`, untouched |
+
+The user chose to replace the root (asked, answered "Replace avfast.in itself"),
+knowing the new app is **masters only**. The live system was moved to `www`
+rather than left unreachable, because that hostname was **already in DNS and
+already on the certificate** — nothing to add, nothing to re-issue.
+
+There is **no wildcard DNS** and no DNS tool on the MCP connection: a brand new
+hostname needs the user to add an A record in hPanel by hand.
+
+Port **8090** still serves the same app on its own vhost, for checking a release
+without going through the domain.
+
+### The live MVC app is down, and it is not our doing
+
+Every Razor view throws `System.BadImageFormatException: Could not load file or
+assembly '<Unknown>'. Index not found.`, so every page 302-loops to
+`/Authentication/UserLogin?ReturnUrl=%2FHome%2FError`. Static files still serve.
+
+- failing since **28 Aug 2026 14:28**, five days before this session
+- reproduces against `127.0.0.1:8080` **directly**, with the original
+  `Host: avfast.in` — so it is not nginx and not the hostname move
+- `AllowedHosts` is `*`, so it is not host filtering
+- **70 files** in `/opt/avfast/web` have mtime **26 Aug 14:51**; the process
+  started **26 Aug 12:47**. A deployment replaced the assemblies underneath the
+  running process.
+
+`systemctl restart avfast-web` is very likely the whole fix. It is the user's
+production service — **ask first.**
+
+### A PEM cannot travel in a systemd environment variable
+
+This was the session's real bug, and it took two wrong fixes to find. Login
+returned **500 while a wrong password still correctly returned 401** — the
+credential path was fine, token *signing* was not.
+
+- `EnvironmentFile` reads **one line per variable**, so a real multi-line PEM
+  arrives as just `-----BEGIN PRIVATE KEY-----` → jose:
+  `asn1 encoding routines::not enough data`
+- escaping the newlines does **not** help: in an unquoted value systemd treats a
+  backslash as an escape and **removes** it, so the process gets
+  `-----BEGIN PRIVATE KEY-----nMIIEv…` with no line breaks → jose:
+  `asn1 encoding routines::too long`
+
+Neither fails at boot. The fix is `JWT_PRIVATE_KEY_FILE` / `JWT_PUBLIC_KEY_FILE`
+holding **paths**, which also keeps the signing key out of `/proc/<pid>/environ`.
+`env.ts` still decodes escaped newlines for containers and CI, and now **refuses
+to boot** on either broken shape, naming the variable and the cause. 19 tests in
+`apps/api/src/config/env.test.ts` — the first tests that file has ever had.
+
+`/proc/<pid>/environ` is what settled it. When an env var "looks right" in the
+file but the app disagrees, read what the *process* actually got.
+
+### Real data is in, and one figure is worth knowing
+
+82 units, 3 companies, 13 sites, 171 suppliers, 758 items, 35 site groups,
+3 users, 21 forms, 63 permissions. Passwords are **never** copied — every
+imported user has `DevPassword1`. Users: `ckalathiya`, `ac`, `chintanauro`.
+
+The dry run confirmed the earlier census: **0 real referential corruption**, 111
+orphans all debris from soft-deleted users, 9 suppliers refused for duplicate GST
+numbers (one GST literally `"00"`), 4 site groups carrying trailing CRLF.
+
+### Other traps, briefly
+
+- **`npm test` before every ship**, and a healthy `/health` is not enough — it
+  never touches the signing key. Always also check a real login.
+- Workspace `file:` deps must be **real copies** on the server, not symlinks:
+  Node resolves a symlinked package from its real path and never sees
+  `api/node_modules`, so `zod` goes missing from inside `contracts/dist`.
+- `/opt/accountbook-next` must be **755**; at 700 `www-data` cannot traverse it
+  and every page is a 500.
+- `tar` on this machine reads `C:/…` as a remote host — use `--force-local`.
+- `HOST=127.0.0.1` in the release env, or the API is reachable directly on 3101
+  and nginx is decoration.
+
+---
+
 ## 6. The Companies / Sites / Site Groups session (committed as `566b28ab`)
 
 **Companies, Sites and Site Groups master screens**, end to end:
@@ -452,6 +546,18 @@ Writing a large file with `cat > file <<EOF` fails with "unexpected EOF" once th
 command grows past roughly 150 lines. Split it, or use the Write tool.
 There is **no Python** on this machine, so no `python - <<PY` either.
 
+**A doubled backslash also collapses**, even inside a quoted `<<'EOF'`. Writing
+`.replace(/\\n/g, "\n")` lands in the file as `.replace(/\n/g, "\n")` — which
+still compiles, still passes review, and is a silent no-op. This cost real time
+in the deployment session (§5e): the code meant to decode escaped newlines in a
+PEM did nothing at all, and only a `/proc/<pid>/environ` dump showed it.
+
+Where a literal backslash matters, build it from a char code —
+`const BACKSLASH = String.fromCharCode(92)` — and use `split`/`join` instead of
+a regex, so no ambiguous escape exists in the source. `apps/api/src/config/env.ts`
+does exactly this and says why. Or just use the Write/Edit tools, which do not
+pass through a shell.
+
 ### 7.6 Drizzle wraps every driver error, so read `cause` before `code`
 A failed query arrives as a `DrizzleQueryError` — "Failed query: insert into …" —
 with the real PostgreSQL error hanging off `.cause`. Reading `error.code` from
@@ -546,9 +652,26 @@ the screens whose UI is gated on `usePermission`.
 
 ## 11. Suggested next steps
 
-The masters are done. Everything below is either blocked on the business or is
-the next tranche of build. **The first three are still on the user — but two of
-them are now cheap, which was the point of §5c.**
+The masters are done and deployed (§5e). Everything below is either blocked on
+the business or is the next tranche of build. **The first items are still on the
+user — but most are now cheap, which was the point of §5c.**
+
+**Server housekeeping, from the deployment session — do these first:**
+
+0a. **Close port 1433.** SQL Server listens on `0.0.0.0:1433`, reachable from the
+    whole internet, while its siblings 1431 and 1434 are correctly on loopback.
+    `ufw` is inactive. Check nothing external depends on it, then
+    `ufw allow 22 && ufw allow 80 && ufw allow 443 && ufw allow 8090 && ufw deny 1433 && ufw enable`.
+    **More urgent than anything else in this list.**
+
+0b. **Rotate the VPS root password.** It was pasted into a session transcript.
+    The deploy key in `~/.ssh/authorized_keys` means the password is no longer
+    needed for any of this. There is also an inert Hostinger public key
+    `accountbook-deploy` (id `571616`) that can be deleted — attaching a key
+    only takes effect on VM *recreate*, so it never did anything.
+
+0c. **Decide about `avfast-web`.** It has been throwing on every page since
+    28 Aug (§5e). A restart is very likely the whole fix, but it is production.
 
 1. **Rotate the SQL Server password.** Still the top item, and now the one that
    gates step 2 as well. It is live, it is in git history, and the repository has
