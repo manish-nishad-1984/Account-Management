@@ -959,9 +959,10 @@ namespace AccountManagement.Repository.Repository.SalesRepository
 
                 if (!string.IsNullOrEmpty(SalesPaymentReport.sortColumn) && !string.IsNullOrEmpty(SalesPaymentReport.sortColumnDir))
                 {
-
-                    var queryType = query.FirstOrDefault().GetType();
-
+                    // Removed: `var queryType = query.FirstOrDefault().GetType();`
+                    // It was never read, cost a full round-trip to the database on
+                    // every sorted report, and threw NullReferenceException when the
+                    // report matched no rows. See 05-Performance-Analysis.md, P5.
                     switch (SalesPaymentReport.sortColumn.ToLower())
                     {
                         case "suppliername":

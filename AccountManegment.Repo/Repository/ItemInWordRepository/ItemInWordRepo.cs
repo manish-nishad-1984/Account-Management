@@ -408,8 +408,19 @@ namespace AccountManagement.Repository.Repository.ItemInWordRepository
             ApiResponseModel response = new ApiResponseModel();
             try
             {
-                var allInwardData = await Context.ItemInwords.ToListAsync();
                 var approvalDict = InwardList.InwardList.ToDictionary(x => x.InwardId, x => x.IsApproved);
+                var requestedIds = approvalDict.Keys.ToList();
+
+                // Load ONLY the inwards being approved. This previously read every
+                // ItemInword in the table and called Update() on all of them, so
+                // approving a single inward issued an UPDATE against every row — a
+                // full-table rewrite that also clobbered any concurrent edit.
+                // Note the spelling: the request model says InwardId, the entity
+                // says InwordId. They are the same key.
+                // See Migration-Assessment/05-Performance-Analysis.md, finding P2.
+                var allInwardData = await Context.ItemInwords
+                    .Where(x => requestedIds.Contains(x.InwordId))
+                    .ToListAsync();
 
                 foreach (var Inward in allInwardData)
                 {

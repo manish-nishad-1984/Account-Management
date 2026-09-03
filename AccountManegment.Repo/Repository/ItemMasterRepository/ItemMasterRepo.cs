@@ -544,8 +544,17 @@ namespace AccountManagement.Repository.Repository.ItemMasterRepository
             ApiResponseModel response = new ApiResponseModel();
             try
             {
-                var allItems = await Context.ItemMasters.ToListAsync();
                 var approvalDict = ItemIdList.ItemList.ToDictionary(x => x.ItemId, x => x.IsApproved);
+                var requestedIds = approvalDict.Keys.ToList();
+
+                // Load ONLY the items being approved. This previously read every
+                // ItemMaster in the table and called Update() on all of them, so
+                // approving a single item issued an UPDATE against every row — a
+                // full-table rewrite that also clobbered any concurrent edit.
+                // See Migration-Assessment/05-Performance-Analysis.md, finding P2.
+                var allItems = await Context.ItemMasters
+                    .Where(x => requestedIds.Contains(x.ItemId))
+                    .ToListAsync();
 
                 foreach (var item in allItems)
                 {

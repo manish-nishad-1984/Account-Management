@@ -316,8 +316,17 @@ namespace AccountManagement.Repository.Repository.PurchaseRequestRepository
             ApiResponseModel response = new ApiResponseModel();
             try
             {
-                var allPRData = await Context.PurchaseRequests.ToListAsync();
                 var approvalDict = PRIdList.PRList.ToDictionary(x => x.Pid, x => x.IsApproved);
+                var requestedIds = approvalDict.Keys.ToList();
+
+                // Load ONLY the requests being approved. This previously read every
+                // PurchaseRequest in the table and called Update() on all of them, so
+                // approving a single request issued an UPDATE against every row — a
+                // full-table rewrite that also clobbered any concurrent edit.
+                // See Migration-Assessment/05-Performance-Analysis.md, finding P2.
+                var allPRData = await Context.PurchaseRequests
+                    .Where(x => requestedIds.Contains(x.Pid))
+                    .ToListAsync();
 
                 foreach (var PR in allPRData)
                 {

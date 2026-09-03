@@ -486,8 +486,17 @@ namespace AccountManagement.Repository.Repository.SupplierRepository
             ApiResponseModel response = new ApiResponseModel();
             try
             {
-                var allSupplierData = await Context.SupplierMasters.ToListAsync();
                 var approvalDict = SupplierList.SupplierList.ToDictionary(x => x.SupplierId, x => x.IsApproved);
+                var requestedIds = approvalDict.Keys.ToList();
+
+                // Load ONLY the suppliers being approved. This previously read every
+                // SupplierMaster in the table and called Update() on all of them, so
+                // approving a single supplier issued an UPDATE against every row — a
+                // full-table rewrite that also clobbered any concurrent edit.
+                // See Migration-Assessment/05-Performance-Analysis.md, finding P2.
+                var allSupplierData = await Context.SupplierMasters
+                    .Where(x => requestedIds.Contains(x.SupplierId))
+                    .ToListAsync();
 
                 foreach (var Supplier in allSupplierData)
                 {

@@ -860,8 +860,17 @@ namespace AccountManagement.Repository.Repository.PurchaseOrderRepository
             ApiResponseModel response = new ApiResponseModel();
             try
             {
-                var allPOData = await Context.PurchaseOrders.ToListAsync();
                 var approvalDict = POIdList.POList.ToDictionary(x => x.Id, x => x.IsApproved);
+                var requestedIds = approvalDict.Keys.ToList();
+
+                // Load ONLY the rows being approved. This previously read every
+                // PurchaseOrder in the table and called Update() on all of them, so
+                // approving a single PO issued an UPDATE against every row — a
+                // full-table rewrite that also clobbered any concurrent edit.
+                // See Migration-Assessment/05-Performance-Analysis.md, finding P2.
+                var allPOData = await Context.PurchaseOrders
+                    .Where(x => requestedIds.Contains(x.Id))
+                    .ToListAsync();
 
                 foreach (var PO in allPOData)
                 {

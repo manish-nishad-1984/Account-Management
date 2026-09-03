@@ -1056,9 +1056,10 @@ namespace AccountManagement.Repository.Repository.InvoiceMasterRepository
 
                 if (!string.IsNullOrEmpty(invoiceReport.sortColumn) && !string.IsNullOrEmpty(invoiceReport.sortColumnDir))
                 {
-
-                    var queryType = query.FirstOrDefault().GetType();
-
+                    // Removed: `var queryType = query.FirstOrDefault().GetType();`
+                    // It was never read, cost a full round-trip to the database on
+                    // every sorted report, and threw NullReferenceException when the
+                    // report matched no rows. See 05-Performance-Analysis.md, P5.
                     switch (invoiceReport.sortColumn.ToLower())
                     {
                         case "suppliername":
@@ -1343,8 +1344,17 @@ namespace AccountManagement.Repository.Repository.InvoiceMasterRepository
             ApiResponseModel response = new ApiResponseModel();
             try
             {
-                var allInvoices = await Context.SupplierInvoices.ToListAsync();
                 var approvalDict = InvoiceIdList.InvoiceList.ToDictionary(x => x.Id, x => x.IsApproved);
+                var requestedIds = approvalDict.Keys.ToList();
+
+                // Load ONLY the invoices being approved. This previously read every
+                // SupplierInvoice in the table and called Update() on all of them, so
+                // approving a single invoice issued an UPDATE against every row — a
+                // full-table rewrite that also clobbered any concurrent edit.
+                // See Migration-Assessment/05-Performance-Analysis.md, finding P2.
+                var allInvoices = await Context.SupplierInvoices
+                    .Where(x => requestedIds.Contains(x.Id))
+                    .ToListAsync();
 
                 foreach (var invoice in allInvoices)
                 {
