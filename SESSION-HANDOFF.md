@@ -1,6 +1,6 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
-**Written:** 1 September 2026, after the CRUD session (supersedes all earlier
+**Written:** 2 September 2026, after the unblocking session (supersedes all earlier
 handoffs of the same name).
 Read this first, then `README.md`, then `Migration-Assessment/01-Executive-Summary.md`
 and `18-GO-NO-GO-Assessment.md`.
@@ -56,7 +56,7 @@ AC/
         └── web/                   React 19 + Vite + Tailwind (77 tests)
 ```
 
-**267 tests pass** (12 .NET + 12 domain + 166 API + 77 web).
+**288 tests pass** (19 .NET + 12 domain + 166 API + 91 web).
 
 ### Verify everything
 
@@ -66,6 +66,14 @@ cd .. && dotnet build AccountManagement.sln && dotnet test AccountManagement.sln
 ```
 
 ### Run it locally
+
+**Use the `/run-local` slash command** — `.claude/skills/run-local/SKILL.md`. It
+frees the ports, builds, boots both, verifies they actually serve, and prints the
+sign-in details. `/run-local stop`, `restart` and `status` also work. It is
+project-scoped on purpose: a global `/run-local` typed in the user's OTHER project
+would boot this app by mistake.
+
+By hand, if you need to:
 
 ```bash
 cd node && npm run --workspace @accountmanagement/api build
@@ -90,8 +98,12 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 
 ## 4. Repository state
 
-Branch **`main`**. HEAD builds and all **267 tests pass**
-(12 .NET + 12 domain + 166 API + 77 web).
+Branch **`main`**. HEAD builds and all **288 tests pass**
+(19 .NET + 12 domain + 166 API + 91 web).
+
+> ⚠️ **The §5c work is UNCOMMITTED.** It sits in the working tree and was left
+> for the user to review rather than committed. `git status` is not clean, and
+> `origin/main` is still at `af0d5014`.
 
 - `b8d03922` completed the broken commit `6cefc164` (see §5).
 - `f0f69f95` merged `newNode` into `main`, resolving 3 conflicts.
@@ -218,6 +230,125 @@ suite went green **and got faster**: 241s → 147s.
 pool is `forks`, so the threads settings are accepted and silently ignored, and
 the only clue is `ChildProcess` in the stack of a pool that should be threads.
 `pool` is now named explicitly so the config cannot miss again.
+
+---
+
+## 5c. The unblocking session (2 Sep 2026, UNCOMMITTED)
+
+The user's three top blockers were all on them, not on code. This session did the
+work that shrinks those blockers, then took the .NET reliability wins that no
+blocker touches. **The user's standing instruction here was "I do not want orphan
+entries" — treat that as a decision: the target keeps real foreign keys and the
+ETL refuses orphans rather than carrying them.**
+
+### The census is now one command
+`Migration-Assessment/tools/run-db-extract.ps1` runs all three extraction scripts
+via `sqlcmd` and writes `01-schema.txt`, `02-perf.txt`, `03-census.txt` into
+`db-extract/`. This replaces the manual SSMS ritual (Results-to-Text, the
+8192-character setting, Save Results As, three times over) that was costing about
+a day.
+
+- The password is passed through `SQLCMDPASSWORD`, never on the command line, and
+  is cleared in a `finally`. It prompts if `$env:ACC_DB_PASSWORD` is unset.
+- `-Only schema,perf,census` runs a subset. Run `perf` on its own at the END of a
+  working day — its DMV counters reset when SQL Server restarts.
+- It prints an **orphan summary** at the end, and **reports failed sections first,
+  in red**. That matters more than it sounds: a section that errored reports no
+  orphans because it never looked, and a partial census that reads as clean is the
+  one genuinely dangerous outcome of the whole exercise.
+- `03-census.txt` is written **pipe-delimited** so it parses; 01 and 02 keep the
+  space-aligned layout because they carry DDL and query text.
+- **Still not run.** It needs the rotated credential. Nothing about it has touched
+  the live server.
+
+### The business questions are now sendable
+`Migration-Assessment/19-Business-Decisions-Required.md` — the 10 questions from
+`07-Business-Rule-Inventory.md` plus the supplier-permission decision, rewritten in
+plain English for a business reader: what was found, why it matters, the options
+with consequences, a recommendation, and a decision box. No rule IDs in the
+reader-facing text; there is a technical cross-reference table at the end.
+
+Question 2 (Create Invoice may be dropping TDS and round-off) asks for a ten-minute
+check against the live system, because it may be affecting data being created now.
+
+Also published as a private, shareable page so it can actually be forwarded — a
+markdown file in a git repo cannot be sent to a business owner:
+<https://claude.ai/code/artifact/764e0b14-2c69-4e36-bbb2-614bb42e1ad7>
+The markdown file is the source of record; if one changes, change both.
+
+### .NET reliability fixes (finding P2 and P5)
+**P2 — seven bulk-approve methods rewrote their entire table.** Not six; there are
+seven, because `ItemInwardRepo.cs` and `ItemInWordRepo.cs` are near-identical
+duplicate files that both carry the bug. Each loaded every row in the table and
+called `Update()` on all of them — note the `Update()` sat *outside* the
+`TryGetValue`, so approving one purchase order issued an UPDATE against every row,
+every column, clobbering any concurrent edit. All seven now load only the requested
+ids.
+
+**P5 — two dead `query.FirstOrDefault().GetType()` calls** removed
+(`SupplierInvoiceRepo.cs`, `SalesRepo.cs`). They were never read, cost a round-trip
+per sorted report, and threw `NullReferenceException` when the report matched no
+rows — so this was a latent crash, not just waste.
+
+`AccountManagement.Tests/BulkApprovalTests.cs` (7 new tests, .NET 12 → 19).
+`Microsoft.EntityFrameworkCore.InMemory` 7.0.17 was added to the test project.
+
+> **The one thing to understand about these tests.** Asserting on the final
+> `IsApproved` values passes against the OLD code too — the old code did reach the
+> right values, it just rewrote the whole table to get there. So the assertions are
+> on **how many rows were loaded and tracked**
+> (`ctx.ChangeTracker.Entries<T>().Count()`). This was verified by temporarily
+> reintroducing the full-table load: the three row-count tests failed and the two
+> value tests still passed. A value-only test here would be false confidence.
+
+### A real bug in the web money formatter
+`formatPercent` used `value.replace(/\.?0+$/, "")`, which strips trailing zeros off
+whole numbers too: `"10"` rendered as **`1%`** and `"100"` as `1%`. It stayed
+invisible because the API serialises `numeric` as `"18.00"`, so the regex matches
+the `".00"` instead — the bug only appears the day a value arrives without a
+decimal point. Fixed to guard on the decimal point being present.
+
+This is **new code, not a ported rule**, so the "ported rules keep their defects"
+convention did not apply.
+
+`apps/web/src/lib/format.test.ts` is new — 14 tests, the first tests in
+`src/lib/` at all. Before this, every money and tax value the user sees was
+rendered by an untested function, and because no seeded amount reaches 100,000 the
+**lakh-grouping branch had never executed once**, in a test or a browser. Web 77 → 91.
+
+---
+
+## 5d. The UI has now been looked at
+
+§10 used to say nobody had ever seen the app render. That is no longer true.
+`patchright` is installed and the browser-automation skill works.
+
+**Nothing was broken.** Login, all seven master screens, the sidebar and a CRUD
+dialog were driven in a real headless Chromium: 0 console errors, 25 rows on every
+list, correct headers, working row actions.
+
+Every deliberate decision in §5b and §6 was confirmed to hold in the rendered DOM:
+no bank account or IFSC in the Companies grid, no Company column on Sites, Site
+Groups read-only with its banner and no row actions, and the user edit dialog saves
+with the password untouched (the §5b regression, verified live).
+
+Three things worth knowing for the next person who does this:
+
+1. **`page.goto` signs you out.** The token is in memory only by design, so every
+   full navigation returns the login page. Navigate by clicking nav links, not by
+   `goto`, or you will "discover" that all seven screens render a login form.
+2. **`ERR_ABORTED` on every list request is correct, not a bug.** React
+   `StrictMode` double-mounts in dev and `list-query.ts` forwards TanStack Query's
+   abort signal to `fetch`, so the first request is cancelled and the second
+   succeeds. The aborts are evidence the cancellation works. Dev-only.
+3. **The default headless viewport is 764×429**, below the sidebar's breakpoint, so
+   the nav sits off-canvas at `x: -244` and clicks time out with "element is
+   outside of the viewport". Call `page.setViewportSize({width: 1440, height: 900})`
+   first. The responsive drawer itself is fine — there is a properly aria-labelled
+   "Open navigation" button.
+
+Run scripts live in the scratchpad, not the repo. `patchright` had to be installed
+into a directory the runner could resolve it from; it is NOT in the repo.
 
 ---
 
@@ -367,8 +498,8 @@ the screens whose UI is gated on `usePermission`.
 
 | Blocker | Detail |
 |---|---|
-| **`Migration-Assessment/db-extract/` is empty** | The 3 read-only scripts in `Migration-Assessment/tools/` have never been run. Until then the orphan volume across ~62 unconstrained FK columns is unknown, and no schema can be *finalised*. About a day in SSMS. **This is the binding constraint.** |
-| **10 business-rule questions unanswered** | `07-Business-Rule-Inventory.md`. 2-4 week lead time — the longest pole. The money calculator cannot start without them. |
+| **`Migration-Assessment/db-extract/` is empty** | The 3 read-only scripts have never been run. Until then the orphan volume across ~62 unconstrained FK columns is unknown, and no schema can be *finalised*. **This is the binding constraint.** No longer a day in SSMS — it is now one command, `tools/run-db-extract.ps1` (§5c). It still needs the rotated credential. |
+| **10 business-rule questions unanswered** | 2-4 week lead time — the longest pole. The money calculator cannot start without them. They are now written to be sent: `Migration-Assessment/19-Business-Decisions-Required.md` (§5c). **The clock does not start until someone sends it.** |
 | **Credentials not rotated** | The `sa` account on `srv1925876.hstgr.cloud` is still live, and its password is still in git history in earlier commits of `appsettings.json`. Removing it from the file did not remove it from history. `gitleaks` in CI will fail on the first push, correctly. **Rotation is the fix, not a history rewrite.** |
 | **Which of 3 jQuery money calculators is correct** | Blocks all invoicing work (Phase 4, the risk centre). The Items screen stores the GST amount as entered rather than deriving it, precisely so this stays an open question rather than being answered by implication. |
 | **Supplier edit/delete permission change** | The port guards `supplier.edit` and `supplier.delete`; the source guards neither (§5b decision 1). Whoever edits suppliers today needs those boxes ticked before cutover, or they lose the ability. Needs a decision, not code. |
@@ -401,11 +532,12 @@ the screens whose UI is gated on `usePermission`.
 - Windows 11, PowerShell + Git Bash. Use a real Windows path for temp files.
 - **Docker is installed but the daemon is not running**, so there is no real
   PostgreSQL container. PGlite is used instead.
-- **No browser automation driver.** The `browser-automation` skill needs
-  `patchright`, which is not installed (it pulls a ~150MB Chromium), so **the
-  rendered UI has never been looked at by anyone but the user.** All UI work is
-  reasoned, not visually verified. If the user says something looks wrong,
-  believe them.
+- **Browser automation works now.** `patchright` + Chromium are installed. The
+  skill's runner resolves `patchright` from the **working directory**, not from a
+  global install, so run it from a directory that has it (the scratchpad — it is
+  deliberately not in the repo). See §5d for what was found and three traps.
+  The user is still the better judge of whether a screen looks *right*; the
+  driver only proves it renders.
 - Node v24.15.0 locally; CI pins 22 LTS.
 - `git clone` of this repo needs `-c core.longpaths=true` — some
   `AccountManegments.Web/wwwroot` paths exceed MAX_PATH.
@@ -415,35 +547,47 @@ the screens whose UI is gated on `usePermission`.
 ## 11. Suggested next steps
 
 The masters are done. Everything below is either blocked on the business or is
-the next tranche of build.
+the next tranche of build. **The first three are still on the user — but two of
+them are now cheap, which was the point of §5c.**
 
-1. **Rotate the SQL Server password.** Still the top item. It is live, it is in
-   git history, and the repository has now been pushed to GitHub — the exposure
-   is wider than it was. Rotation is the fix; removing it from the working tree
-   already happened and did not help.
-2. **Get the 3 census scripts run** (`Migration-Assessment/tools/`, about a day
-   in SSMS). Everything data-shaped is blocked on them: the orphan volume across
-   ~62 unconstrained FK columns is still unknown, so no schema can be finalised
-   and the ETL cannot be written. **This is the binding constraint.**
-3. **Put the 10 business-rule questions to the business**
-   (`07-Business-Rule-Inventory.md`). 2-4 week lead time, and the money
-   calculator — the risk centre of the whole migration — cannot start without
-   the answers.
-4. **Confirm the supplier permission change** (§5b decision 1) with the
-   business. It is the one thing in this session that alters who can do what.
+1. **Rotate the SQL Server password.** Still the top item, and now the one that
+   gates step 2 as well. It is live, it is in git history, and the repository has
+   been pushed to GitHub — the exposure is wider than it was. Rotation is the fix;
+   removing it from the working tree already happened and did not help.
+2. **Run the census.** `cd Migration-Assessment\tools; .\run-db-extract.ps1` —
+   one command now, not a day in SSMS (§5c). Everything data-shaped is blocked on
+   it: the orphan volume across ~62 unconstrained FK columns is still unknown, so
+   no schema can be finalised and the ETL cannot be written. **This is the binding
+   constraint**, and the user has since said they do not want orphan entries at
+   all, which makes the count the thing that sizes the remediation.
+3. **Send `19-Business-Decisions-Required.md` to the business.** It is written and
+   ready. 2-4 week lead time, and the money calculator — the risk centre of the
+   whole migration — cannot start without the answers. **Question 2 in it wants a
+   ten-minute check first**, because it may be affecting invoices being created
+   right now.
+4. **Confirm the supplier permission change** (§5b decision 1). It is question 11
+   in that same document.
 
 Then, in rough order of value:
 
 - **The ETL for `users`, `companies`, `sites`** — the first real data movement,
   and the thing that will surface the orphans the census counts. Do it after
-  step 2, not before.
+  step 2, not before. "No orphan entries" means deciding, per relationship,
+  whether an orphan is cleaned, quarantined or rejected — that decision needs the
+  counts in front of you.
 - **Purchase requests and purchase orders** — the next module, and the first
   with header/detail writes. Two conventions become load-bearing there:
   everything in a transaction (§7.6), and the in-use delete checks that
   suppliers and items are currently missing (§5b decision 4) can finally be
-  written against real tables.
-- **.NET Phase 0 performance work** — pagination on the top 5 lists and the 6
-  bulk-approve full-table loads. Visible to users next week, on the system they
-  actually use today, and independent of every blocker above.
-- **Look at the UI.** Nobody has (§10). Five master screens, five dialogs and a
-  permission matrix have now been written without anyone seeing them render.
+  written against real tables. Deliberately NOT started this session: the census
+  is what says whether `PurchaseOrderDetails.PORefId` can carry a real FK.
+- **More .NET Phase 0 performance work.** P2 and P5 are done (§5c). The remaining
+  ranked items are P4 (`AsNoTracking`), P6 (`.ToList().Count` existence tests),
+  P3 (six N+1 loops) and P1 (pagination). **Do P1 after the DMV data arrives** —
+  "the top five list endpoints" is exactly what script 02 identifies, and guessing
+  which five is how a week goes into the wrong ones.
+  On P4: the assessment bills it as "one global setting, ~1 hour". Treat that with
+  care. There are 61 explicit `.Update(` calls against 35 `SaveChangesAsync`, which
+  suggests writes do not lean on change tracking — but a single read-modify-save
+  path that omits `.Update()` would start failing silently, and 19 tests is not a
+  net for that. Check all 35 save paths first; call it half a day.
