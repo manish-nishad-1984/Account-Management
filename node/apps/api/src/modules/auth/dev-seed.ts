@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { InMemoryUserRepository, UserRepository } from "./user.repository";
 import { ENV, type Env } from "../../config/env";
@@ -66,6 +67,11 @@ export class DevSeed implements OnModuleInit {
   private async seedDatabase(db: Database): Promise<void> {
     const existing = await db.select({ id: users.id }).from(users).limit(1);
     if (existing.length > 0) {
+      return;
+    }
+
+    if (this.env.SEED_SNAPSHOT) {
+      await this.seedFromSnapshot(db, this.env.SEED_SNAPSHOT);
       return;
     }
 
@@ -299,6 +305,125 @@ export class DevSeed implements OnModuleInit {
         DEV_PASSWORD +
         "'.",
     );
+  }
+
+  /**
+   * Seeds from a JSON snapshot of REAL master data produced by
+   * `tools/import-masters --snapshot`, instead of generating dummy records.
+   *
+   * The snapshot stores DATABASE column names (snake_case) because it was built
+   * to be loadable by raw SQL too. Drizzle's `.values()` wants the TypeScript
+   * property names, so the mapping is derived from the table definitions rather
+   * than hand-written thirteen times — one place to be wrong instead of many.
+   */
+  private async seedFromSnapshot(db: Database, path: string): Promise<void> {
+    const { readFileSync, existsSync } = await import("node:fs");
+
+    if (!existsSync(path)) {
+      this.logger.error(
+        `SEED_SNAPSHOT points at ${path}, which does not exist. ` +
+          "Generate it with: node --env-file=.env.local import.mjs --snapshot <path>",
+      );
+      return;
+    }
+
+    const snapshot = JSON.parse(readFileSync(path, "utf8")) as Record<
+      string,
+      Record<string, unknown>[]
+    >;
+
+    /** Maps one snapshot row onto a table's TypeScript property names. */
+    const toRow = (table: Record<string, unknown>, row: Record<string, unknown>) => {
+      const out: Record<string, unknown> = {};
+      for (const [property, column] of Object.entries(table)) {
+        const col = column as { name?: string; dataType?: string } | null;
+        if (!col || typeof col !== "object" || typeof col.name !== "string") continue;
+
+        const value = row[col.name];
+        if (value === undefined) continue;
+
+        // JSON has no date type, so timestamps arrive as ISO strings.
+        out[property] =
+          col.dataType === "date" && typeof value === "string" ? new Date(value) : value;
+      }
+      return out;
+    };
+
+    // Insert order is foreign-key order. The snapshot is keyed by table name.
+    const order: [string, Record<string, unknown>][] = [
+      ["units", units as unknown as Record<string, unknown>],
+      ["forms", forms as unknown as Record<string, unknown>],
+      ["companies", companies as unknown as Record<string, unknown>],
+      ["sites", sites as unknown as Record<string, unknown>],
+      ["users", users as unknown as Record<string, unknown>],
+      ["suppliers", suppliers as unknown as Record<string, unknown>],
+      ["items", items as unknown as Record<string, unknown>],
+      ["site_groups", siteGroups as unknown as Record<string, unknown>],
+      ["site_group_sites", siteGroupSites as unknown as Record<string, unknown>],
+      ["site_group_addresses", siteGroupAddresses as unknown as Record<string, unknown>],
+      ["user_sites", userSites as unknown as Record<string, unknown>],
+      ["user_companies", userCompanies as unknown as Record<string, unknown>],
+      ["user_form_permissions", userFormPermissions as unknown as Record<string, unknown>],
+    ];
+
+    const counts: string[] = [];
+    const refused: string[] = [];
+
+    for (const [name, table] of order) {
+      const rows = snapshot[name] ?? [];
+      if (rows.length === 0) continue;
+
+      const mapped = rows.map((r) => toRow(table, r));
+
+      // onConflictDoNothing is what lets a re-seed be idempotent, but it also
+      // discards rows the target's unique indexes refuse — and doing that
+      // silently would leave a grid that looks complete and is not. Count what
+      // actually landed and say so.
+      let inserted = 0;
+      for (let i = 0; i < mapped.length; i += 200) {
+        const result = await db
+          .insert(table as never)
+          .values(mapped.slice(i, i + 200) as never)
+          .onConflictDoNothing()
+          .returning({ ok: sql<number>`1` });
+        inserted += result.length;
+      }
+
+      counts.push(`${inserted} ${name}`);
+      if (inserted < rows.length) {
+        refused.push(`${rows.length - inserted} ${name}`);
+      }
+    }
+
+    // units.id and forms.id were inserted explicitly, so their identity
+    // sequences are still at 1 and the next insert from the app would collide.
+    for (const table of ["units", "forms"]) {
+      await db.execute(
+        sql.raw(
+          `select setval(pg_get_serial_sequence('${table}','id'), ` +
+            `coalesce((select max(id) from ${table}), 1))`,
+        ),
+      );
+    }
+
+    const meta = (snapshot.__meta ?? {}) as unknown as {
+      source?: string;
+      devPassword?: string;
+    };
+    this.logger.warn(
+      `Seeded REAL data from ${path} (source: ${meta.source ?? "unknown"}): ` +
+        counts.join(", ") +
+        `. Every user's password is '${meta.devPassword ?? DEV_PASSWORD}' — ` +
+        "real passwords were never copied.",
+    );
+
+    if (refused.length > 0) {
+      this.logger.error(
+        `REFUSED by a unique index and NOT loaded: ${refused.join(", ")}. ` +
+          "The source has no such constraint, so these are real duplicates in the " +
+          "data — the grids below are missing those rows.",
+      );
+    }
   }
 }
 

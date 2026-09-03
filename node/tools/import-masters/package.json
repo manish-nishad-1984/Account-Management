@@ -1,0 +1,15 @@
+{
+  "name": "import-masters",
+  "private": true,
+  "type": "module",
+  "description": "Reads the master tables from the live SQL Server and loads them into a local PostgreSQL, so the new app can be exercised against real data. READ-ONLY against SQL Server.",
+  "scripts": {
+    "migrate": "node --env-file=.env.local migrate.mjs",
+    "dry-run": "node --env-file=.env.local import.mjs --dry-run",
+    "import": "node --env-file=.env.local import.mjs"
+  },
+  "dependencies": {
+    "mssql": "^11.0.1",
+    "postgres": "^3.4.5"
+  }
+}

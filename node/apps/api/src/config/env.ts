@@ -19,6 +19,19 @@ const envSchema = z.object({
   ),
 
   /**
+   * Path to a JSON snapshot of REAL master data, produced by
+   * `tools/import-masters` (`--snapshot`). When set, development seeds from it
+   * instead of generating the dummy masters, so the app can be exercised against
+   * real records without a PostgreSQL server or its credentials.
+   *
+   * Development only, and ignored in production.
+   */
+  SEED_SNAPSHOT: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().optional(),
+  ),
+
+  /**
    * RS256 key pair in PEM form. Asymmetric so that verifiers never hold signing
    * material — the .NET app used a symmetric HS256 key that was committed to git
    * (`appsettings.json:19`), meaning anyone with repository access could mint
