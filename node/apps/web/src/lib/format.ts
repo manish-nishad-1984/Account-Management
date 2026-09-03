@@ -32,9 +32,20 @@ export function formatMoney(value: string): string {
   return `${negative ? "-" : ""}${grouped}.${decimals}`;
 }
 
-/** A percentage as stored — "18.00" becomes "18%", "18.50" stays "18.5%". */
+/**
+ * A percentage as stored — "18.00" becomes "18%", "18.50" stays "18.5%".
+ *
+ * Only the FRACTION is trimmed. The obvious one-liner for this,
+ * `value.replace(/\.?0+$/, "")`, also eats trailing zeros off whole numbers:
+ * it turns "10" into "1" and "100" into "1", so a 10% GST rate renders as 1%.
+ * That stayed invisible because the API sends `numeric` as "18.00" and the
+ * regex then matches the ".00" instead — the bug only appears the day a value
+ * arrives without a decimal point. Guard on the point being there at all.
+ */
 export function formatPercent(value: string): string {
-  const trimmed = value.replace(/\.?0+$/, "");
+  const trimmed = value.includes(".")
+    ? value.replace(/0+$/, "").replace(/\.$/, "")
+    : value;
   return `${trimmed === "" ? "0" : trimmed}%`;
 }
 
