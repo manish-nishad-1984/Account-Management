@@ -131,7 +131,7 @@ export class DrizzleUserRepository extends UserRepository {
 
     const permissions: string[] = [];
     for (const p of permissionRows) {
-      const subject = slug(p.controller ?? p.formName);
+      const subject = subjectFor(p.formName);
       if (p.isViewAllow) permissions.push(`${subject}.view`);
       if (p.isAddAllow) permissions.push(`${subject}.add`);
       if (p.isEditAllow) permissions.push(`${subject}.edit`);
@@ -153,4 +153,38 @@ export class DrizzleUserRepository extends UserRepository {
 
 function slug(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+/**
+ * Several forms describe the same subject. `Form` has three rows for users —
+ * "User List", "User Permission" and "Userwise Permission" — and they all grant
+ * rights over users.
+ */
+const FORM_NAME_ALIASES = new Map<string, string>([
+  ["user-list", "user"],
+  ["user-permission", "user"],
+  ["userwise-permission", "user"],
+]);
+
+/**
+ * The permission subject comes from the FORM NAME, never the controller.
+ *
+ * `Web/Helper/FormPermission.cs:30` matches on `a.FormName.Contains(...)`, and
+ * every `[FormPermissionAttribute]` string is a form name — "Site-View",
+ * "Group-View", "Item-Add". Deriving from `Controller` instead looks equivalent
+ * against seeded data, where the master forms have no controller and it falls
+ * through to the form name anyway. Against PRODUCTION data it is wrong twice
+ * over:
+ *
+ *   Site  -> controller "SiteMaster" -> "sitemaster", not "site"
+ *   Item  -> controller "ItemMaster" -> "itemmaster", not "item"
+ *   Group -> controller "SiteMaster" -> "sitemaster" TOO
+ *
+ * so every master screen 403s, and worse, Group and Site collapse into a single
+ * subject — silently turning "may view groups" into "may view sites". Found by
+ * importing the real Form table; no seeded fixture could have shown it.
+ */
+function subjectFor(formName: string): string {
+  const subject = slug(formName);
+  return FORM_NAME_ALIASES.get(subject) ?? subject;
 }

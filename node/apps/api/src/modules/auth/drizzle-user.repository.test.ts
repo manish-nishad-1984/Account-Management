@@ -35,10 +35,15 @@ describe("DrizzleUserRepository (real PostgreSQL)", () => {
 
     await db.insert(schema.companies).values({ id: COMPANY, name: "D H Infra" });
     await db.insert(schema.sites).values({ id: SITE, name: "Site A", companyId: COMPANY });
+    // Controllers here are deliberately NOT the same word as the form name, and
+    // Site/Group deliberately SHARE one — that is what production looks like.
     await db.insert(schema.forms).values([
       { id: 1, formName: "Supplier Invoice", controller: "Invoice", isActive: true },
       { id: 2, formName: "Purchase Order", controller: "PurchaseOrder", isActive: true },
       { id: 3, formName: "Retired Screen", controller: "Retired", isActive: false },
+      { id: 4, formName: "Site", controller: "SiteMaster", isActive: true },
+      { id: 5, formName: "Group", controller: "SiteMaster", isActive: true },
+      { id: 6, formName: "User List", controller: "User", isActive: true },
     ]);
     await db.insert(schema.users).values({
       id: USER,
@@ -56,6 +61,11 @@ describe("DrizzleUserRepository (real PostgreSQL)", () => {
       { userId: USER, formId: 1, isViewAllow: true, isEditAllow: true, isApproved: true },
       { userId: USER, formId: 2, isViewAllow: true },
       { userId: USER, formId: 3, isViewAllow: true },
+      // Site: view only. Group: view AND delete. If the subject came from the
+      // controller these would merge and Site would inherit delete.
+      { userId: USER, formId: 4, isViewAllow: true },
+      { userId: USER, formId: 5, isViewAllow: true, isDeleteAllow: true },
+      { userId: USER, formId: 6, isViewAllow: true },
     ]);
   });
 
@@ -70,14 +80,44 @@ describe("DrizzleUserRepository (real PostgreSQL)", () => {
     const user = await repo.findByUserName("manish");
     expect(user!.permissions).toEqual(
       expect.arrayContaining([
-        "invoice.view",
-        "invoice.edit",
-        "invoice.approve",
-        "purchaseorder.view",
+        "supplier-invoice.view",
+        "supplier-invoice.edit",
+        "supplier-invoice.approve",
+        "purchase-order.view",
       ]),
     );
-    expect(user!.permissions).not.toContain("invoice.add");
-    expect(user!.permissions).not.toContain("invoice.delete");
+    expect(user!.permissions).not.toContain("supplier-invoice.add");
+    expect(user!.permissions).not.toContain("supplier-invoice.delete");
+  });
+
+  it("derives the subject from the FORM NAME, not the controller", async () => {
+    const user = await repo.findByUserName("manish");
+
+    // `Web/Helper/FormPermission.cs:30` matches on `a.FormName.Contains(...)`,
+    // and every [FormPermissionAttribute] string is a form name. Deriving from
+    // the controller instead 403s every master screen against real data, where
+    // Site's controller is "SiteMaster" and Item's is "ItemMaster".
+    expect(user!.permissions).toContain("site.view");
+    expect(user!.permissions).not.toContain("sitemaster.view");
+  });
+
+  it("keeps two forms that share a controller as separate subjects", async () => {
+    const user = await repo.findByUserName("manish");
+
+    // The regression that matters. In production `Site` and `Group` BOTH have
+    // the controller "SiteMaster", so a controller-derived subject merged them:
+    // Group's delete right silently became a delete right over Sites.
+    expect(user!.permissions).toContain("group.delete");
+    expect(user!.permissions).not.toContain("site.delete");
+  });
+
+  it("folds the several user forms onto one subject", async () => {
+    const user = await repo.findByUserName("manish");
+
+    // Form holds "User List", "User Permission" and "Userwise Permission",
+    // all of which grant rights over users.
+    expect(user!.permissions).toContain("user.view");
+    expect(user!.permissions).not.toContain("user-list.view");
   });
 
   it("excludes permissions for inactive forms", async () => {
