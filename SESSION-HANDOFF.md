@@ -905,7 +905,7 @@ Tests: 480 Node (41 domain + 279 API + 160 web) + 19 .NET, up 29.
 
 ## 5l. File upload for challans — the storage decision, made (7 Sep 2026)
 
-Committed as `<COMMIT>`. Phase 3 is now complete.
+Committed as `53c8a620`. Phase 3 is now complete.
 
 ### The decision
 
