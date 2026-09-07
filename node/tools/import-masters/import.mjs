@@ -215,6 +215,7 @@ try {
     "User",
     "Form",
     "UserwiseFormPermission",
+    "PurchaseRequest",
   ];
   const schemas = await resolveSchemas(pool, SOURCE_TABLES);
   for (const note of report.notes) console.log(`  note: ${note}`);
@@ -230,6 +231,7 @@ try {
     users: await readAll(pool, schemas, "User"),
     forms: await readAll(pool, schemas, "Form"),
     permissions: await readAll(pool, schemas, "UserwiseFormPermission"),
+    purchaseRequests: await readAll(pool, schemas, "PurchaseRequest"),
   };
   for (const [k, v] of Object.entries(raw)) {
     console.log(`  ${k.padEnd(12)} ${String(v.length).padStart(6)} rows`);
@@ -246,6 +248,7 @@ try {
     users: liveRows(raw.users, "User"),
     forms: raw.forms,
     permissions: raw.permissions,
+    purchaseRequests: liveRows(raw.purchaseRequests, "PurchaseRequest"),
   };
 
   // ── build target rows, collecting orphans ────────────────────────────────
@@ -634,6 +637,76 @@ try {
     return { kept, dropped, seen };
   };
 
+  // ── purchase requests ────────────────────────────────────────────────────
+  // The first TRANSACTION table. Masters above are referenced by it, so it is
+  // built last and loaded last.
+  const itemIds = new Set(src.items.map((r) => uuid(field(r, "ItemId"))).filter(Boolean));
+  const deletedItems = new Set(
+    [...allIds(raw.items, "ItemId")].filter((id) => !itemIds.has(id)),
+  );
+  const deletedSites = deleted.sites;
+
+  const outPurchaseRequests = [];
+  for (const r of src.purchaseRequests) {
+    const id = uuid(field(r, "Pid"));
+    const siteId = uuid(field(r, "SiteId"));
+    const itemId = uuid(field(r, "ItemId"));
+    const unitId = field(r, "UnitTypeId");
+    const prNo = str(field(r, "PrNo"));
+
+    // site_id is NOT NULL with a real foreign key: a request whose site is gone
+    // cannot be written at all, so it is reported and skipped rather than
+    // silently attached to something else.
+    if (!siteId || !siteIds.has(siteId)) {
+      orphan("PurchaseRequest.SiteId -> Site.SiteId", id, siteId, deletedSites, (kind) =>
+        `purchase request ${prNo ?? id} references site ${siteId}, which is ${kind === "deleted" ? "deleted" : "absent"}`,
+      );
+      continue;
+    }
+
+    // unit_id is NOT NULL too. A unit that no longer exists is unrecoverable.
+    if (unitId === null || unitId === undefined || !unitIds.has(unitId)) {
+      report.orphans.push({
+        relationship: "PurchaseRequest.UnitTypeId -> UnitMaster.UnitId",
+        id,
+        kind: "missing",
+        detail: `purchase request ${prNo ?? id} references unit ${unitId}, which does not exist`,
+      });
+      continue;
+    }
+
+    // item_id is NULLABLE by design — the request keeps its free-text ItemName
+    // instead. So a missing item is reported and the reference dropped, NOT the
+    // whole request: the document still says what was wanted.
+    let keptItemId = itemId;
+    if (itemId && !itemIds.has(itemId)) {
+      orphan("PurchaseRequest.ItemId -> ItemMaster.ItemId", id, itemId, deletedItems, (kind) =>
+        `purchase request ${prNo ?? id} references item ${itemId}, which is ${kind === "deleted" ? "deleted" : "absent"} — kept, with the item reference cleared`,
+      );
+      keptItemId = null;
+    }
+
+    outPurchaseRequests.push({
+      id,
+      pr_no: prNo ?? "(unnumbered)",
+      site_id: siteId,
+      item_id: keptItemId,
+      item_name: str(field(r, "ItemName")),
+      item_description: str(field(r, "ItemDescription")),
+      unit_id: unitId,
+      quantity: num(field(r, "Quantity")) ?? "0",
+      document_date: date(field(r, "Date")),
+      site_address_id: field(r, "SiteAddressId") ?? null,
+      site_address: str(field(r, "SiteAddress")),
+      is_approved: bool(field(r, "IsApproved")),
+      is_deleted: false,
+      created_by: uuid(field(r, "CreatedBy")),
+      created_at: date(field(r, "CreatedOn")) ?? new Date(),
+      updated_by: uuid(field(r, "UpdatedBy")),
+      updated_at: date(field(r, "UpdatedOn")),
+    });
+  }
+
   const upperOrNull = (v) => (v === null || v === undefined ? null : String(v).toUpperCase().trim());
   const lowerOrNull = (v) => (v === null || v === undefined ? null : String(v).toLowerCase().trim());
 
@@ -653,15 +726,9 @@ try {
   }
   const finalUnits = unitsUnique.kept;
 
-  let finalItems = outItems.map((it) =>
-    unitRemap.has(it.unit_id) ? { ...it, unit_id: unitRemap.get(it.unit_id) } : it,
-  );
-  finalItems = enforceUnique(
-    finalItems,
-    "items_name_lower_key",
-    (r) => lowerOrNull(r.name),
-    (r) => r.name,
-  ).kept;
+  // finalItems is derived from itemsUnique below, so that purchase requests can
+  // be remapped onto the SAME winner this keeps. Deduplicating twice invites the
+  // two passes to disagree, which would leave requests pointing at a dropped item.
 
   const finalCompanies = enforceUnique(
     outCompanies,
@@ -682,6 +749,61 @@ try {
     (r) => lowerOrNull(r.name),
     (r) => r.name,
   ).kept;
+
+  // Purchase requests follow their masters: a unit or item that was merged away
+  // must not orphan the request that points at it.
+  const itemsUnique = enforceUnique(
+    outItems.map((it) => (unitRemap.has(it.unit_id) ? { ...it, unit_id: unitRemap.get(it.unit_id) } : it)),
+    "items_name_lower_key",
+    (r) => lowerOrNull(r.name),
+    (r) => r.name,
+  );
+  const finalItems = itemsUnique.kept;
+
+  const itemRemap = new Map();
+  for (const d of itemsUnique.dropped) {
+    const winner = itemsUnique.seen.get(lowerOrNull(d.name));
+    if (winner) itemRemap.set(d.id, winner.id);
+  }
+
+  let finalPurchaseRequests = outPurchaseRequests.map((pr) => ({
+    ...pr,
+    unit_id: unitRemap.has(pr.unit_id) ? unitRemap.get(pr.unit_id) : pr.unit_id,
+    item_id: pr.item_id && itemRemap.has(pr.item_id) ? itemRemap.get(pr.item_id) : pr.item_id,
+  }));
+
+  // The source has no unique index on PrNo, and CheckPRNo() reissues a number
+  // every eleventh request of a year (it parses the sequence with
+  // Substring(11), which reads ONE character). So duplicates are expected here,
+  // and each one named is a document that exists twice in the old system.
+  finalPurchaseRequests = enforceUnique(
+    finalPurchaseRequests,
+    "purchase_requests_pr_no_key",
+    (r) => upperOrNull(r.pr_no),
+    (r) => r.pr_no,
+  ).kept;
+
+  // Seed the counters so the new system cannot reissue a number the old one
+  // used. Without this the first request created after go-live is /001 again.
+  const counters = new Map();
+  for (const pr of finalPurchaseRequests) {
+    const match = /^PR\/(\d{2}-\d{2})\/(\d+)$/.exec(pr.pr_no ?? "");
+    if (!match) continue;
+    const [, year, sequence] = match;
+    const highest = Math.max(counters.get(year) ?? 0, Number(sequence));
+    counters.set(year, highest);
+  }
+  const outDocumentCounters = [...counters].map(([financial_year, highest]) => ({
+    document_type: "purchase_request",
+    financial_year,
+    next_value: highest + 1,
+    updated_at: new Date(),
+  }));
+  for (const c of outDocumentCounters) {
+    report.notes.push(
+      `purchase request numbering for ${c.financial_year} resumes at ${String(c.next_value).padStart(3, "0")}`,
+    );
+  }
 
   // Anything referencing a company that just went must go with it.
   const keptCompanyIds = new Set(finalCompanies.map((c) => c.id));
@@ -705,6 +827,8 @@ try {
     ["user_companies", finalUserCompanies],
     ["forms", outForms],
     ["user_form_permissions", outPermissions],
+    ["purchase_requests", finalPurchaseRequests],
+    ["document_counters", outDocumentCounters],
   ];
   for (const [name, rows] of plan) {
     console.log(`  ${name.padEnd(24)} ${String(rows.length).padStart(6)}`);
@@ -809,6 +933,8 @@ try {
     // when the user rows are replaced) but it should be visible, not a surprise.
     await tx.unsafe(`
       truncate table
+        document_counters,
+        purchase_requests,
         refresh_tokens,
         user_form_permissions, user_sites, user_companies,
         site_group_addresses, site_group_sites, site_groups,

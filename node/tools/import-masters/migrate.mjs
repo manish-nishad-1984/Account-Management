@@ -54,10 +54,45 @@ function migrationStatements(dir) {
 const sql = postgres(PGURL, { max: 1, onnotice: () => {} });
 
 try {
+  /**
+   * Which migrations have already run.
+   *
+   * Without this the runner replayed the journal from the beginning on every
+   * deploy, hit "relation already exists" on migration 0000, and stopped —
+   * reporting "Already migrated. Nothing to do." while every migration added
+   * since the last run was silently skipped. The deploy looked clean and the new
+   * tables were simply absent, which surfaced later as a 500 from the endpoint
+   * that needed them.
+   */
+  const [existing] = await sql`select to_regclass('public.applied_migrations') as table`;
+  const firstRun = existing?.table === null;
+
+  await sql.unsafe(`
+    create table if not exists applied_migrations (
+      tag text primary key,
+      applied_at timestamptz not null default now()
+    )
+  `);
+  const applied = new Set(
+    (await sql`select tag from applied_migrations`).map((row) => row.tag),
+  );
+
+  if (firstRun) {
+    console.log("No tracking table yet — adopting whatever is already in the schema.\n");
+  }
+
   const migrations = migrationStatements(MIGRATIONS_DIR);
-  console.log(`${migrations.length} migration(s) in the journal:\n`);
+  console.log(`${migrations.length} migration(s) in the journal, ${applied.size} already applied:\n`);
+
+  let ran = 0;
+  let adopted = 0;
 
   for (const { tag, sql: body } of migrations) {
+    if (applied.has(tag)) {
+      console.log(`  ${tag} — already applied`);
+      continue;
+    }
+
     // drizzle-kit separates statements within a file with this marker
     const statements = body
       .split("--> statement-breakpoint")
@@ -65,29 +100,54 @@ try {
       .filter(Boolean);
 
     process.stdout.write(`  ${tag} — ${statements.length} statement(s) ... `);
-    await sql.begin(async (tx) => {
-      for (const statement of statements) {
-        await tx.unsafe(statement);
+    try {
+      // One transaction per migration, so a file is applied wholly or not at all
+      // and the recorded tag can never describe a half-applied schema.
+      await sql.begin(async (tx) => {
+        for (const statement of statements) {
+          await tx.unsafe(statement);
+        }
+        await tx`insert into applied_migrations ${tx({ tag })}`;
+      });
+      ran += 1;
+      console.log("ok");
+    } catch (error) {
+      /**
+       * On the FIRST run these errors mean the migration was applied before the
+       * tracking table existed — true of every database the previous version of
+       * this script migrated. Adopt it: record the tag and carry on to the ones
+       * that have not run. Aborting here is the bug this replaces.
+       *
+       * Matched by SQLSTATE, not by message text, because an already-applied
+       * migration fails differently depending on what it did: CREATE reports
+       * "already exists" (42P07/42710), a DROP reports "does not exist"
+       * (42703/42704), ADD COLUMN reports a duplicate column (42701).
+       *
+       * Only on the first run. Once the table is populated, any of these is a
+       * real failure and must not be swallowed.
+       */
+      const ADOPTABLE = new Set(["42P07", "42P06", "42710", "42701", "42703", "42704"]);
+      if (firstRun && ADOPTABLE.has(error.code)) {
+        await sql`insert into applied_migrations ${sql({ tag })} on conflict do nothing`;
+        adopted += 1;
+        console.log("already in the schema — recorded, not re-run");
+      } else {
+        throw error;
       }
-    });
-    console.log("ok");
+    }
   }
+
+  console.log(`\n${ran} applied, ${adopted} adopted, ${applied.size} skipped.`);
 
   const tables = await sql`
     select table_name from information_schema.tables
     where table_schema = 'public' order by table_name
   `;
-  console.log(`\n${tables.length} tables now present:`);
+  console.log(`${tables.length} tables now present:`);
   console.log("  " + tables.map((t) => t.table_name).join(", "));
 } catch (error) {
-  // A second run will fail on "already exists" — that is not a crash worth a stack trace.
-  if (String(error.message).includes("already exists")) {
-    console.log("\nAlready migrated (an object already exists). Nothing to do.");
-    console.log("To start over: drop and recreate the database, then re-run.");
-  } else {
-    console.error("\nMigration failed:", error.message);
-    process.exitCode = 1;
-  }
+  console.error("\nMigration failed:", error.message);
+  process.exitCode = 1;
 } finally {
   await sql.end();
 }

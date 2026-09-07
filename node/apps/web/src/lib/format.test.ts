@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDate, formatMoney, formatPercent } from "./format";
+import { formatDate, formatMoney, formatPercent, formatQuantity } from "./format";
 
 /**
  * These formatters render every money and tax value the user ever sees, and
@@ -101,5 +101,37 @@ describe("formatDate", () => {
   it("renders an ISO timestamp as a day-month-year date", () => {
     const rendered = formatDate("2026-04-01T00:00:00.000Z");
     expect(rendered).toMatch(/^\d{2} \w{3} 2026$/);
+  });
+});
+
+describe("formatQuantity", () => {
+  it("drops the decimal part when a quantity is whole", () => {
+    expect(formatQuantity("150.00")).toBe("150");
+    expect(formatQuantity("1.00")).toBe("1");
+  });
+
+  it("keeps a real fraction, trimming only trailing zeros", () => {
+    expect(formatQuantity("2.50")).toBe("2.5");
+    expect(formatQuantity("0.75")).toBe("0.75");
+    expect(formatQuantity("0.05")).toBe("0.05");
+  });
+
+  it("groups the integer part the Indian way, like money", () => {
+    expect(formatQuantity("1234567.00")).toBe("12,34,567");
+  });
+
+  /** The trap formatPercent documents: a careless trim turns 10 into 1. */
+  it("never trims zeros off the integer part", () => {
+    expect(formatQuantity("10")).toBe("10");
+    expect(formatQuantity("100")).toBe("100");
+    expect(formatQuantity("1000")).toBe("1,000");
+  });
+
+  it("keeps the sign outside the grouping", () => {
+    expect(formatQuantity("-1234.50")).toBe("-1,234.5");
+  });
+
+  it("renders a bare zero as zero, not as an empty string", () => {
+    expect(formatQuantity("0.00")).toBe("0");
   });
 });

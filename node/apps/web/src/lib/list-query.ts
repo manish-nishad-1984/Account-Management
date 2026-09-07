@@ -21,6 +21,13 @@ export type ListParams = Pick<ListQuery, "limit" | "sortBy" | "sortDir"> & {
   search?: string;
 };
 
+/**
+ * Resource-specific filters that sit alongside the shared paging contract —
+ * `siteId` on a transaction list, `isApproved` on an approval queue. Undefined
+ * and empty values are dropped rather than sent as blanks.
+ */
+export type ListFilters = Record<string, string | number | boolean | undefined>;
+
 export const listSearchParams = (params: ListParams): string => {
   const search = new URLSearchParams();
   search.set("limit", String(params.limit));
@@ -44,11 +51,22 @@ export function useListResource<T>(
   resource: string,
   rowSchema: z.ZodType<T>,
   params: ListParams,
+  filters: ListFilters = {},
 ) {
+  const search = new URLSearchParams(listSearchParams(params));
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== "") {
+      search.set(key, String(value));
+    }
+  }
+
   return useQuery<ListResponse<T>>({
-    queryKey: [resource, params],
+    // Filters belong in the KEY as well as the URL. Two filter settings sharing
+    // one cache entry shows the previous site's rows for a frame after switching,
+    // which reads as a bug in the data rather than in the cache.
+    queryKey: [resource, params, filters],
     queryFn: ({ signal }) =>
-      apiRequest(`/${resource}?${listSearchParams(params)}`, {
+      apiRequest(`/${resource}?${search.toString()}`, {
         schema: listResponseSchema(rowSchema) as unknown as z.ZodType<ListResponse<T>>,
         signal,
       }),

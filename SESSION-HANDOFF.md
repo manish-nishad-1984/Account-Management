@@ -446,6 +446,111 @@ numbers (one GST literally `"00"`), 4 site groups carrying trailing CRLF.
 
 ---
 
+---
+
+## 5f. Purchase Requests — the first transaction module (7 Sep 2026)
+
+Phase 3 of the roadmap. Chosen deliberately as the first transaction wave
+because it carries **no money arithmetic**, so the team builds the transactional
+UI patterns before the GST question (B-2) has to be answered.
+
+Live at **https://avfast.in/purchase-requests** with the 3 real requests from
+production. Test count **337 Node + 19 .NET = 356**.
+
+### The document-numbering defect, confirmed in the data
+
+`PurchaseRequestRepo.CheckPRNo()` parses the sequence with
+`int.Parse(LastPr.PrNo.Substring(11))`. `"PR/25-26/001"` is twelve characters, so
+index 11 is the **last character only**. From `"009"` it reads `"9"` and
+correctly produces `"010"`; from `"010"` it reads `"0"` and produces `"001"`
+again.
+
+This is not theoretical. `PurchaseRequest` holds **28 rows carrying 12 distinct
+numbers**: the sequence runs 001-010, restarts at 001, runs to 010 again,
+restarts once more and reaches 006. Ten numbers have been issued to more than one
+document. Only three rows are live and those three happen not to collide, so the
+import is clean — but the defect has been firing since the 24-25 financial year.
+
+It is also racy: read-then-write with no lock and no unique index.
+
+**Replaced by `document_counters`**, one row per (document type, financial year),
+incremented with `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` inside the same
+transaction as the insert. The FORMAT is unchanged — those strings are on paper.
+The importer seeds `next_value` from the highest number already issued per year,
+so the new system cannot reissue an old number (25-26 resumes at 009, 24-25 at
+011).
+
+### Two deliberate departures from the source, both flagged for sign-off
+
+1. **The list LEFT JOINs items.** The source INNER JOINs `ItemMaster`, so a
+   request raised with free text and no `ItemId` sits in the table and is
+   invisible in the application. Here it lists, labelled by its free text. The
+   foreign key means `item_id` is either a real item or NULL, so nothing is
+   invented.
+2. **No `sites.is_active` filter.** The source adds `c.IsActive == true`, so
+   deactivating a site erases its request history from the list rather than
+   hiding the site.
+
+Both are correctness fixes rather than rule changes, but both change what a user
+sees, so they are recorded here rather than buried.
+
+### Also fixed on the way
+
+- **Approval states the value instead of toggling it.** `PurchaseRequestIsApproved`
+  reads the row and writes the opposite, so two approvers racing land wherever
+  ordering puts them, and the API cannot express "approve this" at all.
+- **`prNo` cannot be reassigned.** `UpdatePurchaseRequestDetails` reassigns
+  `PrNo` from the posted body, so a client could renumber one request over
+  another. It is absent from the update contract by construction.
+- **`updated_by` / `updated_at` are stamped.** The source leaves them null on
+  every update path.
+- **Bulk approval is ONE statement** — `UPDATE ... WHERE id = ANY(...)` — and
+  reports how many rows actually changed.
+
+### `nav.ts` had the wrong permission subject on six screens
+
+The subject is derived from `Form.FormName`, and the real rows are
+`"Purchase Request"`, `"Purchase Order"`, `"Inward Challan"`, `"Inventory
+Inward"`, `"Purchase  Invoice"` (two spaces), `"Sales Invoice"`, `"Sales
+Report"`, `"Details Report"`. `nav.ts` carried `purchaserequest`,
+`purchaseorder`, `iteminword`, `inventory`, `invoice`, `sales`, `report` — none
+of which any migrated `Form` row grants. They were inert while those screens were
+placeholders; the first one to go live would have 403'd on every call. All
+corrected against the production `forms` table.
+
+**When adding a screen, read the subject off `forms`, do not guess it.**
+
+### `migrate.mjs` was silently skipping migrations
+
+It replayed the journal from the beginning on every run, hit "relation already
+exists" on migration 0000, and stopped — printing *"Already migrated. Nothing to
+do."* while every migration added since the last deploy was skipped. The deploy
+looked clean and the new tables were simply absent.
+
+It now records applied tags in `applied_migrations`, one transaction per
+migration. On the FIRST run against a database that predates the tracking table
+it adopts what is already there, matching by SQLSTATE rather than message text —
+an already-applied migration fails differently depending on what it did
+(`42P07` duplicate table, `42703` undefined column for a DROP, `42701` duplicate
+column). After that first run any such error is a real failure and is not
+swallowed.
+
+### `npm run dev` is broken for the API, and it is not new
+
+`tsx` compiles with esbuild, which **does not implement `emitDecoratorMetadata`**.
+Any Nest constructor parameter typed by class rather than by an `@Inject` token
+resolves to `undefined`. `DevSeed` fails first, and behind it `AuthGuard`
+(`Reflector`, `TokenService`) and every controller that injects its repository by
+type — so `/api/v1/health` returns 500 with `this.reflector` undefined.
+
+`npm run build && node dist/main.js` works, because tsc does emit the metadata,
+and that is what `/run-local` and the deploy both do. **Fixing this properly means
+adding `@Inject` tokens across every controller and guard — a separate job.** It
+was left alone rather than half-fixed.
+
+
+---
+
 ## 6. The Companies / Sites / Site Groups session (committed as `566b28ab`)
 
 **Companies, Sites and Site Groups master screens**, end to end:

@@ -147,6 +147,26 @@ export const optionalMoney = (label: string) =>
       }
     });
 
+/**
+ * A quantity, as a decimal STRING — for exactly the reason `money` is one. A
+ * quantity is decimal by definition (2.5 tonnes, 0.75 hours) and rounding it
+ * through binary floating point is the same defect as rounding a price.
+ *
+ * Must be greater than zero. Requesting none of something is not a request, and
+ * a negative quantity would flow into a purchase order as a credit nobody
+ * intended. The check is against the digits rather than `Number(value) > 0` so
+ * that the value is never parsed to a float, not even to compare it.
+ */
+const QUANTITY_PATTERN = /^\d{1,15}(\.\d{1,2})?$/;
+
+export const quantity = (label: string) =>
+  z
+    .string()
+    .trim()
+    .min(1, `${label} is required`)
+    .regex(QUANTITY_PATTERN, `${label} must be a number with at most 2 decimal places`)
+    .refine((value) => /[1-9]/.test(value), `${label} must be greater than zero`);
+
 /** A percentage, 0 to 100, with at most 2 decimal places. Also a string. */
 export const optionalPercent = (label: string) =>
   z

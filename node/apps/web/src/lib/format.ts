@@ -17,19 +17,40 @@
  * rupees, and a lakh grouped in thousands is misread at a glance by exactly the
  * people who use this system daily.
  */
+function groupIndian(whole: string): string {
+  const lastThree = whole.slice(-3);
+  const rest = whole.slice(0, -3);
+  return rest ? rest.replace(/\B(?=(\d{2})+(?!\d))/g, ",") + "," + lastThree : lastThree;
+}
+
 export function formatMoney(value: string): string {
   const negative = value.startsWith("-");
   const unsigned = negative ? value.slice(1) : value;
   const [whole = "0", fraction] = unsigned.split(".");
 
-  const lastThree = whole.slice(-3);
-  const rest = whole.slice(0, -3);
-  const grouped = rest
-    ? rest.replace(/\B(?=(\d{2})+(?!\d))/g, ",") + "," + lastThree
-    : lastThree;
-
   const decimals = (fraction ?? "").padEnd(2, "0").slice(0, 2);
-  return `${negative ? "-" : ""}${grouped}.${decimals}`;
+  return `${negative ? "-" : ""}${groupIndian(whole)}.${decimals}`;
+}
+
+/**
+ * A quantity, grouped like money but WITHOUT forced decimal places.
+ *
+ * Money always shows two — ₹10.00 is a price. A quantity does not: "10.00 Bag"
+ * reads as a measurement taken to two decimals rather than ten bags, and the
+ * column is scanned by people counting deliveries. So trailing zeros in the
+ * fraction go, and a whole number renders whole: "10.00" → "10", "2.50" → "2.5",
+ * "0.75" → "0.75".
+ *
+ * Only the fraction is trimmed, never the integer part — the same trap
+ * `formatPercent` documents, where a careless regex turns 10 into 1.
+ */
+export function formatQuantity(value: string): string {
+  const negative = value.startsWith("-");
+  const unsigned = negative ? value.slice(1) : value;
+  const [whole = "0", fraction] = unsigned.split(".");
+
+  const trimmed = (fraction ?? "").replace(/0+$/, "");
+  return `${negative ? "-" : ""}${groupIndian(whole)}${trimmed ? `.${trimmed}` : ""}`;
 }
 
 /**

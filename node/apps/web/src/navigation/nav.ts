@@ -67,25 +67,25 @@ export const NAV: NavSection[] = [
   {
     title: "Procurement",
     items: [
-      { label: "Purchase Requests", to: "/purchase-requests", icon: ClipboardList, permission: "purchaserequest", status: "planned", legacy: "/PurchaseMaster/PurchaseRequestListView" },
-      { label: "Purchase Orders", to: "/purchase-orders", icon: ShoppingCart, permission: "purchaseorder", status: "planned", legacy: "/PurchaseMaster/POListView" },
-      { label: "Inward Challans", to: "/inward", icon: FileInput, permission: "iteminword", status: "planned", legacy: "/ItemInWord/ItemInWord" },
-      { label: "Inventory", to: "/inventory", icon: Boxes, permission: "inventory", status: "planned", legacy: "/Sales/CreateInventory" },
+      { label: "Purchase Requests", to: "/purchase-requests", icon: ClipboardList, permission: "purchase-request", status: "ready", legacy: "/PurchaseMaster/PurchaseRequestListView" },
+      { label: "Purchase Orders", to: "/purchase-orders", icon: ShoppingCart, permission: "purchase-order", status: "planned", legacy: "/PurchaseMaster/POListView" },
+      { label: "Inward Challans", to: "/inward", icon: FileInput, permission: "inward-challan", status: "planned", legacy: "/ItemInWord/ItemInWord" },
+      { label: "Inventory", to: "/inventory", icon: Boxes, permission: "inventory-inward", status: "planned", legacy: "/Sales/CreateInventory" },
     ],
   },
   {
     title: "Invoicing",
     items: [
-      { label: "Purchase Invoices", to: "/purchase-invoices", icon: Receipt, permission: "invoice", status: "planned", legacy: "/InvoiceMaster/SupplierInvoiceListView" },
-      { label: "Sales Invoices", to: "/sales-invoices", icon: FileText, permission: "sales", status: "planned", legacy: "/Sales/SalesList" },
-      { label: "Payments", to: "/payments", icon: Wallet, permission: "invoice", status: "planned", legacy: "/InvoiceMaster/PayOutInvoice" },
+      { label: "Purchase Invoices", to: "/purchase-invoices", icon: Receipt, permission: "purchase-invoice", status: "planned", legacy: "/InvoiceMaster/SupplierInvoiceListView" },
+      { label: "Sales Invoices", to: "/sales-invoices", icon: FileText, permission: "sales-invoice", status: "planned", legacy: "/Sales/SalesList" },
+      { label: "Payments", to: "/payments", icon: Wallet, permission: "reports-payments", status: "planned", legacy: "/InvoiceMaster/PayOutInvoice" },
     ],
   },
   {
     title: "Reports",
     items: [
-      { label: "Sales Report", to: "/reports/sales", icon: ScrollText, permission: "sales", status: "planned", legacy: "/Sales/SalesReport" },
-      { label: "Ledger & Payments", to: "/reports/ledger", icon: ScrollText, permission: "report", status: "planned", legacy: "/Report/ReportDetails" },
+      { label: "Sales Report", to: "/reports/sales", icon: ScrollText, permission: "sales-report", status: "planned", legacy: "/Sales/SalesReport" },
+      { label: "Ledger & Payments", to: "/reports/ledger", icon: ScrollText, permission: "details-report", status: "planned", legacy: "/Report/ReportDetails" },
     ],
   },
 ];

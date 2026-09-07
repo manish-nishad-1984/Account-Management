@@ -1,12 +1,15 @@
 import { sql } from "drizzle-orm";
+import { financialYear } from "@accountmanagement/domain";
 import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { InMemoryUserRepository, UserRepository } from "./user.repository";
 import { ENV, type Env } from "../../config/env";
 import { DATABASE, type Database } from "../../db/database";
 import {
   companies,
+  documentCounters,
   forms,
   items,
+  purchaseRequests,
   siteGroupAddresses,
   siteGroupSites,
   siteGroups,
@@ -159,6 +162,13 @@ export class DevSeed implements OnModuleInit {
       { id: 6, formName: "Group", formGroup: "Masters", isActive: true },
       { id: 7, formName: "Supplier", formGroup: "Masters", isActive: true },
       { id: 8, formName: "Item", formGroup: "Masters", isActive: true },
+      /**
+       * "Purchase Request" — the NAME matters. The permission subject is derived
+       * from the form name, so this row is what makes `purchase-request.view`
+       * exist at all. `PurchaseMaster` also serves purchase orders, which is
+       * precisely why the subject cannot come from the controller.
+       */
+      { id: 9, formName: "Purchase Request", controller: "PurchaseMaster", formGroup: "Purchase", isActive: true },
     ]);
 
     // Units first: items reference them, and the foreign key is real.
@@ -191,7 +201,9 @@ export class DevSeed implements OnModuleInit {
       })),
     );
 
-    await db.insert(items).values(
+    const insertedItems = await db
+      .insert(items)
+      .values(
       ITEM_NAMES.map((name, i) => {
         const withGst = i % 4 !== 0;
         const price = String(150 + i * 37) + ".00";
@@ -214,7 +226,8 @@ export class DevSeed implements OnModuleInit {
           isApproved: i % 5 !== 0,
         };
       }),
-    );
+      )
+      .returning({ id: items.id, unitId: items.unitId });
 
     // One administrator plus 40 others, so the grid has several pages to walk.
     const seeded = await db
@@ -274,7 +287,56 @@ export class DevSeed implements OnModuleInit {
       { userId: admin.id, formId: 7, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
       // Item has View/Add/Edit/Delete attributes in ItemMasterController.
       { userId: admin.id, formId: 8, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
+      /**
+       * Purchase Request, including APPROVE. The approval flow is the point of
+       * the screen, and without this right its buttons never render — which
+       * would look like a broken page rather than a withheld permission.
+       */
+      { userId: admin.id, formId: 9, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true, isApproved: true },
     ]);
+
+    /**
+     * Purchase requests, numbered the way the server numbers them.
+     *
+     * The counter row is seeded to match, because the sequence is the database's
+     * to hand out — leaving it at 1 would make the next request created in the
+     * UI collide with one of these.
+     *
+     * One request deliberately carries no `itemId` and only free text: that row
+     * is INVISIBLE in the .NET list, which inner-joins ItemMaster, and visible
+     * here. It is the case the departure exists for, so local dev shows it.
+     */
+    const financialYearLabel = financialYear.format(financialYear.currentAsProduced(new Date()));
+    const requestCount = 18;
+
+    await db.insert(purchaseRequests).values(
+      Array.from({ length: requestCount }, (_, i) => {
+        const item = insertedItems[i % insertedItems.length]!;
+        const offCatalogue = i % 6 === 5;
+        return {
+          prNo: `PR/${financialYearLabel}/${String(i + 1).padStart(3, "0")}`,
+          siteId: insertedSites[i % insertedSites.length]!.id,
+          itemId: offCatalogue ? null : item.id,
+          itemName: offCatalogue ? OFF_CATALOGUE_REQUESTS[i % OFF_CATALOGUE_REQUESTS.length]! : null,
+          itemDescription: i % 4 === 0 ? "Site engineer to confirm grade before dispatch" : null,
+          unitId: item.unitId,
+          // Quantities are decimal STRINGS, like money, and some are fractional
+          // so the display trimming is exercised rather than assumed.
+          quantity: i % 3 === 0 ? String(i + 1) + ".50" : String((i + 1) * 25) + ".00",
+          documentDate: new Date(Date.UTC(2026, 7, ((i * 3) % 27) + 1)),
+          siteAddress: i % 5 === 0 ? "Gate 2, materials yard" : null,
+          // A third approved, so both states and both buttons are on screen.
+          isApproved: i % 3 === 0,
+          createdBy: admin.id,
+        };
+      }),
+    );
+
+    await db.insert(documentCounters).values({
+      documentType: "purchase_request",
+      financialYear: financialYearLabel,
+      nextValue: requestCount + 1,
+    });
 
     await db.insert(userSites).values(
       seeded.flatMap((user, index) =>
@@ -664,4 +726,17 @@ const ITEM_NAMES = [
   "Safety Helmet",
   "Safety Harness",
   "Shuttering Plywood 12mm",
+];
+
+/**
+ * Things a site asks for that are not in the item catalogue — hire, labour,
+ * one-off services. The source supports these through `ItemName` and then hides
+ * them, because its list query inner-joins `ItemMaster`.
+ */
+const OFF_CATALOGUE_REQUESTS = [
+  "Scaffolding hire - 2 weeks",
+  "JCB with operator - day rate",
+  "Water tanker - 5000L",
+  "Crane hire - half day",
+  "Site survey - external",
 ];

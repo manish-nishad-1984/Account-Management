@@ -178,6 +178,15 @@ cd api && PGURL="$DATABASE_URL" MIGRATIONS_DIR=./drizzle node migrate.mjs
 migrations only on the embedded PGlite path; with `DATABASE_URL` set it just
 connects. Migrating here is not optional.
 
+The runner records applied tags in `applied_migrations`, one transaction per
+migration, so re-running is safe and only new migrations run. **Read its output.**
+It used to replay the journal from the start, fail on migration 0000 with
+"already exists", and print *"Already migrated. Nothing to do."* while skipping
+every migration added since the last deploy — a clean-looking deploy with the new
+tables simply absent. Expect a line per migration and an
+`N applied, N adopted, N skipped` summary. `0 applied` after shipping a new
+migration means something is wrong.
+
 ### 6. Switch, restart, verify
 
 ```bash
@@ -276,6 +285,11 @@ items, 35 site groups, 3 users, 21 forms, 63 permissions.
 
 Every imported user's password is **`DevPassword1`** — real passwords are never
 copied. Users: `ckalathiya`, `ac`, `chintanauro`.
+
+The import **truncates and reloads** every table it manages — purchase requests
+included — so anything created through the UI since the last load is lost. It
+also seeds `document_counters` from the highest request number already issued
+per financial year; without that the app reissues numbers the old system used.
 
 A **fresh** database is empty; migrations create tables and nothing more, and
 `DevSeed` does not run under `NODE_ENV=production`, so login returns 401 until
