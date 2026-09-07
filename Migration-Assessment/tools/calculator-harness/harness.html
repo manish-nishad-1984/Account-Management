@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Legacy calculator harness</title></head>
+<body>
+<!--
+  A harness for the LEGACY money calculators.
+
+  It loads the REAL script files from AccountManegments.Web/wwwroot/moduls, in
+  the REAL order CreateInvoice.cshtml loads them (lines 896-898), against a
+  faithful reproduction of that page's markup.
+
+  THE POINT OF THE MARKUP IS THAT THERE ARE TWO ROW SHAPES on one table, and the
+  two calculators are each written for one of them:
+
+    - Rows rendered WITH THE PAGE      CreateInvoice.cshtml:262 and :357
+      class="productRow", inputs carry BOTH a class (txtproductamount) and an
+      id suffixed with the row number (txtproductamount_1).
+
+    - Rows added BY AJAX when an item is picked from the modal
+      _DisplayInvoiceItemDetailsPartial.cshtml:11
+      class="product", inputs carry ONLY a bare id (txtproductamount) — no
+      class — and every row repeats the same id.
+
+  InvoiceMasterScript's updateTotals iterates $(".productRow") and reads by
+  CLASS. PurchaseRequestScript's iterates $(".product") and reads by ID. Neither
+  can see the other's rows.
+
+  It is a REPRODUCTION, not the live page. It proves what the shipped JavaScript
+  does with that markup; it cannot prove what production serves today. That is
+  why 19-Business-Decisions-Required.md still asks for a check by someone who
+  uses the screen.
+
+  Run it:  node run.mjs
+-->
+<table><tbody id="InvoiceProductDetailsTable">
+
+  <!-- IN-PAGE row. CreateInvoice.cshtml:262-341 (a saved invoice's line). -->
+  <tr class="productRow" data-shape="in-page" onclick="updateProductTotalAmount(this)">
+    <td class="product-id text-start">1</td>
+    <td><input type="number" class="product-quantity form-control txtproductquantity" id="txtproductquantity_1" value="10"></td>
+    <td><input type="text" class="form-control txtproductamount" id="txtproductamount_1" value="100"></td>
+    <td><input type="hidden" class="form-control productamount" id="productamount_1" value="100"></td>
+    <td><input type="text" class="form-control txtdiscountamount" id="txtdiscountamount_1" value="0"></td>
+    <td><input type="text" class="form-control txtdiscountpercentage" id="txtdiscountpercentage_1" value="0"></td>
+    <td><input type="text" class="product-Gstper form-control txtgst" id="txtgst_1" value="18"></td>
+    <td><input type="number" class="product-Gstamount form-control bg-light txtgstAmount" id="txtgstAmount_1" value="0" readonly></td>
+    <td><input type="text" class="product-producttotalamount form-control bg-light txtproducttotalamount" id="txtproducttotalamount_1" value="0" readonly></td>
+    <td class="product-removal"></td>
+  </tr>
+
+  <!-- AJAX row. _DisplayInvoiceItemDetailsPartial.cshtml:11-111.
+       Note: ids only, no classes, and the id repeats on every such row. -->
+  <tr id="templateRow_2" class="product" data-shape="ajax" onclick="updateProductTotalAmount(this)">
+    <td class="product-id text-start">2</td>
+    <td><input type="number" class="product-quantity form-control" id="txtproductquantity" value="4"></td>
+    <td><input type="text" class="form-control" id="txtproductamount" value="125"></td>
+    <td><input type="hidden" class="form-control" id="productamount" value="125"></td>
+    <td><input type="text" class="product-discountamount form-control" id="txtdiscountamount" value="0"></td>
+    <td><input type="text" class="product-discountpercentage form-control" id="txtdiscountpercentage" value="0"></td>
+    <td><input type="text" class="product-Gstper form-control" id="txtgst" value="18"></td>
+    <td><input type="number" class="product-Gstamount form-control bg-light" id="txtgstAmount" value="0" readonly></td>
+    <td><input type="text" class="product-producttotalamount form-control bg-light" id="txtproducttotalamount" value="0" readonly></td>
+    <td class="product-removal"></td>
+  </tr>
+
+</tbody></table>
+
+<!-- Totals. CreateInvoice.cshtml:527-574 -->
+<input type="text" id="cart-subtotal" readonly />
+<input type="text" id="totalgst" readonly />
+<input type="text" id="cart-tds" value="0" />
+<input type="text" id="cart-discount" readonly />
+<input type="text" id="IDiscountRoundOff" value="0" />
+<input type="text" id="cart-total" readonly />
+<span id="TotalProductQuantity"></span>
+<span id="TotalProductPrice"></span>
+<span id="TotalProductGST"></span>
+<span id="TotalDiscountPrice"></span>
+<span id="TotalProductAmount"></span>
+
+<!-- The Sales screen, on its OWN page. Its rows are class="product" too
+     (_DisplaySalesItemDetailsPartial.cshtml:5) — which is why this fixture is
+     loaded into a separate document by run.mjs. Putting both tables in one DOM
+     would make $(".product") span both, and that never happens in the real app. -->
+<table id="sales-table" hidden><tbody>
+  <tr class="product" data-shape="sales" onclick="updateSalesProductTotalAmount(this)">
+    <td><input id="txtSalesproductquantity" value="10"></td>
+    <td><input id="txtSalesproductamount" value="100"></td>
+    <td><input type="hidden" id="Salesproductamount" value="100"></td>
+    <td><input id="txtSalesdiscountamount" value="0"></td>
+    <td><input id="txtSalesdiscountpercentage" value="0"></td>
+    <td><input id="txtSalesgst" value="18"></td>
+    <td><input id="txtSalesgstAmount" value="0"></td>
+    <td><input id="txtSalesproducttotalamount" value="0"></td>
+  </tr>
+</tbody></table>
+<input type="text" id="Sales-cart-subtotal" />
+<input type="text" id="Salestotalgst" />
+<input type="text" id="Sales-cart-tds" value="0" />
+<input type="text" id="Sales-cart-discount" />
+<input type="text" id="SalesIDiscountRoundOff" value="0" />
+<input type="text" id="Sales-cart-total" />
+<span id="SalesTotalProductQuantity"></span>
+<span id="SalesTotalProductPrice"></span>
+<span id="SalesTotalProductGST"></span>
+<span id="SalesTotalDiscountPrice"></span>
+<span id="SalesTotalProductAmount"></span>
+</body>
+</html>

@@ -121,6 +121,33 @@ historical totals are to reproduce.
 *render* time by comparing `CompanyStateCode` against `SupplierStateCode` — both
 merely *selected* in the repository (`SalesRepo.cs:310`, `:322`).
 
+**(e) ⚠️ EVERY TOTAL IS ROUNDED TO A WHOLE RUPEE, AND EXACTLY .50 ROUNDS DOWN.**
+Recorded nowhere until it was found by running the code.
+`InvoiceMasterScript.js:1005-1006` and `SalesInvoiceMasterScript.js:381-386`:
+
+```javascript
+var decimal = grandTotal - Math.floor(grandTotal);
+grandTotal = (decimal <= 0.5) ? Math.floor(grandTotal) : Math.ceil(grandTotal);
+```
+
+So no document this system has issued carries paise, and a total of 1234.50 is
+charged as 1234 — always in the counterparty's favour, never the company's.
+Commercial rounding takes a half UP. This is a business rule, not a defect to
+fix quietly: it has applied to every invoice ever issued. Question 5a of doc 19.
+
+**(f) The Sales roll-up has no discount term.** `updateSalesTotals` computes
+`totalAmount = totalSubtotal + totalGst - Tds + roundOff` and never subtracts
+`TotalDiscount`, which it computes and displays. That is correct ONLY because a
+separate handler has already overwritten the visible price with the discounted
+one — a different function on a different event. Per-line GST meanwhile uses the
+HIDDEN price minus the discount (`#Salesproductamount`), while the roll-up sums
+the VISIBLE price (`#txtSalesproductamount`). If the overwrite did not happen,
+the discount is shown to the customer and never taken off the total.
+
+Also: `var Tds = $('#Sales-cart-tds').val()` is used unparsed — a STRING in
+arithmetic. An empty box coerces to 0 and works by accident; anything grouped
+("1,000") makes the whole total NaN.
+
 ### ⚠️ RULE D-JS-1 — The Create Invoice screen silently drops TDS and round-off
 
 `CreateInvoice.cshtml:896-898` loads three JS modules together. All three define
@@ -133,9 +160,34 @@ discount, no TDS and no round-off. The inline `onclick="updateProductTotalAmount
 at `CreateInvoice.cshtml:262` and `:357` calls the **PO** implementation, and
 `#cart-tds` / `#IDiscountRoundOff` are **never read on this screen**.
 
-> **Verify this against production behaviour immediately.** If confirmed, purchase
-> invoices have been computed without TDS and round-off, and the scope of affected
-> data needs to be established before anything else.
+> **CONFIRMED BY RUNNING IT — 7 Sep 2026.** `Migration-Assessment/tools/calculator-harness`
+> loads the three real script files into jsdom in the real order, against a
+> reproduction of the real markup, and reads the totals back. It confirms the
+> collision AND finds that it is worse than described.
+>
+> **The two calculators read DIFFERENT ROWS of the same table.**
+> `InvoiceMasterScript` iterates `$(".productRow")` and reads its fields BY CLASS.
+> `PurchaseRequestScript` iterates `$(".product")` and reads them BY ID. Rows
+> rendered with the page (`CreateInvoice.cshtml:262`, `:357`) carry `productRow`
+> and a class on every input; rows added by AJAX
+> (`_DisplayInvoiceItemDetailsPartial.cshtml:11`) carry `product` and a bare id.
+>
+> Each calculator therefore sees exactly half the table, and the halves are
+> disjoint. On a two-line invoice of 1000.00 + 500.00 the correct total is
+> 1770.00; the calculator that runs returns **590.00**, the one it overwrote
+> returns **1180.00**. **No load order produces 1770.00.**
+>
+> The practical shape of it: a NEW invoice built entirely from the item picker
+> totals correctly apart from the missing TDS. An EXISTING invoice reopened and
+> re-saved has its own lines invisible to the recalculation.
+>
+> Still to be confirmed against the LIVE server, which may serve a different
+> build — question 2 of doc 19 asks for that.
+>
+> Both calculators are now reproduced, defects included, in
+> `packages/domain/src/invoice-total.ts` (`asProduced`), alongside the correct
+> arithmetic (`corrected`) and a `drift()` that reports the difference per
+> document.
 
 ### ⚠️ Two mechanisms for one concept
 

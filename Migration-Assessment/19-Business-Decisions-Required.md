@@ -63,34 +63,62 @@ should not change because the software was rebuilt.
 
 ---
 
-## Question 2 — Purchase invoices may have been missing TDS and round-off
+## Question 2 — The Create Invoice total can be wrong in two ways at once
 
-**What we found.** On the **Create Invoice** screen specifically, we found what
-looks like a collision between two parts of the software. The Purchase Order
-calculation appears to overwrite the Invoice calculation. Purchase Orders have no
-TDS and no round-off — so on that screen, **the TDS and round-off boxes may be
-ignored entirely**, even when you fill them in.
+**This has moved on since the first draft.** We have now RUN your invoice
+calculator — the actual JavaScript files from your web server, against the actual
+layout of the Create Invoice page — instead of only reading it. The tool is
+`Migration-Assessment/tools/calculator-harness`; anyone can run it and see the
+same output.
 
-**We have not been able to confirm this against your live system.** It is what the
-code says should happen. It needs ten minutes of checking by someone who uses the
-screen daily.
+### What it showed
 
-**Why it matters.** If it is confirmed, then some purchase invoices have been saved
-with a total that does not deduct the TDS that was entered. That affects supplier
-balances and possibly TDS returns. We would need to establish how many invoices and
-over what period before deciding what to do about it.
+**(a) The TDS and round-off boxes are not read.** Create Invoice loads three
+script files that each define a function with the same name. The last one to load
+wins, and the winner is the **Purchase Order** calculator. A purchase order has no
+TDS and no round-off, so those two boxes are never looked at. We put ₹500 of TDS
+in and the total did not move by a rupee.
 
-**What we need.** Someone who uses Create Invoice to do this, today if possible:
+**(b) Worse: part of the invoice is missing from its own total.** The two
+calculators do not just differ in their formulas — they look at **different rows
+of the same table**. Lines that come with the page when you open it are built one
+way; lines you add by picking an item from the list are built another. Each
+calculator can see only one of the two kinds.
 
-1. Create a test purchase invoice.
-2. Enter a TDS amount and a round-off amount.
-3. Check whether the final total actually changes when you do.
+Our test invoice had two lines, ₹1,000 and ₹500 before tax. The correct total is
+**₹1,770**. The calculator that runs produced **₹590** — the added line only. The
+calculator that was overwritten would produce **₹1,180** — the other line only.
+**Neither one gives ₹1,770**, and there is no ordering of the files that would.
 
-Then tell us: **does entering TDS change the total, yes or no?**
+**What this means in practice.** A saved invoice you REOPEN and re-save is at risk:
+its existing lines are the kind the running calculator cannot see. A brand-new
+invoice where every line was added from the item list totals correctly, apart from
+the missing TDS.
 
-> **Decision:** ☐ Confirmed — TDS is ignored  ☐ Works correctly  ☐ Not yet checked
+### We still need you to confirm it on the real screen
+
+We are testing the code in your repository. We cannot see which build your live
+server is running, and we will not tell you your invoices are wrong on the
+strength of that alone. Ten minutes:
+
+1. Open an EXISTING purchase invoice that has more than one line.
+2. Without changing anything, look at the total. Then change one quantity and
+   change it back, so the page recalculates.
+3. **Does the total change? Does it drop?**
+4. On a new invoice, enter a TDS amount. **Does the total change?**
+
+**Why it matters.** If confirmed, some purchase invoices were saved with a total
+that does not deduct the TDS entered, and some may have been saved missing whole
+lines. That affects what you owe suppliers and possibly your TDS returns. We would
+need to know how many and over what period before deciding what to do.
+
+> **Decision:** ☐ Confirmed on the live screen  ☐ Works correctly there  ☐ Not yet checked
 >
-> **If confirmed:** how far back do we need to investigate? ☐ Current FY ☐ All history
+> **If confirmed:** how far back do we investigate? ☐ Current FY ☐ All history
+>
+> **Also:** should we run a report over every stored invoice comparing the saved
+> total against the sum of its own lines? That tells you the exact number of
+> affected documents without anyone re-keying anything. ☐ Yes ☐ No
 
 ---
 
@@ -171,6 +199,51 @@ anyone made a decision based on one of them coming back empty?
 
 > **Decision:** ☐ Nobody uses them — low priority  ☐ In use — fix and notify users
 > ☐ In use, and a decision was made on a blank result — needs investigating
+
+---
+
+## Question 5a — Every invoice total is rounded to a whole rupee, and exactly 50 paise rounds DOWN
+
+**What we found.** Your invoice and sales screens both finish by throwing away the
+paise:
+
+```
+if the paise are 50 or fewer  ->  round DOWN to the rupee
+otherwise                     ->  round UP to the rupee
+```
+
+So a total of ₹1,04,532.40 is charged as ₹1,04,532, and ₹1,04,532.60 as
+₹1,04,533. **No invoice your system has ever issued has paise on it.**
+
+**Two things to notice.**
+
+1. This was not written down anywhere — not in our first assessment, not in any
+   specification we were given. We found it by running the code. If it is
+   deliberate, it needs recording. If nobody knew, that is more important.
+2. **Exactly 50 paise rounds DOWN.** Normal commercial rounding takes a half up.
+   Yours takes it down, every time, in the counterparty's favour and never in
+   yours. On a sales invoice that is money you did not bill.
+
+**Why it matters.** The new system will do whatever you tell it to. If we say
+nothing, we will reproduce this exactly — including the half-rounds-down — because
+that is what every existing document did, and matching history is the safer
+default. But it should be a choice you made, not one you inherited.
+
+**Your options.**
+
+| Option | What it means |
+|---|---|
+| **A. Keep it exactly** (default if you do not choose) | Whole rupees, 50 paise rounds down. Nothing changes; new documents match old ones. |
+| **B. Keep whole rupees, round 50 paise UP** | Standard commercial rounding. Differs from history by ₹1 on the exact-half cases only. |
+| **C. Keep the paise** | Totals carry two decimals like every other figure in the system. Cleanest arithmetically, most different from what you issue today. |
+
+**We recommend B** if this rounding is deliberate, and **C** if it turns out
+nobody chose it. We do not recommend A, but it is the safe answer and we will
+implement it without argument.
+
+> **Decision:** ☐ A — keep exactly  ☐ B — round half up  ☐ C — keep the paise  ☐ Discuss
+>
+> **Also:** was the whole-rupee rounding a deliberate decision? ☐ Yes ☐ No ☐ Nobody knows
 
 ---
 

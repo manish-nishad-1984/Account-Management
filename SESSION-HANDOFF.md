@@ -813,6 +813,96 @@ Tests: 451 Node (12 domain + 279 API + 160 web) + 19 .NET, up 46.
 
 ---
 
+## 5k. The money rules, run rather than read (7 Sep 2026)
+
+No new screen. This session went at the arithmetic that blocks Phase 4 — and the
+important change is that the invoice calculators are no longer something we have
+READ. They have been RUN.
+
+`Migration-Assessment/tools/calculator-harness/` loads the three real script
+files from `AccountManegments.Web/wwwroot/moduls` into jsdom, in the order
+`CreateInvoice.cshtml:896-898` loads them, against a reproduction of that page's
+markup, and reads the totals fields back. `node run.mjs`.
+
+### D-JS-1 is confirmed, and it is worse than it was written up
+
+The known part: three files define `updateTotals`, the last wins, and the winner
+is the PURCHASE ORDER calculator, which has no TDS and no round-off. Confirmed —
+₹500 of TDS moves the total by nothing.
+
+**The part nobody had spotted: the two calculators read DIFFERENT ROWS.**
+
+- `InvoiceMasterScript` iterates `$(".productRow")` and reads fields BY CLASS.
+- `PurchaseRequestScript` iterates `$(".product")` and reads them BY ID.
+- Rows rendered with the page (`CreateInvoice.cshtml:262`, `:357`) carry
+  `productRow`, and every input has both a class and a row-suffixed id.
+- Rows added by AJAX (`_DisplayInvoiceItemDetailsPartial.cshtml:11`) carry
+  `product`, and the inputs have a bare id and NO class.
+
+Each calculator sees exactly half the table and the halves are disjoint. On a
+two-line invoice of 1000.00 + 500.00, correct total 1770.00: the calculator that
+runs returns **590.00**, the one it overwrote returns **1180.00**. **No load
+order produces 1770.00.**
+
+Practically: a NEW invoice built entirely from the item picker totals correctly
+except for the missing TDS. An EXISTING invoice reopened and re-saved has its own
+lines invisible to the recalculation.
+
+Still to be confirmed on the LIVE server, which may serve a different build.
+Doc 19 question 2 now asks for exactly that, with the steps.
+
+### A business rule nobody had written down
+
+**Every invoice total is rounded to a whole rupee, and exactly .50 rounds DOWN.**
+
+`InvoiceMasterScript.js:1005` and `SalesInvoiceMasterScript.js:381`:
+
+```javascript
+var decimal = grandTotal - Math.floor(grandTotal);
+grandTotal = (decimal <= 0.5) ? Math.floor(grandTotal) : Math.ceil(grandTotal);
+```
+
+No document this system has issued carries paise. And the half goes DOWN, where
+commercial rounding takes it up — always in the counterparty's favour, never the
+company's. That is now question 5a of doc 19. **The default if nobody answers is
+to reproduce it exactly**, because that is what every issued document did.
+
+### Two more, in the Sales roll-up
+
+`updateSalesTotals` computes `total = subtotal + gst - Tds + roundOff` and never
+subtracts the discount it displays. That is right ONLY because a separate handler
+already overwrote the visible price — per-line GST uses the HIDDEN price minus
+discount, the roll-up sums the VISIBLE price. If the overwrite did not happen,
+the discount is shown and never taken off. And `Tds` is read with `.val()` and
+used unparsed: an empty box coerces to 0 by luck, `"1,000"` makes the total NaN.
+
+### The arithmetic now exists, in decimals, with both versions
+
+`packages/domain/src/money.ts` — fixed-point decimal on BigInt. Money is a string
+everywhere else in this system; this is the only place it is arithmetic. Half-up
+rounding (`toFixed` rounds 1.005 to "1.00"; this gives 1.01), and
+`roundToWholeRupeeAsProduced` for the rule above.
+
+`packages/domain/src/invoice-total.ts` — TWO functions, deliberately:
+
+- `asProduced(lines, charges, calculator)` reproduces each legacy calculator IN
+  FLOAT, defects included. Float on purpose: doing it in decimals would give the
+  right answer, which is what makes it useless for reconciling history.
+- `corrected(lines, charges)` is the arithmetic the business thinks it has.
+- `drift(...)` reports the difference per document — the number question 1 asks
+  them to accept, now producible for every stored invoice instead of estimated.
+
+Rounding is per line then summed, not sum-then-round, matching the source's
+`.toFixed(2)` per line. A total that does not equal the printed lines added up is
+a support call every time.
+
+**Nothing in the API uses these yet.** They are the foundation Phase 4 sits on,
+and they are provable before a screen is built on them.
+
+Tests: 480 Node (41 domain + 279 API + 160 web) + 19 .NET, up 29.
+
+---
+
 ## 6. The Companies / Sites / Site Groups session (committed as `566b28ab`)
 
 **Companies, Sites and Site Groups master screens**, end to end:
