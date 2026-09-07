@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { vi } from "vitest";
 import type { AuthenticatedUser } from "@accountmanagement/contracts";
 import { AuthContext } from "../contexts/AuthContext";
+import { StaticSiteScope, type SiteScope } from "../contexts/SiteScopeContext";
 
 /**
  * Renders a screen with a signed-in user, so permission-gated UI can be tested.
@@ -20,7 +21,18 @@ import { AuthContext } from "../contexts/AuthContext";
  */
 export function renderWithAuth(
   node: ReactNode,
-  { permissions = [] as string[] }: { permissions?: string[] } = {},
+  {
+    permissions = [] as string[],
+    scope,
+  }: {
+    permissions?: string[];
+    /**
+     * The site scope the screen sees. Defaults to every site and READY, so a
+     * test that has nothing to say about site scoping is not held on a loading
+     * state it never resolves.
+     */
+    scope?: Partial<SiteScope>;
+  } = {},
 ) {
   const user: AuthenticatedUser = { id: "test-user", userName: "tester", permissions };
 
@@ -36,7 +48,7 @@ export function renderWithAuth(
           logout: vi.fn(),
         }}
       >
-        {node}
+        <StaticSiteScope {...scope}>{node}</StaticSiteScope>
       </AuthContext.Provider>
     </QueryClientProvider>,
   );

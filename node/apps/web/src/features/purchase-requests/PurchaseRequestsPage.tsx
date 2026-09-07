@@ -7,12 +7,8 @@ import {
 import { Check, Plus, Undo2 } from "lucide-react";
 import { DataGrid, RowActions } from "../../components/DataGrid";
 import { Badge, Button, ConfirmDialog, PageHeader, SelectField } from "../../components/ui";
-import {
-  useAllSites,
-  useDeletePurchaseRequest,
-  usePurchaseRequestList,
-  useSetApproval,
-} from "./api";
+import { useSiteScope } from "../../contexts/SiteScopeContext";
+import { useDeletePurchaseRequest, usePurchaseRequestList, useSetApproval } from "./api";
 import { PurchaseRequestFormDialog } from "./PurchaseRequestFormDialog";
 import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
@@ -32,12 +28,12 @@ export function PurchaseRequestsPage() {
   const canAdd = usePermission("purchase-request", "add");
   const screen = useMasterScreen<PurchaseRequestRow>({ defaultSortBy: "prNo", defaultSortDir: "desc" });
 
-  const [siteId, setSiteId] = useState("");
   const [approval, setApproval] = useState<ApprovalFilter>("all");
 
-  const sites = useAllSites();
+  // The site is chosen once, in the shell header, and applies to every scoped
+  // screen. This one reads the choice only to say so in its empty state.
+  const scope = useSiteScope();
   const query = usePurchaseRequestList(screen.listParams, {
-    siteId: siteId || undefined,
     isApproved: approval === "all" ? undefined : approval === "approved",
   });
   const remove = useDeletePurchaseRequest();
@@ -154,14 +150,7 @@ export function PurchaseRequestsPage() {
         }
       />
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:max-w-xl">
-        <SelectField
-          label="Site"
-          value={siteId}
-          placeholder={sites.isLoading ? "Loading sites…" : "All sites"}
-          options={(sites.data?.rows ?? []).map((site) => ({ value: site.id, label: site.name }))}
-          onChange={(event) => setSiteId(event.target.value)}
-        />
+      <div className="mb-4 max-w-xs">
         <SelectField
           label="Status"
           value={approval}
@@ -174,8 +163,16 @@ export function PurchaseRequestsPage() {
         columns={columns}
         searchPlaceholder="Search request number or item"
         sortableFields={PURCHASE_REQUEST_SORT_FIELDS}
-        emptyMessage="No purchase requests match these filters"
+        emptyMessage={
+          scope.siteName
+            ? `No purchase requests for ${scope.siteName} match these filters`
+            : "No purchase requests match these filters"
+        }
         {...screen.gridProps(query)}
+        // The list does not fetch until the site scope resolves. Without this the
+        // grid renders its empty state in the gap and reports "no requests" for a
+        // site it has not asked about yet.
+        isLoading={query.isLoading || !scope.isReady}
       />
 
       <PurchaseRequestFormDialog

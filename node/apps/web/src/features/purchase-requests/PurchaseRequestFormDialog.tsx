@@ -14,9 +14,9 @@ import {
   useCreatePurchaseRequest,
   useItemOptions,
   usePurchaseRequest,
-  useAllSites,
   useUpdatePurchaseRequest,
 } from "./api";
+import { useSiteScope } from "../../contexts/SiteScopeContext";
 
 /**
  * The purchase request form.
@@ -44,7 +44,16 @@ export function PurchaseRequestFormDialog({
 }) {
   const isEdit = requestId !== null;
   const detail = usePurchaseRequest(open && isEdit ? requestId : null);
-  const sites = useAllSites();
+
+  /**
+   * The site dropdown is fed by the SCOPE, not by `GET /sites`.
+   *
+   * That list needs the `site.view` right, which guards the Site master screen —
+   * so a clerk who may raise requests but not edit sites got a 403 and an empty
+   * dropdown with no way to save. `/sites/assignable` needs no right and returns
+   * the sites this user actually works on, which is the correct set anyway.
+   */
+  const scope = useSiteScope();
   const units = useAllUnits();
   const itemOptions = useItemOptions("");
   const create = useCreatePurchaseRequest();
@@ -69,11 +78,13 @@ export function PurchaseRequestFormDialog({
     if (!open) return;
     setFormError(null);
     if (!isEdit) {
-      reset(EMPTY);
+      // A new request defaults to the site in the header, which is what the
+      // person raising it is looking at. Still changeable.
+      reset({ ...EMPTY, siteId: scope.siteId ?? "" });
     } else if (detail.data) {
       reset(toFormValues(detail.data));
     }
-  }, [open, isEdit, detail.data, reset]);
+  }, [open, isEdit, detail.data, reset, scope.siteId]);
 
   const pending = create.isPending || update.isPending;
 
@@ -94,10 +105,7 @@ export function PurchaseRequestFormDialog({
     (invalid) => setFormError(unshownValidationMessage(invalid)),
   );
 
-  const siteOptions = (sites.data?.rows ?? []).map((site) => ({
-    value: site.id,
-    label: site.name,
-  }));
+  const siteOptions = scope.sites.map((site) => ({ value: site.id, label: site.name }));
 
   const unitOptions = (units.data?.rows ?? []).map((unit) => ({
     value: unit.id,
@@ -132,7 +140,7 @@ export function PurchaseRequestFormDialog({
               label="Site"
               required
               autoFocus
-              placeholder={sites.isLoading ? "Loading sites…" : "Choose a site"}
+              placeholder={scope.isReady ? "Choose a site" : "Loading sites…"}
               options={siteOptions}
               error={errors.siteId?.message}
               {...register("siteId")}

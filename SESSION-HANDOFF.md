@@ -583,6 +583,81 @@ Discount and Adjustment. It is the superset. Build `LineItemGrid` against it.
 
 ---
 
+## 5h. The site scope is now in the shell (7 Sep 2026)
+
+Gap 1 of section 5g is closed. The site is chosen ONCE, in the header, and every
+site-scoped screen follows it — as `drpSiteName` does in `Main_Layout.cshtml`.
+
+- `contexts/SiteScopeContext.tsx` — the provider, mounted in `App.tsx` below
+  `RequireAuth` and keyed by user id.
+- `components/SiteScopePicker.tsx` — the header control.
+- `GET /api/v1/sites/assignable` — `SitesRepository.scopeFor()`.
+
+**The rule, taken from the source and reproduced deliberately.** A user with rows
+in `user_sites` picks among those and is offered no "All sites"; a user with none
+sees every active site and defaults to all of them. That is `UserSession.SiteData`
+versus the `GetSiteNameList` fallback. It is PRESENTATION, not authorisation, and
+it was not authorisation in the source either — the .NET endpoints never checked
+the session's site against the row being read or written. Narrowing a dropdown
+does not stop a request for another site's data. Real per-site authorisation is a
+separate decision; it belongs with finding C-6.
+
+### The new endpoint carries no `@Permissions`, on purpose
+
+`GET /sites` requires `site.view` — the right that guards the Site MASTER screen.
+The purchase-request form was reading that endpoint to fill its site dropdown, so
+**a clerk who may raise requests but not administer sites got a 403 and an empty
+dropdown they could not save past.** `/sites/assignable` needs no right, returns
+two columns, and is scoped to the sites that user actually works on. `useAllSites`
+is gone; both the form and the filter read the scope.
+
+### Four defects in the source version, not reproduced
+
+1. `<option value="@site.SiteId" isSelected>` is missing the `@`, so `isSelected`
+   is emitted as a literal attribute on every option and the computed selection
+   is never applied. The header and the server session can disagree about which
+   site is in scope, silently.
+2. Changing site calls `/Home/PurchaseRequestList` for its session side effect,
+   writes the returned partial into `#tbPndingApproval`, then `location.reload()`s
+   — discarding the HTML it just fetched and reloading the page it just updated.
+3. The choice lives in `sessionStorage`, so it dies with the tab. Ours is
+   `localStorage`, keyed per user because a site office shares a keyboard. A site
+   id is a display preference, not a credential — which is why this persists when
+   `AuthContext` deliberately persists nothing.
+4. An unassigned user's dropdown is populated asynchronously with no placeholder.
+
+### A stored site that is no longer on offer is discarded
+
+Somebody removed from a site would otherwise keep filtering by it and see an
+empty application, with every screen agreeing — which looks like the data is gone
+rather than the filter is wrong.
+
+### A scoped list must not fetch before the scope resolves
+
+`useListResource` now takes `{ enabled }`. An assigned user's default is their
+FIRST SITE, not everything, so a request sent early returns another site's rows
+and is then replaced — which reads as a bug in the data rather than a loading
+state. `PurchaseRequestsPage` also overrides `isLoading` for the same window, or
+the grid announces "no purchase requests" for a site it has not asked about yet.
+`usePurchaseRequestList` is the worked example; each scoped module copies it.
+
+### An assigned site that was deactivated is still offered
+
+`GetSiteNameList` filters on `IsActive` and `UserSession.SiteData` does not. The
+asymmetry is kept: dropping a deactivated site the user is assigned to would hide
+their own documents from the only person responsible for them. Soft-deleted sites
+are dropped either way.
+
+### Fastify prefers the static route, whatever the declaration order
+
+`sites/assignable` and `sites/:id` are siblings in the radix tree — verified with
+`printRoutes()`. `users/options` and `purchase-requests/approvals` already rely on
+this. Declaration order is a readability choice here, not a correctness one.
+
+Tests: 361 Node (12 domain + 221 API + 128 web) + 19 .NET. Up 24.
+
+---
+
 ## 6. The Companies / Sites / Site Groups session (committed as `566b28ab`)
 
 **Companies, Sites and Site Groups master screens**, end to end:

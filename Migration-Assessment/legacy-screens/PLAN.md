@@ -12,22 +12,32 @@ phase**, because they show four things the .NET source alone did not.
 These are in shipped screens. They are not new features; they are the port
 falling short of the thing it replaces. Verified against our code, not assumed.
 
-### 1.1 There is no global site selector  ·  **the biggest one**
+### 1.1 There is no global site selector  ·  ~~the biggest one~~  ·  **DONE**
 
-Every legacy screen carries `All Site` in the header, and everything below is
-scoped to it. Our `AppShell` has nothing. Purchase Requests grew its own
-per-screen site dropdown, which does not persist and which nothing else honours.
+_Shipped 7 Sep 2026. See SESSION-HANDOFF §5h._
 
-Users work one site at a time. Without this they will filter every screen by
-hand, every time.
+The scope lives in `contexts/SiteScopeContext.tsx`, the control in
+`components/SiteScopePicker.tsx`, and the options come from a new
+`GET /sites/assignable` that requires no permission — `GET /sites` needs
+`site.view`, which is the Site MASTER right, and the purchase-request form was
+quietly 403ing for anyone without it.
 
-**Do:** a site scope in `AppShell`, held in context, persisted per user, applied
-as a default filter by every list hook. The API already accepts `siteId` on
-purchase requests; extend the same parameter as each module lands. Sites the user
-is assigned to come from `user_sites`, which is already imported.
+**What every scoped module must now do** — `usePurchaseRequestList` is the worked
+example, and it is three lines:
 
-**Cost:** medium. **Do it before the next module**, so each new screen is built
-against it instead of being retrofitted.
+```ts
+const { siteId, isReady } = useScopedSiteId(filters.siteId);
+return useListResource(RESOURCE, rowSchema, params, { ...filters, siteId },
+  { enabled: isReady });
+```
+
+and the screen overrides `isLoading={query.isLoading || !scope.isReady}` on its
+grid. Both halves matter: an assigned user's default scope is their FIRST SITE,
+not everything, so a list that fetches early shows another site's rows, and a
+grid that does not know it is waiting announces "nothing found" for a site it has
+not asked about yet.
+
+**Do NOT put a site dropdown on a screen.** The header owns that choice.
 
 ### 1.2 Master-detail split vs modal dialog
 
@@ -136,7 +146,8 @@ set and only then paged.
 ## Part 3 — Sequencing, honestly
 
 ```
-NOW      site selector  +  master-detail decision        <- do not skip
+DONE     site selector                                    (7 Sep 2026, §1.1)
+NOW      master-detail decision                          <- business call, do not skip
          Inventory Inward                                 (small, proves the selector)
 NEXT     Inward Challan  (file upload, aggregates)        <- completes Phase 3
          Excel import/export, item price history          (parallel, independent)

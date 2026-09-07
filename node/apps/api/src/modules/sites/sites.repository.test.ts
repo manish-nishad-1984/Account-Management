@@ -111,6 +111,107 @@ describe("SitesRepository (real PostgreSQL)", () => {
     expect(page.rows.filter((r) => r.id === site!.id)).toHaveLength(1);
   });
 
+  /**
+   * The header's site picker, which every signed-in user reads.
+   *
+   * `Main_Layout.cshtml` distinguishes two cases and so does this: rows in
+   * `user_sites` mean the user is assigned and gets exactly those, with no
+   * "All Site" entry; no rows means the layout falls back to `GetSiteNameList`
+   * and every site.
+   */
+  describe("scopeFor", () => {
+    const addUser = async (userName: string) => {
+      const [user] = await db
+        .insert(schema.users)
+        .values({
+          firstName: "First",
+          lastName: "Last",
+          email: userName + "@example.com",
+          phoneNo: "0",
+          userName,
+          password: "x",
+        })
+        .returning({ id: schema.users.id });
+      return user!.id;
+    };
+
+    const siteNamed = async (name: string) => {
+      const [site] = await db
+        .select({ id: schema.sites.id })
+        .from(schema.sites)
+        .where(eq(schema.sites.name, name));
+      return site!.id;
+    };
+
+    it("returns only the sites a user is assigned to", async () => {
+      const userId = await addUser("assigned");
+      await db.insert(schema.userSites).values([
+        { userId, siteId: await siteNamed("Site 03") },
+        { userId, siteId: await siteNamed("Site 07") },
+      ]);
+
+      const result = await repo.scopeFor(userId);
+
+      expect(result.scope).toBe("assigned");
+      expect(result.sites.map((s) => s.name)).toEqual(["Site 03", "Site 07"]);
+    });
+
+    it("falls back to every active site for a user assigned to none", async () => {
+      const result = await repo.scopeFor(await addUser("unassigned"));
+
+      expect(result.scope).toBe("all");
+      // 4 of the 20 fixture sites are inactive.
+      expect(result.sites).toHaveLength(16);
+    });
+
+    /**
+     * `UserSession.SiteData` carries no `IsActive` filter while
+     * `GetSiteNameList` does, and the asymmetry is kept: dropping a deactivated
+     * site the user is assigned to would hide their own documents from the only
+     * person responsible for them.
+     */
+    it("keeps an assigned site that has been deactivated", async () => {
+      const userId = await addUser("on-a-closed-site");
+      // Site 00 is one of the inactive ones in the fixture.
+      await db.insert(schema.userSites).values({ userId, siteId: await siteNamed("Site 00") });
+
+      const result = await repo.scopeFor(userId);
+
+      expect(result.sites.map((s) => s.name)).toEqual(["Site 00"]);
+    });
+
+    it("drops a soft-deleted site from an assignment rather than offering a dead one", async () => {
+      const userId = await addUser("stale-assignment");
+      const siteId = await siteNamed("Site 03");
+      await db.insert(schema.userSites).values([
+        { userId, siteId },
+        { userId, siteId: await siteNamed("Site 07") },
+      ]);
+      await db.update(schema.sites).set({ isDeleted: true }).where(eq(schema.sites.id, siteId));
+
+      const result = await repo.scopeFor(userId);
+
+      expect(result.sites.map((s) => s.name)).toEqual(["Site 07"]);
+    });
+
+    it("is ordered by name, so the default first site does not move between calls", async () => {
+      const userId = await addUser("ordered");
+      await db.insert(schema.userSites).values([
+        { userId, siteId: await siteNamed("Site 11") },
+        { userId, siteId: await siteNamed("Site 02") },
+      ]);
+
+      const result = await repo.scopeFor(userId);
+
+      expect(result.sites.map((s) => s.name)).toEqual(["Site 02", "Site 11"]);
+    });
+
+    it("returns every site rather than throwing when the caller has no id", async () => {
+      const result = await repo.scopeFor(undefined);
+      expect(result.scope).toBe("all");
+    });
+  });
+
   it("caps the page size so a client cannot ask for the whole table", () => {
     expect(() => query({ limit: 5000 })).toThrow();
   });

@@ -3,7 +3,8 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { PlaceholderPage } from "./components/PlaceholderPage";
 import { RequireAuth } from "./components/RequireAuth";
-import { AuthProvider } from "./contexts/AuthContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { SiteScopeProvider } from "./contexts/SiteScopeContext";
 import { LoginPage } from "./features/auth/LoginPage";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { UsersPage } from "./features/users/UsersPage";
@@ -39,6 +40,23 @@ const IMPLEMENTED: Record<string, React.ComponentType> = {
   "/purchase-requests": PurchaseRequestsPage,
 };
 
+/**
+ * The shell, with the site scope around it.
+ *
+ * Mounted BELOW `RequireAuth` so the request for the caller's sites never fires
+ * on the login page, and keyed by user so signing in as somebody else discards
+ * the previous person's chosen site rather than carrying it into an account that
+ * may not even be assigned to that site — a site office shares a keyboard.
+ */
+function ScopedShell({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  return (
+    <SiteScopeProvider key={user?.id ?? "anonymous"} userId={user?.id ?? null}>
+      <AppShell>{children}</AppShell>
+    </SiteScopeProvider>
+  );
+}
+
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -54,9 +72,9 @@ export function App() {
                   path={item.to}
                   element={
                     <RequireAuth>
-                      <AppShell>
+                      <ScopedShell>
                         <Screen />
-                      </AppShell>
+                      </ScopedShell>
                     </RequireAuth>
                   }
                 />

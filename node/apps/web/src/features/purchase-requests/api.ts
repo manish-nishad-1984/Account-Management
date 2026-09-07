@@ -4,28 +4,44 @@ import {
   listResponseSchema,
   purchaseRequestDetailSchema,
   purchaseRequestRowSchema,
-  siteRowSchema,
   type CreatePurchaseRequest,
   type ItemRow,
   type ListResponse,
   type PurchaseRequestDetail,
   type PurchaseRequestRow,
-  type SiteRow,
   type UpdatePurchaseRequest,
 } from "@accountmanagement/contracts";
 import { useListResource, type ListFilters, type ListParams } from "../../lib/list-query";
+import { useScopedSiteId } from "../../contexts/SiteScopeContext";
 import { useCreateResource, useDeleteResource, useUpdateResource } from "../../lib/crud";
 import { apiRequest } from "../../lib/api-client";
 
 const RESOURCE = "purchase-requests";
 
 export type PurchaseRequestFilters = ListFilters & {
+  /** Omit to follow the application's site scope, which is the normal case. */
   siteId?: string;
   isApproved?: boolean;
 };
 
-export const usePurchaseRequestList = (params: ListParams, filters: PurchaseRequestFilters = {}) =>
-  useListResource<PurchaseRequestRow>(RESOURCE, purchaseRequestRowSchema, params, filters);
+/**
+ * The site comes from the SHELL, not from this screen.
+ *
+ * Every legacy screen is filtered by the header's `drpSiteName` rather than by a
+ * dropdown of its own, and this is the worked example of that here: a scoped
+ * list hook reads `useScopedSiteId`, passes the result as a filter, and gates
+ * the request on `isReady`. Each module that lands copies these three lines.
+ */
+export const usePurchaseRequestList = (params: ListParams, filters: PurchaseRequestFilters = {}) => {
+  const { siteId, isReady } = useScopedSiteId(filters.siteId);
+  return useListResource<PurchaseRequestRow>(
+    RESOURCE,
+    purchaseRequestRowSchema,
+    params,
+    { ...filters, siteId },
+    { enabled: isReady },
+  );
+};
 
 export const usePurchaseRequest = (id: string | null) =>
   useQuery({
@@ -72,21 +88,15 @@ export const useSetApproval = () => {
   });
 };
 
-/**
- * Every site, for the site filter and the form's dropdown.
+/*
+ * There is no `useAllSites` here any more.
  *
- * Same reasoning as `useAllUnits`: a `<select>` that offers only the first page
- * silently omits the site somebody needs. Sites number in the dozens.
+ * It read `GET /sites`, which requires the `site.view` right — the one that
+ * guards the Site MASTER screen. A user who may raise purchase requests but not
+ * administer sites got a 403 and an empty dropdown. Both the filter and the
+ * form now read `useSiteScope`, which is fed by `/sites/assignable`: no right
+ * required, and scoped to the sites that user actually works on.
  */
-export const useAllSites = () =>
-  useQuery({
-    queryKey: ["sites", "all"],
-    queryFn: ({ signal }) =>
-      apiRequest<ListResponse<SiteRow>>(`/sites?limit=200&sortBy=name`, {
-        schema: listResponseSchema(siteRowSchema) as never,
-        signal,
-      }),
-  });
 
 /**
  * Every item, for the item dropdown.

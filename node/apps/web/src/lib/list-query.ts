@@ -47,11 +47,25 @@ export const listSearchParams = (params: ListParams): string => {
  * response schema this hook rebuilds on every render, and that is cheap only
  * because the schemas themselves are shared singletons.
  */
+export interface ListResourceOptions {
+  /**
+   * Hold the request until the filters mean something.
+   *
+   * A site-scoped list must not fetch before the site scope has resolved: the
+   * default for an assigned user is their first site, not "everything", so an
+   * early request returns every site's rows and is then replaced. That reads as
+   * a bug in the data rather than as a loading state. Screens that gate on this
+   * must also report it as loading — see `PurchaseRequestsPage`.
+   */
+  enabled?: boolean;
+}
+
 export function useListResource<T>(
   resource: string,
   rowSchema: z.ZodType<T>,
   params: ListParams,
   filters: ListFilters = {},
+  { enabled = true }: ListResourceOptions = {},
 ) {
   const search = new URLSearchParams(listSearchParams(params));
   for (const [key, value] of Object.entries(filters)) {
@@ -65,6 +79,7 @@ export function useListResource<T>(
     // one cache entry shows the previous site's rows for a frame after switching,
     // which reads as a bug in the data rather than in the cache.
     queryKey: [resource, params, filters],
+    enabled,
     queryFn: ({ signal }) =>
       apiRequest(`/${resource}?${search.toString()}`, {
         schema: listResponseSchema(rowSchema) as unknown as z.ZodType<ListResponse<T>>,

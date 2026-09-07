@@ -146,6 +146,48 @@ export class SitesRepository extends BaseRepository {
     return row?.value ?? 0;
   }
 
+  /**
+   * The sites this user may scope the application to, for the header picker.
+   *
+   * Two cases, matching `Main_Layout.cshtml` — see `siteScopeResponseSchema`:
+   * rows in `user_sites` mean the user is assigned and gets exactly those; no
+   * rows means unassigned, and the old layout falls back to every site.
+   *
+   * INACTIVE SITES ARE INCLUDED when they are assigned to the user, and excluded
+   * from the unassigned fallback. `GetSiteNameList` filters on `IsActive`, so the
+   * fallback matches it — but `UserSession.SiteData` does not, so a user assigned
+   * to a site that was later deactivated still sees it. That asymmetry is the
+   * source's, and dropping the assigned site would hide documents the user is
+   * responsible for from the only person able to see them.
+   *
+   * Soft-deleted sites are excluded either way. A deleted site is gone.
+   */
+  async scopeFor(userId: string | undefined): Promise<{
+    scope: "assigned" | "all";
+    sites: { id: string; name: string }[];
+  }> {
+    const assigned = userId
+      ? await this.db
+          .select({ id: sites.id, name: sites.name })
+          .from(userSites)
+          .innerJoin(sites, eq(sites.id, userSites.siteId))
+          .where(and(eq(userSites.userId, userId), eq(sites.isDeleted, false)))
+          .orderBy(sites.name)
+      : [];
+
+    if (assigned.length > 0) {
+      return { scope: "assigned", sites: assigned };
+    }
+
+    const all = await this.db
+      .select({ id: sites.id, name: sites.name })
+      .from(sites)
+      .where(and(eq(sites.isDeleted, false), eq(sites.isActive, true)))
+      .orderBy(sites.name);
+
+    return { scope: "all", sites: all };
+  }
+
   /** One site, or 404. A soft-deleted site is a 404, not a hidden but editable row. */
   async findById(id: string): Promise<SiteDetail> {
     const [row] = await this.db

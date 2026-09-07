@@ -16,10 +16,16 @@ legacy app is here, not in the individual forms.
 - The user's name sits top right with an avatar. No visible sign-out in the
   captures; presumably behind the avatar.
 
-**PORT GAP — this does not exist in the React app.** There is no global site
-scope anywhere in `AppShell`. The Purchase Requests screen has its own per-screen
-site dropdown, which is a different thing: it does not persist across screens and
-nothing else honours it. This is the single largest UX divergence found so far.
+**PORT GAP — CLOSED 7 Sep 2026.** `SiteScopePicker` now sits in the `AppShell`
+header, fed by `SiteScopeContext` and `GET /sites/assignable`. Purchase Requests
+lost its own site dropdown and follows the header instead. See PLAN.md §1.1 for
+what each new scoped screen must do, and SESSION-HANDOFF §5h for the four defects
+in the legacy version that were deliberately not reproduced.
+
+One rule from the source is kept: a user with rows in `user_sites` picks among
+those and gets no "All sites" entry; a user with none sees everything. That is
+presentation, not authorisation — the .NET endpoints never checked the session's
+site against the row being read, and neither do ours yet.
 
 ## The sidebar, in the legacy order
 

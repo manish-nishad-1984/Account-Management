@@ -19,6 +19,7 @@ import {
   type ListResponse,
   type SiteDetail,
   type SiteRow,
+  type SiteScopeResponse,
   type UpdateSite,
 } from "@accountmanagement/contracts";
 import { SitesRepository } from "./sites.repository";
@@ -58,6 +59,26 @@ export class SitesController {
       nextCursor: page.nextCursor,
       total,
     };
+  }
+
+  /**
+   * The site scope for the application header.
+   *
+   * DELIBERATELY CARRIES NO `@Permissions`. Every signed-in user needs to pick a
+   * site, including one with no `site.view` right — that right guards the Site
+   * MASTER screen, where sites are created and edited, and requiring it here
+   * would leave a site clerk unable to choose the site they work on. The
+   * projection is two columns wide for the same reason.
+   *
+   * Declared above `@Get(":id")` to read in the obvious order. Fastify routes on
+   * a radix tree and prefers the static segment over the parametric one whatever
+   * the declaration order, which is how `users/options` and
+   * `purchase-requests/approvals` already work — verified against
+   * `printRoutes()`, where `assignable` and `:id` are siblings under `sites/`.
+   */
+  @Get("assignable")
+  scope(@CurrentUser() caller: AccessTokenClaims | undefined): Promise<SiteScopeResponse> {
+    return this.sites.scopeFor(caller?.sub);
   }
 
   @Get(":id")

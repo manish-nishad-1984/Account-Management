@@ -86,3 +86,39 @@ export type UpdateSite = z.infer<typeof updateSiteSchema>;
 
 export const SITE_SORT_FIELDS = ["name", "createdAt"] as const;
 export type SiteSortField = (typeof SITE_SORT_FIELDS)[number];
+
+/**
+ * The site scope offered in the application header.
+ *
+ * A separate, deliberately thin shape rather than a reuse of `siteRowSchema`:
+ * every signed-in user reads this, including users with no `site.view` right at
+ * all, so it carries a name and an id and nothing else. Counts, contact details
+ * and addresses stay behind the Site master screen's permission.
+ */
+export const siteScopeOptionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+export type SiteScopeOption = z.infer<typeof siteScopeOptionSchema>;
+
+/**
+ * `Main_Layout.cshtml` builds this dropdown from `UserSession.SiteData`, and the
+ * two cases it distinguishes are reproduced here rather than merged:
+ *
+ *  - `assigned` — the user has rows in `user_sites`. The old layout offers those
+ *    sites and NO "All Site" entry, so an assigned user always works one site.
+ *  - `all` — the user has no assignment at all. The old layout falls back to
+ *    `GetSiteNameList` and prepends "All Site", so an unassigned user sees
+ *    everything by default.
+ *
+ * This is a PRESENTATION rule, not an access control, and it was not one in the
+ * source either: the .NET endpoints never checked the session's site against the
+ * row being read or written. Narrowing the dropdown does not stop a request for
+ * another site's data. Real per-site authorisation is a separate decision and is
+ * recorded with finding C-6.
+ */
+export const siteScopeResponseSchema = z.object({
+  scope: z.enum(["assigned", "all"]),
+  sites: z.array(siteScopeOptionSchema),
+});
+export type SiteScopeResponse = z.infer<typeof siteScopeResponseSchema>;

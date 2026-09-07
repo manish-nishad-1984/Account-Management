@@ -5,6 +5,7 @@ import { CalendarDays, LogOut, Menu, X } from "lucide-react";
 import { financialYear } from "@accountmanagement/domain";
 import { useAuth } from "../contexts/AuthContext";
 import { NAV } from "../navigation/nav";
+import { SiteScopePicker } from "./SiteScopePicker";
 
 /**
  * Account Book panel shell: a fixed module rail, a slim top bar, and the routed
@@ -149,10 +150,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Breadcrumb pathname={location.pathname} />
           </div>
 
-          <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 ring-1 ring-inset ring-slate-200">
-            <CalendarDays aria-hidden className="size-3.5 text-slate-400" />
-            <span className="hidden text-xs text-slate-500 sm:inline">Financial year</span>
-            <span className="tabular text-xs font-semibold text-slate-800">{fy}</span>
+          <div className="flex items-center gap-2">
+            <SiteScopePicker />
+
+            {/* The financial year yields the width on a phone; the site does not. */}
+            <div className="hidden items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 ring-1 ring-inset ring-slate-200 sm:flex">
+              <CalendarDays aria-hidden className="size-3.5 text-slate-400" />
+              <span className="hidden text-xs text-slate-500 lg:inline">Financial year</span>
+              <span className="tabular text-xs font-semibold text-slate-800">{fy}</span>
+            </div>
           </div>
         </header>
 

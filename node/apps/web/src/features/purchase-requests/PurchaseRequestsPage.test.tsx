@@ -12,10 +12,12 @@ const ALL_RIGHTS = [
   "purchase-request.approve",
 ];
 
+const SITE = "22222222-2222-2222-2222-222222222222";
+
 const row = (overrides: Record<string, unknown> = {}) => ({
   id: "11111111-1111-1111-1111-111111111111",
   prNo: "PR/26-27/001",
-  siteId: "22222222-2222-2222-2222-222222222222",
+  siteId: SITE,
   siteName: "Akwada Lake Front",
   itemId: "33333333-3333-3333-3333-333333333333",
   itemLabel: "OPC 53 Grade Cement",
@@ -33,45 +35,34 @@ const row = (overrides: Record<string, unknown> = {}) => ({
 
 const list = (rows: unknown[]) => ({ rows, nextCursor: null, total: rows.length });
 
-/** Must satisfy `siteRowSchema` in full, or the response fails validation and
- *  the dropdown renders empty with nothing to say why. */
-const SITES = list([
-  {
-    id: "22222222-2222-2222-2222-222222222222",
-    name: "Akwada Lake Front",
-    isActive: true,
-    contactPersonName: null,
-    contactPersonPhoneNo: null,
-    area: null,
-    pincode: null,
-    userCount: 0,
-    groupCount: 0,
-    capabilities: { canEdit: true, canDelete: true, canApprove: false },
-  },
-]);
+/**
+ * The site scope the shell supplies. This screen has no site control of its own
+ * — the header owns that choice for the whole application.
+ */
+const SCOPE = {
+  sites: [{ id: SITE, name: "Akwada Lake Front" }],
+  canSelectAll: true,
+};
 
 /**
  * The approval PATCH shares a prefix with the list, so its pattern must be
  * matched FIRST — `routeFetch` returns the first route that matches.
  */
 const routes = (rows: unknown[]) =>
-  routeFetch(
-    [
-      [/\/purchase-requests\/.+\/approval$/, json(row({ isApproved: true }))],
-      [/\/purchase-requests$/, list(rows)],
-      [/\/sites$/, SITES],
-      [/\/units$/, list([])],
-      [/\/items$/, list([])],
-    ],
-  );
+  routeFetch([
+    [/\/purchase-requests\/.+\/approval$/, json(row({ isApproved: true }))],
+    [/\/purchase-requests$/, list(rows)],
+    [/\/units$/, list([])],
+    [/\/items$/, list([])],
+  ]);
 
 /** The URL of the last GET that hit the purchase-request list. */
-const lastListUrl = () => {
-  const calls = vi
-    .mocked(globalThis.fetch)
-    .mock.calls.filter((call) => String(call[0]).includes("/purchase-requests?"));
-  return new URL(String(calls[calls.length - 1]![0]), "http://localhost");
-};
+const listCalls = () =>
+  vi.mocked(globalThis.fetch).mock.calls.filter((call) =>
+    String(call[0]).includes("/purchase-requests?"),
+  );
+
+const lastListUrl = () => new URL(String(listCalls().at(-1)![0]), "http://localhost");
 
 describe("PurchaseRequestsPage", () => {
   beforeEach(() => {
@@ -88,12 +79,7 @@ describe("PurchaseRequestsPage", () => {
     expect(await screen.findByText("PR/26-27/001")).toBeInTheDocument();
     expect(screen.getByText("OPC 53 Grade Cement")).toBeInTheDocument();
     expect(screen.getByText("Bag")).toBeInTheDocument();
-
-    // The site name is also an option in the filter dropdown, so scope to the grid.
-    const inGrid = screen
-      .getAllByText("Akwada Lake Front")
-      .filter((element) => element.closest("table") !== null);
-    expect(inGrid).toHaveLength(1);
+    expect(screen.getByText("Akwada Lake Front")).toBeInTheDocument();
   });
 
   /**
@@ -207,22 +193,69 @@ describe("PurchaseRequestsPage", () => {
       await screen.findByText("PR/26-27/001");
       expect(lastListUrl().searchParams.has("isApproved")).toBe(false);
     });
+  });
 
-    it("filters by site", async () => {
+  /**
+   * The site is chosen once, in the shell header, exactly as `drpSiteName` works
+   * in the legacy layout. These assert the screen OBEYS that choice rather than
+   * carrying a site filter of its own.
+   */
+  describe("site scope", () => {
+    it("has no site filter of its own", async () => {
       routes([row()]);
-      renderWithAuth(<PurchaseRequestsPage />, { permissions: ALL_RIGHTS });
+      renderWithAuth(<PurchaseRequestsPage />, { permissions: ALL_RIGHTS, scope: SCOPE });
 
       await screen.findByText("PR/26-27/001");
-      await userEvent.selectOptions(
-        screen.getByLabelText("Site"),
-        "22222222-2222-2222-2222-222222222222",
-      );
+      expect(screen.queryByLabelText("Site")).not.toBeInTheDocument();
+    });
 
-      await waitFor(() => {
-        expect(lastListUrl().searchParams.get("siteId")).toBe(
-          "22222222-2222-2222-2222-222222222222",
-        );
+    it("filters by the site the shell is scoped to", async () => {
+      routes([row()]);
+      renderWithAuth(<PurchaseRequestsPage />, {
+        permissions: ALL_RIGHTS,
+        scope: { ...SCOPE, siteId: SITE, siteName: "Akwada Lake Front" },
       });
+
+      await screen.findByText("PR/26-27/001");
+      expect(lastListUrl().searchParams.get("siteId")).toBe(SITE);
+    });
+
+    it("sends no siteId when the scope is every site", async () => {
+      routes([row()]);
+      renderWithAuth(<PurchaseRequestsPage />, { permissions: ALL_RIGHTS, scope: SCOPE });
+
+      await screen.findByText("PR/26-27/001");
+      expect(lastListUrl().searchParams.has("siteId")).toBe(false);
+    });
+
+    /**
+     * An assigned user's default scope is their FIRST SITE, not everything — so a
+     * request sent before the scope resolves returns another site's rows and is
+     * then replaced. That reads as a bug in the data rather than a loading state.
+     */
+    it("asks for nothing until the scope has resolved", async () => {
+      routes([row()]);
+      renderWithAuth(<PurchaseRequestsPage />, {
+        permissions: ALL_RIGHTS,
+        scope: { ...SCOPE, isReady: false },
+      });
+
+      await screen.findByRole("button", { name: /new request/i });
+      expect(listCalls()).toHaveLength(0);
+      // And it must not claim there is nothing to show while it is still waiting.
+      expect(screen.queryByText(/no purchase requests/i)).not.toBeInTheDocument();
+    });
+
+    it("names the scoped site in its empty state, so an empty grid explains itself", async () => {
+      routes([]);
+      renderWithAuth(<PurchaseRequestsPage />, {
+        permissions: ALL_RIGHTS,
+        scope: { ...SCOPE, siteId: SITE, siteName: "Akwada Lake Front" },
+      });
+
+      expect(
+        await screen.findByText(/No purchase requests for Akwada Lake Front/i),
+      ).toBeInTheDocument();
     });
   });
 
@@ -230,7 +263,6 @@ describe("PurchaseRequestsPage", () => {
     routeFetch([
       [/\/purchase-requests\/.+$/, noContent()],
       [/\/purchase-requests$/, list([row()])],
-      [/\/sites$/, SITES],
       [/\/units$/, list([])],
       [/\/items$/, list([])],
     ]);
