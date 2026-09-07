@@ -51,7 +51,8 @@ Site · Supplier · Invoice NO · **Document — "Choose Files", multiple** · S
 
 1. **File upload, and it is the reason this module is Phase 3.** Multiple files
    per challan. Assessment 12 puts these in object storage rather than on the web
-   server's disk, which is where they live today.
+   server's disk, which is where they live today. _(Done — local disk behind a
+   swappable interface; see below.)_
 2. **A footer aggregate** on the grid.
 3. **Explicit search** (two fields plus a Search By selector and a Reset), not
    the single as-you-type box every other screen uses.
@@ -63,7 +64,7 @@ Site · Supplier · Invoice NO · **Document — "Choose Files", multiple** · S
 
 ---
 
-## PORTED — 7 Sep 2026, except the upload
+## PORTED — 7 Sep 2026, upload included
 
 Live at `/inward`. Schema `inward_challans` + `inward_challan_documents`,
 migration `0006`, module `apps/api/src/modules/inward-challans/`, screen
@@ -74,9 +75,45 @@ filtered set and present when the set is empty — the source loses it exactly
 then), the explicit Supplier / Item / date-range / status filters with Search and
 Reset, and attachments listed and counted.
 
-**NOT done: attaching a file.** Names are carried; bytes are not. It needs a
-storage decision, a multipart dependency and a deploy change. See
-SESSION-HANDOFF §5j.
+**Upload shipped 7 Sep 2026.** `POST/GET/DELETE /inward-challans/:id/documents`,
+migration `0007`. See SESSION-HANDOFF §5j and §5l.
+
+### The storage decision, made and stated
+
+**Local disk behind a `DocumentStorage` interface.** Assessment 12 wants object
+storage; the business runs a disk today. This ships the disk because it needs no
+new infrastructure, no credentials and no bucket policy to review — but behind
+the interface, so S3 is one new class and one line in `storage.module.ts`, with
+no caller touched. `STORAGE_DIR` on the VPS is `/opt/accountbook-next/uploads`:
+outside the web root, and outside `releases/`, which the deploy prunes to the
+last five.
+
+### What that closes
+
+The legacy single-file path is four lines and contains every mistake available:
+
+```csharp
+var path = Environment.WebRootPath;
+var filepath = "Content/InWordDocument/" + ItemInWordDetails.DocumentName.FileName;
+var fullpath = Path.Combine(path, filepath);
+UploadFile(ItemInWordDetails.DocumentName, fullpath);
+```
+
+| Legacy | Here |
+|---|---|
+| Destination built from the browser's `FileName`, `..` and all — **H-10** | Key generated server-side; the name is a column, never a path |
+| `FileMode.Create` truncates, so two `invoice.pdf` overwrite each other | Written with `wx`; a collision is refused, and keys carry a UUID anyway |
+| Inside `wwwroot`, so anyone who guesses a name downloads it — **H-9** | Outside anything nginx serves; every byte goes through a token and `inward-challan.view` |
+| No extension, size or type check | Allowlist + 10 MB + content sniffing; `.html` and `.svg` are excluded deliberately |
+| Served as whatever the web server decides | `attachment` + `nosniff` + a type read from the file's own signature |
+
+The multi-file paths do prefix a GUID, so they avoid the overwrite. The
+single-file path does not, and **both are live**.
+
+Verified by running it, not by reading it: an `.html` renamed `.pdf` is refused
+by its contents, an executable called `.png` is refused, and a file named
+`../../../../etc/passwd.pdf` is stored as `passwd.pdf` under the challan's own
+prefix with nothing written outside the root.
 
 Five defects found in `ItemInwardRepo.cs` that the capture could not show — two
 create paths and two update paths, one of each silently dropping the supplier and

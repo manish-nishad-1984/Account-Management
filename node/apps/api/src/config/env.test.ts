@@ -16,6 +16,7 @@ function prod(overrides: Record<string, string | undefined> = {}) {
     DATABASE_URL: "postgres://u:p@127.0.0.1:5432/db",
     JWT_PRIVATE_KEY: PRIVATE_PEM,
     JWT_PUBLIC_KEY: PUBLIC_PEM,
+    STORAGE_DIR: "/opt/accountbook-next/uploads",
     ...overrides,
   } as NodeJS.ProcessEnv;
 }
@@ -39,6 +40,20 @@ describe("loadEnv", () => {
 
   it("refuses production without a key pair", () => {
     expect(() => loadEnv(prod({ JWT_PRIVATE_KEY: undefined }))).toThrow(/JWT_PRIVATE_KEY/);
+  });
+
+  /**
+   * Without it, uploads land in a default path relative to the working
+   * directory — which on the VPS is inside the release the deploy prunes to the
+   * last five. The files would be deleted by a later deploy, silently, and only
+   * discovered when someone asked for one.
+   */
+  it("refuses production without STORAGE_DIR, which would lose uploads on the fifth deploy", () => {
+    expect(() => loadEnv(prod({ STORAGE_DIR: undefined }))).toThrow(/STORAGE_DIR is required/);
+  });
+
+  it("needs no STORAGE_DIR outside production", () => {
+    expect(loadEnv({ NODE_ENV: "development" } as NodeJS.ProcessEnv).STORAGE_DIR).toBeUndefined();
   });
 
   describe("PEM keys in an environment variable", () => {

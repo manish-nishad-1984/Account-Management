@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { rowCapabilitiesSchema } from "./pagination";
-import { optionalDate, optionalText, quantity, uuidId } from "./fields";
+import { optionalDate, optionalText, optionalUuidId, quantity, uuidId } from "./fields";
 
 /**
  * Purchase requests — `PurchaseRequest` in SQL Server.
@@ -71,7 +71,10 @@ export type PurchaseRequestDetail = z.infer<typeof purchaseRequestDetailSchema>;
 export const createPurchaseRequestSchema = z
   .object({
     siteId: uuidId,
-    itemId: uuidId.nullable().optional().transform((value) => value ?? null),
+    // Same as the challan supplier: an unselected select submits "", which the
+    // plain nullable form rejects as "Not a valid identifier". A free-text item
+    // with no master row is the whole point of this field being nullable.
+    itemId: optionalUuidId,
     itemName: optionalText(200),
     itemDescription: optionalText(500),
     unitId: z.coerce.number().int().positive("Choose a unit"),

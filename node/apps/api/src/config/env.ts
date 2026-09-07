@@ -79,6 +79,24 @@ const envSchema = z.object({
   SEED_SNAPSHOT: optionalString,
 
   /**
+   * Where uploaded documents are written — the root of the `DocumentStorage`
+   * driver. See `common/storage/document-storage.ts` for why it is behind an
+   * interface at all.
+   *
+   * It must be OUTSIDE anything the web server serves. The legacy application
+   * wrote uploads into `wwwroot/Content/InWordDocument/`, which nginx serves
+   * directly, so every attachment in the business is anonymously downloadable by
+   * anyone who can guess a file name (finding H-9).
+   *
+   * It must also be outside the release directory. Deploys symlink
+   * `current -> releases/<timestamp>/` and prune to the last five, so uploads
+   * written under a release are deleted by the fifth deploy after they were
+   * made — silently, and only discovered when someone asks for a file.
+   * `/opt/accountbook-next/uploads` is the intended value on the VPS.
+   */
+  STORAGE_DIR: optionalString,
+
+  /**
    * RS256 key pair in PEM form. Asymmetric so that verifiers never hold signing
    * material — the .NET app used a symmetric HS256 key that was committed to git
    * (`appsettings.json:19`), meaning anyone with repository access could mint
@@ -214,6 +232,18 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       "Invalid environment configuration:\n" +
         "  DATABASE_URL is required when NODE_ENV=production. Without it the API " +
         "would silently fall back to the in-memory repository and lose every write.",
+    );
+  }
+
+  if (env.NODE_ENV === "production" && !env.STORAGE_DIR) {
+    throw new Error(
+      "Invalid environment configuration:\n" +
+        "  STORAGE_DIR is required when NODE_ENV=production. Without it uploads would\n" +
+        "  land in a default path relative to the working directory, which on the VPS\n" +
+        "  is inside the release the deploy prunes — the files would be deleted by a\n" +
+        "  later deploy and nothing would report it.\n" +
+        "  Use a directory outside the releases and outside the web root, e.g.\n" +
+        "  STORAGE_DIR=/opt/accountbook-next/uploads",
     );
   }
 

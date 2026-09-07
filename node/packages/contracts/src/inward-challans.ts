@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { listResponseSchema, rowCapabilitiesSchema, type ListResponse } from "./pagination";
-import { optionalDate, optionalText, quantity, uuidId } from "./fields";
+import { optionalDate, optionalText, optionalUuidId, quantity, uuidId } from "./fields";
+import { attachmentSchema, type Attachment } from "./attachments";
 
 /**
  * Inward challans — `ItemInword` in SQL Server, `/ItemInWord/ItemInWord`.
@@ -13,17 +14,17 @@ import { optionalDate, optionalText, quantity, uuidId } from "./fields";
  * Everything here says `inward`; the ETL maps at the boundary.
  */
 
-export const inwardChallanDocumentSchema = z.object({
-  id: z.string(),
-  documentName: z.string(),
-  /**
-   * Null on every row carried from the source, which records a name and no
-   * location — the files sit on the old web server's disk. Non-null once a file
-   * is stored somewhere this application can reach.
-   */
-  storageKey: z.string().nullable(),
-});
-export type InwardChallanDocument = z.infer<typeof inwardChallanDocumentSchema>;
+/**
+ * An attachment on a challan, in the shape every module with files now uses.
+ *
+ * `storageKey` used to be on this schema and is gone: it is a server-side
+ * location and the browser never needed it. What it needed was `isDownloadable`,
+ * which is what "there are bytes to fetch" actually means — the ETL brings over
+ * rows recording a file NAME and nothing else, because the source's own table
+ * records nothing else.
+ */
+export const inwardChallanDocumentSchema = attachmentSchema;
+export type InwardChallanDocument = Attachment;
 
 export const inwardChallanRowSchema = z.object({
   id: z.string(),
@@ -89,10 +90,13 @@ export type InwardChallanDetail = z.infer<typeof inwardChallanDetailSchema>;
 export const createInwardChallanSchema = z.object({
   siteId: uuidId,
   itemId: uuidId,
-  supplierId: uuidId
-    .nullable()
-    .optional()
-    .transform((value) => value ?? null),
+  /**
+   * `optionalUuidId`, not `uuidId.nullable().optional()`. An unselected select
+   * submits "", which the latter rejects as "Not a valid identifier" — and a
+   * challan with no supplier is the COMMON case here, because the source's live
+   * create path never records one.
+   */
+  supplierId: optionalUuidId,
   unitId: z.coerce.number().int().positive("Choose a unit"),
   quantity: quantity("Quantity"),
   invoiceNo: optionalText(100),

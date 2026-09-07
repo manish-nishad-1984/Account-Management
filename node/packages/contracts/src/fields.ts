@@ -189,6 +189,24 @@ export const optionalPercent = (label: string) =>
 export const uuidId = z.string().uuid("Not a valid identifier");
 
 /**
+ * An OPTIONAL reference, from a select with a blank option.
+ *
+ * An unselected `<select>` submits the empty string, not undefined and not null.
+ * `uuidId.nullable().optional()` therefore rejects it with "Not a valid
+ * identifier" — which surfaced as an inward challan with no supplier being
+ * impossible to save, on a screen where NO SUPPLIER IS THE COMMON CASE: the
+ * source's live create path (`AddItemInWordDetails`) never writes one at all.
+ *
+ * The empty string is mapped to null BEFORE the uuid check, so "nothing chosen"
+ * and "chosen and invalid" stay different answers. Use this for every nullable
+ * id that a form control can leave blank.
+ */
+export const optionalUuidId = z.preprocess(
+  (value) => (value === "" || value === undefined ? null : value),
+  uuidId.nullable(),
+);
+
+/**
  * A geography reference — city, state or country.
  *
  * Stays a bare integer with no foreign key, matching the schema. The lookup

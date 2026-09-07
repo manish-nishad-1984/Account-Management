@@ -903,6 +903,141 @@ Tests: 480 Node (41 domain + 279 API + 160 web) + 19 .NET, up 29.
 
 ---
 
+## 5l. File upload for challans — the storage decision, made (7 Sep 2026)
+
+Committed as `<COMMIT>`. Phase 3 is now complete.
+
+### The decision
+
+**Local disk, behind a `DocumentStorage` interface.**
+
+Assessment 12 wants object storage. The business runs a disk today. This ships
+the disk — no new infrastructure, no credentials, no bucket policy to review —
+but behind an interface, so S3 is one new class with four methods and one line in
+`common/storage/storage.module.ts`. No repository, controller or test changes.
+
+`STORAGE_DIR` is `/opt/accountbook-next/uploads` on the VPS, and the API
+**refuses to boot in production without it**. Two reasons, both learned from the
+deploy layout:
+
+- It must be outside anything nginx serves. The legacy application writes into
+  `wwwroot/Content/InWordDocument/`, which the web server hands to anyone who
+  guesses a name.
+- It must be outside `releases/`. `current` is a symlink into
+  `releases/<timestamp>/` and the deploy prunes to the last five, so uploads
+  written under a release are deleted by the fifth deploy after they were made —
+  silently, and only noticed when someone asks for a file.
+
+`StorageModule` creates the directory and write-tests it at boot, so a
+permissions problem fails the deploy rather than someone's first upload.
+
+### What it closes — findings H-9 and H-10
+
+The legacy single-file handler is four lines and contains every mistake
+available (`ItemInWordController.cs:190-193`):
+
+```csharp
+var path = Environment.WebRootPath;
+var filepath = "Content/InWordDocument/" + ItemInWordDetails.DocumentName.FileName;
+var fullpath = Path.Combine(path, filepath);
+UploadFile(ItemInWordDetails.DocumentName, fullpath);
+```
+
+1. `IFormFile.FileName` is the browser's, unsanitised — separators and `..`
+   included — so the destination is caller-controlled. That is an arbitrary file
+   **write**, not just a read. **H-10.**
+2. `FileMode.Create` truncates. Two suppliers uploading `invoice.pdf` overwrite
+   one another and the earlier challan then shows the later one's document.
+   `InsertMultipleItemInWordDetail` prefixes a GUID and avoids this;
+   `AddItemInWordDetails` does not; **both are live**.
+3. Inside `wwwroot`, so every attachment is anonymously downloadable. **H-9.**
+4. No extension, size or type check, so an `.html` upload is stored XSS on the
+   application's own origin.
+
+Here:
+
+| Legacy | Port |
+|---|---|
+| Path built from the uploaded name | Key generated (`newStorageKey`); the name is a column, never a path |
+| `FileMode.Create` truncates | Written with `wx`; a collision is refused |
+| Served from the web root | Outside it; every byte through a token and `inward-challan.view` |
+| No checks | Allowlist + 10 MB + signature sniffing |
+| Whatever type the server guesses | `attachment` + `nosniff` + the type read from the bytes |
+
+`.html`, `.svg` and `.xml` are off the allowlist deliberately. All three script
+in a browser, and `.svg` is the one that looks like an image and is not.
+
+### The three decisions inside it worth knowing
+
+**Validate everything, then write everything, then record everything.**
+Validating as we go would leave three of five files stored and the request
+rejected — the user retries and collects duplicates. If a write fails part way,
+what was already written is removed: a blob with no row is invisible, and
+invisible waste is never reclaimed.
+
+**Delete the row first, then the bytes.** The other order risks a row pointing at
+bytes that are gone, which is a broken download for as long as the row lives.
+This way a failed blob delete leaves a stray file and nothing else, and it is
+logged rather than reported as a failed delete — the user asked for the
+attachment to be gone and, from where they sit, it is.
+
+**A download is a `fetch`, not a link.** The access token is held in memory and
+never in a cookie, so a browser-initiated navigation carries no credentials and
+would 401. The bytes come back through `fetch` and reach the disk as an object
+URL, revoked on the next tick. That is a direct consequence of the token
+decision, and it is the right way round: the alternative is a cookie the browser
+attaches to every request, which is what makes CSRF possible.
+
+### A bug this found in an already-shipped screen
+
+**An inward challan with no supplier could not be saved at all.**
+
+`supplierId: uuidId.nullable().optional()` — an unselected `<select>` submits the
+empty string, which fails `.uuid()` with "Not a valid identifier". And no
+supplier is the COMMON case here: the source's live create path
+(`AddItemInWordDetails`) never records one. The purchase request form had the
+same defect on its optional item, which is the whole reason that field is
+nullable.
+
+Both now use `optionalUuidId` in `contracts/fields.ts`, which maps `""` to null
+BEFORE the uuid check — so "nothing chosen" and "chosen and invalid" stay
+different answers. Regression tests in `contracts/attachments.test.ts`.
+
+It was found by a test, not by reading: the form simply never posted, and the
+message was attached to a field nobody looked at.
+
+### Verified by running it
+
+Against the local API, not inferred:
+
+| | |
+|---|---|
+| upload a real PDF | 200, `contentType: application/pdf`, `sizeBytes: 48` |
+| download it | bytes **identical**, `attachment`, `nosniff`, `private, no-store` |
+| without a token | 401 |
+| `.html` | 400 — "`.html` files cannot be attached. Allowed: …" |
+| the same file renamed `.pdf` | 400 — "is not a PDF. Its name says one thing and its contents say another." |
+| an executable named `.png` | 400 — "is a program, whatever it is named." |
+| `../../../../etc/passwd.pdf` | **200** — stored as `passwd.pdf` under the challan's own prefix, nothing written outside the root |
+| 11 MB | 413, naming the 10.0 MB limit |
+| the same document id via another challan | 404 (not 403 — a 403 confirms the id exists) |
+| an ETL row with no bytes | 404 saying the old system kept the file on its own web server |
+| delete, then delete again | 204, then 404; the file is gone from disk |
+
+### The deploy needs one thing that is not in this repo
+
+**`client_max_body_size` must be at least `12m` on the `/api/` location in
+nginx.** The default is 1m and nginx rejects a larger body itself, with its own
+413 HTML, before the request reaches the API. The symptom is an attachment well
+under the app's 10 MB limit failing with an error the application never wrote and
+nothing in its log. Recorded in the deploy skill; `write-env.mjs` now emits
+`STORAGE_DIR`.
+
+Tests: **617 Node** (25 contracts + 41 domain + 374 API + 177 web) + 19 .NET,
+up 137.
+
+---
+
 ## 6. The Companies / Sites / Site Groups session (committed as `566b28ab`)
 
 **Companies, Sites and Site Groups master screens**, end to end:

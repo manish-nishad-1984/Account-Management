@@ -44,6 +44,26 @@ Every edit to `avfast.conf` is backed up first to `/root/avfast.conf.bak.<stamp>
 and `nginx -t` must pass before `reload`. If it fails, restore the backup — never
 leave that file invalid, it is the live business's front door.
 
+**`client_max_body_size` must be at least `12m` on the `/api/` location.** nginx
+defaults to **1m**, and it rejects a larger body itself, with its own 413 HTML —
+before the request ever reaches the API. The symptom is an attachment under the
+app's own 10 MB limit failing with an error the application never wrote and
+nothing in its log. 12m leaves room for the multipart framing around a 10 MB
+file.
+
+```nginx
+location /api/ {
+    client_max_body_size 12m;
+    proxy_pass http://127.0.0.1:3101;
+}
+```
+
+Check it before believing an upload bug is in the API:
+
+```bash
+grep -n client_max_body_size /etc/nginx/sites-enabled/avfast.conf
+```
+
 Port **8090** still serves the same app on its own vhost
 (`accountbook-next.conf`), which is useful for checking a release without going
 through the domain.
@@ -59,9 +79,22 @@ Set up once and reused by every deploy — do NOT recreate these:
 │                            Regenerating signs every user out.
 ├── keys/public.pem
 ├── write-env.mjs            writes a release's .env (repo: node/tools/deploy/)
+├── uploads/                 attached documents. OUTSIDE releases/ on purpose.
 ├── releases/<timestamp>/     api/ web/ packages/ — last 5 kept
 └── current -> releases/…     atomic switch; rollback is one ln
 ```
+
+**`uploads/` must never move inside a release.** `current` is a symlink into
+`releases/<timestamp>/` and the deploy prunes to the last five, so files written
+under a release are deleted by the fifth deploy after they were made — silently,
+and only discovered when someone asks for one. It is also outside everything
+nginx serves, which is the point: the legacy app kept uploads in `wwwroot/`,
+where the web server hands them to anyone who guesses a name (finding H-9).
+
+`write-env.mjs` sets `STORAGE_DIR=/opt/accountbook-next/uploads`, and the API
+**refuses to boot in production without it** rather than defaulting to a path
+inside the release. It creates the directory and write-tests it at startup, so a
+permissions problem fails the deploy instead of the first upload of the day.
 
 - systemd unit `accountbook-next.service`, logs to `/var/log/accountbook-next.log`
 - PostgreSQL 16 on 127.0.0.1:5432, role `accountbook`, database `accountbook_next`
@@ -219,6 +252,17 @@ find /opt/accountbook-next/releases -type f -exec chmod 644 {} \;
 chmod 700 /opt/accountbook-next/keys
 chmod 600 /opt/accountbook-next/keys/private.pem /opt/accountbook-next/.dbpass
 chmod 600 /opt/accountbook-next/current/api/.env
+# Uploads: the service writes them, and NOBODY else reads them — not even
+# www-data. Every download goes through the API, which checks the token and the
+# permission first.
+chmod 700 /opt/accountbook-next/uploads
+```
+
+Confirm nginx cannot read an attachment directly. If this ever passes, the
+uploads are back where the legacy ones were:
+
+```bash
+sudo -u www-data ls /opt/accountbook-next/uploads   # must FAIL
 ```
 
 `/opt/accountbook-next` must be **755**, not 700 — at 700 nginx cannot traverse

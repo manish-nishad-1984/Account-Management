@@ -5,6 +5,7 @@ import { AuthGuard } from "./common/auth/auth.guard";
 import { PermissionsGuard } from "./common/auth/permissions.guard";
 import { ConfigModule } from "./config/config.module";
 import { DatabaseModule } from "./db/database.module";
+import { StorageModule } from "./common/storage/storage.module";
 import { loadEnv } from "./config/env";
 import { AuthModule } from "./modules/auth/auth.module";
 import { HealthModule } from "./modules/health/health.module";
@@ -24,6 +25,9 @@ const env = loadEnv();
   imports: [
     ConfigModule,
     DatabaseModule,
+    // Global, like ConfigModule: a feature module injects DOCUMENT_STORAGE
+    // without importing anything.
+    StorageModule,
     LoggerModule.forRoot({
       pinoHttp: {
         level: env.LOG_LEVEL,

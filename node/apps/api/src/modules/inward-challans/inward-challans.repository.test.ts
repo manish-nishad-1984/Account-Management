@@ -321,16 +321,44 @@ describe("InwardChallansRepository (real PostgreSQL)", () => {
   });
 
   describe("the detail", () => {
-    it("carries the attachment names", async () => {
+    it("carries an ETL attachment as a name with nothing to download", async () => {
       const created = await repo.create(input(), ACTOR);
+      // Exactly what the ETL produces: the source records a file NAME and no
+      // location, because its own table records nothing else.
       await db
         .insert(schema.inwardChallanDocuments)
         .values({ challanId: created.id, documentName: "weighbridge.jpg" });
 
       const detail = await repo.findById(created.id);
       expect(detail.documents.map((d) => d.documentName)).toEqual(["weighbridge.jpg"]);
-      // No bytes yet — the source records a name and no location either.
-      expect(detail.documents[0]!.storageKey).toBeNull();
+      expect(detail.documents[0]!.isDownloadable).toBe(false);
+      expect(detail.documents[0]!.contentType).toBeNull();
+      expect(detail.documents[0]!.sizeBytes).toBeNull();
+    });
+
+    it("never puts a storage key on the wire", async () => {
+      const created = await repo.create(input(), ACTOR);
+      await repo.addDocument(
+        created.id,
+        {
+          documentName: "challan.pdf",
+          storageKey: "inward-challans/x/secret-location.pdf",
+          contentType: "application/pdf",
+          sizeBytes: 1234,
+        },
+        ACTOR,
+      );
+
+      const detail = await repo.findById(created.id);
+      // The location is a server-side detail. Publishing it tells a client where
+      // the file lives and invites it to build its own URL from it.
+      expect(JSON.stringify(detail)).not.toContain("secret-location");
+      expect(detail.documents[0]).toMatchObject({
+        documentName: "challan.pdf",
+        contentType: "application/pdf",
+        sizeBytes: 1234,
+        isDownloadable: true,
+      });
     });
 
     it("updates every field it is given, unlike the source's single-row update", async () => {

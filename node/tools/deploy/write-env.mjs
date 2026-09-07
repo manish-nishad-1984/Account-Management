@@ -30,6 +30,20 @@ const lines = [
   `DATABASE_URL=postgres://accountbook:${dbpass}@127.0.0.1:5432/accountbook_next`,
   `JWT_PRIVATE_KEY_FILE=${join(ROOT, "keys", "private.pem")}`,
   `JWT_PUBLIC_KEY_FILE=${join(ROOT, "keys", "public.pem")}`,
+  /**
+   * Uploaded documents. UNDER ROOT, NOT UNDER THE RELEASE.
+   *
+   * `current` is a symlink into `releases/<timestamp>/` and the deploy prunes
+   * to the last five, so anything written inside a release is deleted by the
+   * fifth deploy after it was made — silently, and only noticed when someone
+   * asks for a file. It is also outside the directory nginx serves, which is
+   * the whole point: the legacy application kept uploads in `wwwroot/`, where
+   * the web server hands them to anyone who guesses a name (finding H-9).
+   *
+   * The API refuses to boot in production without this, and creates and
+   * write-tests the directory at startup.
+   */
+  `STORAGE_DIR=${join(ROOT, "uploads")}`,
 ];
 
 const target = join(release, "api", ".env");

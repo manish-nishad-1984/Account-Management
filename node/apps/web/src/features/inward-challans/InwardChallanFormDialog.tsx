@@ -3,13 +3,18 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
 import { createInwardChallanSchema, type InwardChallanDetail } from "@accountmanagement/contracts";
-import { Paperclip } from "lucide-react";
 import { Alert, FormDialog, FormSection, SelectField, TextField } from "../../components/ui";
+import {
+  ChallanAttachments,
+  QueuedAttachments,
+  UploadingNotice,
+} from "./ChallanAttachments";
 import { applyServerErrors, unshownValidationMessage } from "../../lib/crud";
 import { text } from "../../lib/form-values";
 import { useAllUnits } from "../items/api";
 import { useItemOptions } from "../purchase-requests/api";
 import {
+  useAttachChallanDocuments,
   useCreateInwardChallan,
   useInwardChallan,
   useSupplierOptions,
@@ -45,7 +50,13 @@ export function InwardChallanFormDialog({
   const suppliers = useSupplierOptions();
   const create = useCreateInwardChallan();
   const update = useUpdateInwardChallan();
+  const attach = useAttachChallanDocuments();
   const [formError, setFormError] = useState<string | null>(null);
+  /**
+   * Files chosen on a NEW challan, held until there is an id to hang them off.
+   * A challan must exist before anything can reference it.
+   */
+  const [queued, setQueued] = useState<File[]>([]);
 
   const {
     register,
@@ -61,6 +72,7 @@ export function InwardChallanFormDialog({
   useEffect(() => {
     if (!open) return;
     setFormError(null);
+    setQueued([]);
     if (!isEdit) {
       reset({ ...EMPTY, siteId: scope.siteId ?? "" });
     } else if (detail.data) {
@@ -68,7 +80,7 @@ export function InwardChallanFormDialog({
     }
   }, [open, isEdit, detail.data, reset, scope.siteId]);
 
-  const pending = create.isPending || update.isPending;
+  const pending = create.isPending || update.isPending || attach.isPending;
 
   const onSubmit = handleSubmit(
     async (values) => {
@@ -76,9 +88,34 @@ export function InwardChallanFormDialog({
       try {
         if (isEdit) {
           await update.mutateAsync({ id: challanId, body: values });
-        } else {
-          await create.mutateAsync(values);
+          onClose();
+          return;
         }
+
+        const created = await create.mutateAsync(values);
+
+        /**
+         * TWO STEPS, AND THE SECOND CAN FAIL ON ITS OWN.
+         *
+         * The challan is saved first because the files need its id. If the
+         * upload then fails, the challan EXISTS — so the dialog stays open,
+         * says exactly that, and keeps the queue so the user can retry the
+         * files rather than re-keying the challan. Closing here and reporting
+         * a generic failure would leave them to guess whether anything saved.
+         */
+        if (queued.length > 0) {
+          try {
+            await attach.mutateAsync({ id: created.id, files: queued });
+          } catch (uploadError) {
+            setFormError(
+              `The challan was saved, but the files were not attached: ${
+                uploadError instanceof Error ? uploadError.message : "upload failed"
+              } You can attach them by editing the challan.`,
+            );
+            return;
+          }
+        }
+
         onClose();
       } catch (error) {
         setFormError(applyServerErrors(error, setError));
@@ -187,32 +224,20 @@ export function InwardChallanFormDialog({
             />
           </FormSection>
 
-          {/* Attachments are READ ONLY for now — see the note at the foot of the
-              controller. Listing them is honest; a disabled file input would not
-              be. */}
-          {isEdit && (detail.data?.documents.length ?? 0) > 0 && (
-            <FormSection title="Attachments">
-              <ul className="space-y-1 text-sm text-slate-600">
-                {detail.data!.documents.map((doc) => (
-                  <li key={doc.id} className="flex items-center gap-2">
-                    <Paperclip aria-hidden className="size-3.5 text-slate-400" />
-                    <span>{doc.documentName}</span>
-                    {doc.storageKey === null && (
-                      <span className="text-xs text-slate-400">(on the old server)</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </FormSection>
-          )}
+          <FormSection title="Attachments">
+            {isEdit ? (
+              <ChallanAttachments
+                challanId={challanId}
+                documents={detail.data?.documents ?? []}
+              />
+            ) : attach.isPending ? (
+              <UploadingNotice count={queued.length} />
+            ) : (
+              <QueuedAttachments files={queued} onChange={setQueued} />
+            )}
+          </FormSection>
 
-          {!isEdit && (
-            <Alert tone="info">
-              A new challan is recorded unapproved. Attaching files is not available yet —
-              the old system keeps them on its own web server, and where they go next is
-              still to be decided.
-            </Alert>
-          )}
+          {!isEdit && <Alert tone="info">A new challan is recorded unapproved.</Alert>}
         </>
       )}
     </FormDialog>

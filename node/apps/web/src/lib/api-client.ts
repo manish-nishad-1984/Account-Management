@@ -34,7 +34,6 @@ interface RequestOptions<T> {
   signal?: AbortSignal;
 }
 
-/** The one place a failed response becomes an ApiError, shared by both helpers. */
 async function send(
   path: string,
   init: { method: string; body?: unknown; signal?: AbortSignal },
@@ -51,15 +50,20 @@ async function send(
   });
 
   if (!response.ok) {
-    const problem = await response.json().catch(() => ({}) as Record<string, unknown>);
-    throw new ApiError(
-      response.status,
-      typeof problem.message === "string" ? problem.message : response.statusText,
-      Array.isArray(problem.issues) ? problem.issues : undefined,
-    );
+    throw await problemFrom(response);
   }
 
   return response;
+}
+
+/** The one place a failed response becomes an ApiError, shared by all four helpers. */
+async function problemFrom(response: Response): Promise<ApiError> {
+  const problem = await response.json().catch(() => ({}) as Record<string, unknown>);
+  return new ApiError(
+    response.status,
+    typeof problem.message === "string" ? problem.message : response.statusText,
+    Array.isArray(problem.issues) ? problem.issues : undefined,
+  );
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions<T>): Promise<T> {
@@ -74,6 +78,67 @@ export async function apiRequest<T>(path: string, options: RequestOptions<T>): P
   }
 
   return options.schema.parse(await response.json());
+}
+
+/**
+ * A multipart upload.
+ *
+ * Separate from `send` because the Content-Type MUST NOT be set here: the
+ * browser writes it itself, including the boundary parameter it generated, and
+ * a hand-set `multipart/form-data` carries no boundary — the server then cannot
+ * tell where one part ends and the next begins, and rejects the whole request.
+ * That is the most common way an upload fails for reasons that look like a
+ * server bug.
+ */
+export async function uploadRequest<T>(
+  path: string,
+  files: File[],
+  options: { schema: z.ZodType<T>; signal?: AbortSignal },
+): Promise<T> {
+  const form = new FormData();
+  for (const file of files) {
+    form.append("files", file);
+  }
+
+  const token = accessTokenProvider();
+  const response = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+    signal: options.signal,
+  });
+
+  if (!response.ok) {
+    throw await problemFrom(response);
+  }
+
+  return options.schema.parse(await response.json());
+}
+
+/**
+ * Fetches the bytes of a file.
+ *
+ * A plain anchor cannot be used for a download here. The access token is held in
+ * memory and never in a cookie, so a browser-initiated navigation carries no
+ * credentials at all and the server answers 401. The bytes have to come back
+ * through `fetch`, with the header attached, and reach the disk as an object
+ * URL.
+ *
+ * That is a direct consequence of the token decision, and it is the right way
+ * round: the alternative is a cookie the browser attaches to every request,
+ * which is what makes CSRF possible.
+ */
+export async function downloadRequest(path: string): Promise<Blob> {
+  const token = accessTokenProvider();
+  const response = await fetch(`${BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (!response.ok) {
+    throw await problemFrom(response);
+  }
+
+  return response.blob();
 }
 
 /**

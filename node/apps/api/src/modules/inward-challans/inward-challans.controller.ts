@@ -9,7 +9,10 @@ import {
   Patch,
   Post,
   Query,
+  Req,
+  Res,
 } from "@nestjs/common";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
   createInwardChallanSchema,
@@ -24,6 +27,9 @@ import {
   type UpdateInwardChallan,
 } from "@accountmanagement/contracts";
 import { InwardChallansRepository } from "./inward-challans.repository";
+import { InwardChallanDocumentsService } from "./inward-challan-documents.service";
+import { readUploads } from "../../common/storage/multipart";
+import { contentDisposition } from "../../common/storage/content-disposition";
 import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
@@ -53,7 +59,10 @@ const listRequestSchema = listQuerySchema.and(filterSchema);
 
 @Controller("inward-challans")
 export class InwardChallansController {
-  constructor(private readonly challans: InwardChallansRepository) {}
+  constructor(
+    private readonly challans: InwardChallansRepository,
+    private readonly documents: InwardChallanDocumentsService,
+  ) {}
 
   @Get()
   @Permissions("inward-challan.view")
@@ -142,17 +151,76 @@ export class InwardChallansController {
     return this.challans.remove(id, actorId(caller));
   }
 
-  /*
-   * THERE IS NO UPLOAD ENDPOINT YET, and that is the one thing this module does
-   * not finish.
+  /**
+   * Attach one or more files. `multipart/form-data`, field name `files`.
    *
-   * `inward_challan_documents` records file NAMES, which is all the source's own
-   * table records — the bytes live on the old web server's disk. Accepting a file
-   * here needs three things that are not a code decision: somewhere to put it
-   * (assessment 12 says object storage; the alternative is the VPS disk, which is
-   * what happens today), a multipart dependency the API does not carry, and a
-   * deploy change for the body-size limit and the writable path.
+   * Requires `edit`, not `add`: attaching changes an existing challan, and
+   * anyone who may not change a challan may not change what is attached to it.
    *
-   * Existing attachments are listed and counted. Adding one is the next change.
+   * Returns the whole challan rather than the new documents alone, so a client
+   * refreshes one thing and cannot end up displaying a stale attachment list
+   * beside a fresh challan.
    */
+  @Post(":id/documents")
+  @Permissions("inward-challan.edit")
+  async attach(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Req() request: FastifyRequest,
+    @CurrentUser() caller: AccessTokenClaims | undefined,
+  ): Promise<InwardChallanDetail> {
+    const uploads = await readUploads(request);
+    await this.documents.attach(id, uploads, actorId(caller));
+    return this.challans.findById(id);
+  }
+
+  /**
+   * Download one attachment.
+   *
+   * THIS ENDPOINT IS THE FIX FOR FINDING H-9. The legacy application wrote every
+   * upload into `wwwroot/Content/InWordDocument/` and let the web server hand it
+   * out: no login, no permission, no site scope — a URL and a guessable file name
+   * were the whole of the access control. Here the bytes live outside anything
+   * nginx serves and come back only through a request that carried a token and
+   * passed `inward-challan.view`.
+   *
+   * Three headers matter and all three are deliberate:
+   *
+   *   Content-Type          from the row, written from the file's SNIFFED
+   *                         signature at upload — never echoed from the client.
+   *   X-Content-Type-Options nosniff, so a browser cannot decide for itself that
+   *                         something is HTML and run it on this origin.
+   *   Content-Disposition   attachment, so nothing renders in a tab at all.
+   *
+   * Together they mean that even a file whose contents lie is inert.
+   */
+  @Get(":id/documents/:documentId")
+  @Permissions("inward-challan.view")
+  async download(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
+    const file = await this.documents.read(id, documentId);
+
+    await reply
+      .header("Content-Type", file.contentType)
+      .header("Content-Length", file.bytes.byteLength)
+      .header("Content-Disposition", contentDisposition(file.documentName))
+      .header("X-Content-Type-Options", "nosniff")
+      // An attachment is as private as the challan it hangs off. Nothing about
+      // it should sit in a shared cache.
+      .header("Cache-Control", "private, no-store")
+      .send(file.bytes);
+  }
+
+  /** Removes the row and the bytes. `edit`, for the same reason as attaching. */
+  @Delete(":id/documents/:documentId")
+  @Permissions("inward-challan.edit")
+  @HttpCode(204)
+  detach(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
+  ): Promise<void> {
+    return this.documents.detach(id, documentId);
+  }
 }

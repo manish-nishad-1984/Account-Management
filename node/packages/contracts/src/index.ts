@@ -2,6 +2,7 @@ export * from "./auth";
 export * from "./permissions";
 export * from "./pagination";
 export * from "./fields";
+export * from "./attachments";
 export * from "./users";
 export * from "./user-permissions";
 export * from "./companies";

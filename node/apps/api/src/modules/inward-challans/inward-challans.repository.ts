@@ -259,16 +259,37 @@ export class InwardChallansRepository extends BaseRepository {
     return { rows: row?.rows ?? 0, quantity: row?.quantity ?? "0" };
   }
 
-  private async documentsFor(challanId: string) {
-    return this.db
+  /**
+   * The attachments on a challan, oldest first.
+   *
+   * `storageKey` is read and NOT returned. It is a location in the storage
+   * driver, the browser has no use for it, and the only thing a client needs to
+   * know is whether there are bytes behind the name — which is what
+   * `isDownloadable` says. Every row the ETL carries has a name and no key,
+   * because the source's own table records nothing more.
+   */
+  private async documentsFor(challanId: string): Promise<InwardChallanDetail["documents"]> {
+    const rows = await this.db
       .select({
         id: inwardChallanDocuments.id,
         documentName: inwardChallanDocuments.documentName,
+        contentType: inwardChallanDocuments.contentType,
+        sizeBytes: inwardChallanDocuments.sizeBytes,
         storageKey: inwardChallanDocuments.storageKey,
+        createdAt: inwardChallanDocuments.createdAt,
       })
       .from(inwardChallanDocuments)
       .where(eq(inwardChallanDocuments.challanId, challanId))
       .orderBy(inwardChallanDocuments.createdAt);
+
+    return rows.map((row) => ({
+      id: row.id,
+      documentName: row.documentName,
+      contentType: row.contentType,
+      sizeBytes: row.sizeBytes,
+      isDownloadable: row.storageKey !== null,
+      uploadedAt: iso(row.createdAt) as string,
+    }));
   }
 
   async findById(id: string): Promise<InwardChallanDetail> {
@@ -369,6 +390,102 @@ export class InwardChallansRepository extends BaseRepository {
       throw new NotFoundException("Inward challan not found");
     }
     return toDetail(row, await this.documentsFor(id));
+  }
+
+  /**
+   * The challan exists and is not deleted — checked BEFORE any file is written.
+   *
+   * Uploading against a deleted or invented id would otherwise store bytes that
+   * nothing references, and an orphaned file is one nobody knows to remove.
+   */
+  async assertExists(id: string): Promise<void> {
+    const [row] = await this.db
+      .select({ id: inwardChallans.id })
+      .from(inwardChallans)
+      .where(and(eq(inwardChallans.id, id), eq(inwardChallans.isDeleted, false)))
+      .limit(1);
+
+    if (!row) {
+      throw new NotFoundException("Inward challan not found");
+    }
+  }
+
+  /** Records a stored file against a challan. The bytes are already written. */
+  async addDocument(
+    challanId: string,
+    document: {
+      documentName: string;
+      storageKey: string;
+      contentType: string;
+      sizeBytes: number;
+    },
+    actorId: string,
+  ): Promise<void> {
+    await writing(() =>
+      this.db.insert(inwardChallanDocuments).values({ challanId, ...document, uploadedBy: actorId }),
+    );
+  }
+
+  /**
+   * A document, looked up BY CHALLAN AND BY ID together.
+   *
+   * Both halves of the path are part of the query on purpose. Fetching by
+   * document id alone would let anyone holding one id read it through any
+   * challan they can see, which turns a per-challan permission into no
+   * permission at all — the classic IDOR. A mismatch is a 404, not a 403: a 403
+   * would confirm the id exists somewhere.
+   */
+  async findDocument(
+    challanId: string,
+    documentId: string,
+  ): Promise<{
+    id: string;
+    documentName: string;
+    contentType: string | null;
+    sizeBytes: number | null;
+    storageKey: string | null;
+  }> {
+    const [row] = await this.db
+      .select({
+        id: inwardChallanDocuments.id,
+        documentName: inwardChallanDocuments.documentName,
+        contentType: inwardChallanDocuments.contentType,
+        sizeBytes: inwardChallanDocuments.sizeBytes,
+        storageKey: inwardChallanDocuments.storageKey,
+      })
+      .from(inwardChallanDocuments)
+      .innerJoin(inwardChallans, eq(inwardChallanDocuments.challanId, inwardChallans.id))
+      .where(
+        and(
+          eq(inwardChallanDocuments.id, documentId),
+          eq(inwardChallanDocuments.challanId, challanId),
+          eq(inwardChallans.isDeleted, false),
+        ),
+      )
+      .limit(1);
+
+    if (!row) {
+      throw new NotFoundException("Attachment not found");
+    }
+    return row;
+  }
+
+  /**
+   * Removes the row and hands back the key, so the caller can remove the bytes.
+   *
+   * The row goes first. If the blob delete then fails, the result is an orphaned
+   * file — wasted space, and nothing more. The other order risks a row pointing
+   * at bytes that are gone, which is a broken download for as long as the row
+   * lives. Given a choice of which failure to keep, keep the cheap one.
+   */
+  async removeDocument(challanId: string, documentId: string): Promise<string | null> {
+    const document = await this.findDocument(challanId, documentId);
+
+    await this.db
+      .delete(inwardChallanDocuments)
+      .where(eq(inwardChallanDocuments.id, document.id));
+
+    return document.storageKey;
   }
 
   /** Soft delete, as the source does here — this is the module it gets right. */

@@ -290,11 +290,60 @@ Web tier's checks become **UI hints only**, and should be documented as such.
 | **H-6** | **Swagger enabled in production**, publishing the entire API surface | `Program.cs:168-169` — no environment guard | Gate behind `IsDevelopment()` or auth |
 | **H-7** | **No rate limiting anywhere**, including on login | — | .NET 8 has built-in rate limiting; in Node use `express-rate-limit` + a login-specific lockout |
 | **H-8** | **No CSRF protection.** No antiforgery tokens on POSTs, plus 3 GET endpoints that mutate | `SalesController.cs:90, 152, 170` | `SameSite=Strict` + double-submit token; never GET-to-mutate |
-| **H-9** | **Unrestricted file upload.** No extension, size, or content-type validation found; files are written into `wwwroot/` and **served directly from the web root** | 8 Web controllers | Validate type and size, store outside the web root, serve through a controlled endpoint, randomise names |
-| **H-10** | **Path traversal risk** in the inward document handler | `ItemInWordController.cs:181` | Canonicalise and verify the resolved path stays inside the target directory |
+| **H-9** | **Unrestricted file upload.** No extension, size, or content-type validation found; files are written into `wwwroot/` and **served directly from the web root** | 8 Web controllers | Validate type and size, store outside the web root, serve through a controlled endpoint, randomise names — **closed in the port for inward challans, 7 Sep 2026** |
+| **H-10** | **Path traversal risk** in the inward document handler | `ItemInWordController.cs:181` | Canonicalise and verify the resolved path stays inside the target directory — **closed in the port, 7 Sep 2026** |
 | **H-11** | **Username enumeration** — "user not found" and "password incorrect" are distinguishable | `UserAuthentication.cs:388-413` | One generic message for both |
 | **H-12** | **`throw ex;` (47 sites) and `ex.Message` leaked to the browser (25+ sites)**, including full exception objects | e.g. `ItemMasterRepo.cs:354` | Generic client message + correlation id; full detail to structured logs only |
 | **H-13** | **`System.Linq.Dynamic.Core` used for runtime string-based sorting.** If a sort field name reaches it from user input unvalidated, it permits arbitrary expression evaluation | `AccountManagement.Repository.csproj:14` | Allow-list sortable columns; never pass user strings through |
+
+#### H-9 and H-10 — what the port actually does, 7 Sep 2026
+
+Inward challans are the first module in the port to accept a file, so these two
+are answered there first. **They remain open against the LIVE .NET application**,
+which is unchanged: the table above describes the system in production.
+
+The legacy single-file handler is four lines and holds every mistake available:
+
+```csharp
+var path = Environment.WebRootPath;
+var filepath = "Content/InWordDocument/" + ItemInWordDetails.DocumentName.FileName;
+var fullpath = Path.Combine(path, filepath);
+UploadFile(ItemInWordDetails.DocumentName, fullpath);
+```
+
+1. `IFormFile.FileName` is the browser's, unsanitised. It may contain separators
+   and `..`, so the destination is caller-controlled — an arbitrary file WRITE
+   anywhere the web process can reach. That is H-10, and it is a write, not just
+   a read.
+2. `FileMode.Create` truncates, so two suppliers uploading `invoice.pdf`
+   overwrite one another and the earlier challan then shows the later one's
+   document. (`InsertMultipleItemInWordDetail` prefixes a GUID and avoids this.
+   `AddItemInWordDetails` does not, and both are live.)
+3. The destination is inside `wwwroot`, so every attachment in the business is
+   anonymously downloadable by anyone who guesses a file name — no login, no
+   permission, no site scope.
+4. No extension, size or content check, so an `.html` upload is stored XSS on the
+   application's own origin.
+
+In the port:
+
+| Concern | Where |
+|---|---|
+| Storage key generated server-side; the uploaded name is a column, never a path | `common/storage/document-storage.ts` |
+| Driver re-verifies the resolved path is inside its root, and refuses to overwrite | `common/storage/local-disk.storage.ts` |
+| Extension allowlist and a 10 MB cap, shared with the browser | `contracts/attachments.ts` |
+| Content sniffed from the file's own signature; a renamed file is refused | `common/storage/file-type.ts` |
+| Header built safely — no quote, CR or LF can reach it | `common/storage/content-disposition.ts` |
+| Every download behind a token and `inward-challan.view`, `attachment` + `nosniff` | `modules/inward-challans/inward-challans.controller.ts` |
+| Bytes outside the web root and outside the pruned release directory | `STORAGE_DIR`, required in production |
+
+`.html`, `.svg` and `.xml` are excluded from the allowlist deliberately: all
+three script in a browser, and `.svg` is the one that looks like an image and is
+not.
+
+The remaining seven upload sites in the .NET application — supplier, item,
+invoice, sales, purchase and report controllers — are untouched. Each becomes a
+caller of the same interface as its module is ported.
 
 ### MEDIUM
 

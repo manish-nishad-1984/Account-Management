@@ -3,6 +3,7 @@ import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, NestFastifyApplication } from "@nestjs/platform-fastify";
 import { Logger } from "nestjs-pino";
 import { AppModule } from "./app.module";
+import { configureApp } from "./bootstrap";
 import { loadEnv } from "./config/env";
 
 async function bootstrap() {
@@ -15,7 +16,7 @@ async function bootstrap() {
   );
 
   app.useLogger(app.get(Logger));
-  app.setGlobalPrefix("api/v1");
+  await configureApp(app);
 
   await app.listen({ port: env.PORT, host: env.HOST });
 }

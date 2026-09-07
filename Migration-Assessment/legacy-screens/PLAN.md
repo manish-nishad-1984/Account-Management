@@ -85,15 +85,32 @@ purchase requests just established. See `15-inventory-inward.md`.
 
 Do it **after** the site selector, as the first screen built against it.
 
-### Then: Inward Challan  ·  the file-upload module
+### ~~Then: Inward Challan  ·  the file-upload module~~  ·  **DONE**
 
-The real Phase 3 work. See `09-inward-challan.md`. Three new capabilities:
+_Shipped 7 Sep 2026. All three capabilities. See `09-inward-challan.md`._
 
-1. **Multiple file upload per challan**, to object storage — not the web
-   server's disk, where they live today.
+1. **Multiple file upload per challan.** The storage question was answered by
+   putting a `DocumentStorage` interface in front of it and shipping the local
+   disk — what the business already runs, needing no new infrastructure. Object
+   storage is one new class and one line in `storage.module.ts`.
 2. A **footer aggregate** on the grid (the legacy totals Quantity to 70013.25).
-3. **Explicit search** — two fields, a Search By selector, a Reset button — not
-   the as-you-type box every other screen uses.
+3. **Explicit search** — two fields, a Search By selector, a Reset button.
+
+**What every module that gains attachments now does**, and none of it needs
+repeating per module:
+
+```ts
+constructor(@Inject(DOCUMENT_STORAGE) private readonly storage: DocumentStorage) {}
+```
+
+- The **key is generated**, never derived from the uploaded name
+  (`newStorageKey`). The name is a column.
+- The **allowlist and the size cap live in `contracts/attachments.ts`**, so the
+  browser and the server refuse the same files with the same sentence.
+- **Downloads go through the API**, never a static path — `attachment`,
+  `nosniff`, and a content type read from the file's own signature.
+- The route needs **`edit`, not `add`**: changing what is attached to a document
+  is changing the document.
 
 Still no money. That is the point of finishing Phase 3 before Phase 4.
 
@@ -149,8 +166,8 @@ set and only then paged.
 DONE     site selector                                    (7 Sep 2026, §1.1)
          Inventory Inward                                 (7 Sep 2026, §15)
          Inward Challan  (aggregates, filters)            (7 Sep 2026, §09)
-NOW      file upload for challans                        <- needs a STORAGE decision
-         master-detail decision                          <- business call, do not skip
+         file upload for challans                         (7 Sep 2026, §09)
+NOW      master-detail decision                          <- business call, do not skip
 NEXT     Excel import/export, item price history          (parallel, independent)
 BLOCKED  Purchase Invoice -> Purchase Order -> Sales      <- needs B-2 and D7
 LAST     Reports, payments, dashboard queues              <- needs the payments model

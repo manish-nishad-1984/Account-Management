@@ -138,11 +138,13 @@ export const inwardChallans = pgTable(
  * carried, and the ETL explodes it into rows if the child table is ever missing
  * one.
  *
- * NO BYTES YET. This records the file NAME, which is all the source's own table
- * records — the files themselves sit on the web server's disk, and assessment 12
- * puts them in object storage instead. Uploading is a separate change: it needs
- * a storage decision, a multipart dependency and a deploy change, none of which
- * belong in a schema migration.
+ * THERE ARE BYTES NOW. `storage_key` is the location in whatever `DocumentStorage`
+ * driver is configured — the local disk today, object storage the day someone
+ * decides to. It stays NULLABLE, because every row the ETL carries has a file
+ * name and no location: the source's own table records nothing else, and the
+ * files are on the old web server. A row with a null key is a record that a
+ * document existed, which is worth keeping and is not worth pretending is
+ * downloadable.
  */
 export const inwardChallanDocuments = pgTable(
   "inward_challan_documents",
@@ -153,14 +155,36 @@ export const inwardChallanDocuments = pgTable(
       .notNull()
       .references(() => inwardChallans.id, { onDelete: "cascade" }),
 
-    /** The file name as the source recorded it. */
+    /**
+     * The name the file had when it was uploaded — DISPLAY ONLY, and never part
+     * of a path.
+     *
+     * The source built its destination out of this exact value
+     * (`ItemInWordController.cs:191`), which is finding H-10: a browser controls
+     * `IFormFile.FileName`, it may contain `..` and separators, and
+     * `Path.Combine` was given it unsanitised. Here the storage key is generated
+     * server-side and this column is data.
+     */
     documentName: text("document_name").notNull(),
 
     /**
-     * Where the bytes are, once there is somewhere to put them. Null on every
-     * row the ETL carries, because the source records no location at all.
+     * Where the bytes are, in the configured storage driver. NULL on every row
+     * the ETL carries: the source records no location at all.
      */
     storageKey: text("storage_key"),
+
+    /**
+     * What the file will be SERVED as, decided from the extension against the
+     * allowlist in `contracts/attachments.ts` — not copied from the upload's own
+     * `Content-Type` header, which the client chooses and can lie about.
+     */
+    contentType: text("content_type"),
+
+    /** Bytes actually written, so the UI need not fetch a file to size it. */
+    sizeBytes: integer("size_bytes"),
+
+    /** Null for ETL rows: the source records no uploader for a document. */
+    uploadedBy: uuid("uploaded_by"),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
