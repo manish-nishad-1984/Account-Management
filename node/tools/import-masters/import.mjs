@@ -216,6 +216,7 @@ try {
     "Form",
     "UserwiseFormPermission",
     "PurchaseRequest",
+    "InventoryInward",
   ];
   const schemas = await resolveSchemas(pool, SOURCE_TABLES);
   for (const note of report.notes) console.log(`  note: ${note}`);
@@ -232,6 +233,7 @@ try {
     forms: await readAll(pool, schemas, "Form"),
     permissions: await readAll(pool, schemas, "UserwiseFormPermission"),
     purchaseRequests: await readAll(pool, schemas, "PurchaseRequest"),
+    inventoryInward: await readAll(pool, schemas, "InventoryInward"),
   };
   for (const [k, v] of Object.entries(raw)) {
     console.log(`  ${k.padEnd(12)} ${String(v.length).padStart(6)} rows`);
@@ -249,6 +251,13 @@ try {
     forms: raw.forms,
     permissions: raw.permissions,
     purchaseRequests: liveRows(raw.purchaseRequests, "PurchaseRequest"),
+    /**
+     * `IsDeleted` on this table is never actually set: DeleteInventoryDetails
+     * writes the flag and then calls Remove() on the same entity, so the row
+     * leaves the table instead. `liveRows` therefore returns everything that is
+     * still there, which is the correct live set anyway.
+     */
+    inventoryInward: liveRows(raw.inventoryInward, "InventoryInward"),
   };
 
   // ── build target rows, collecting orphans ────────────────────────────────
@@ -707,6 +716,75 @@ try {
     });
   }
 
+  // ── inventory inward ─────────────────────────────────────────────────────
+  // item_id and unit_id are NOT NULL with real foreign keys, so a row whose
+  // item or unit is gone cannot be written. site_id is nullable and, in this
+  // table, ALWAYS NULL: nothing in the .NET application ever writes it.
+  const outInventoryInward = [];
+  let inventorySiteCount = 0;
+
+  for (const r of src.inventoryInward) {
+    const id = uuid(field(r, "Id"));
+    const itemId = uuid(field(r, "ItemId"));
+    const unitId = field(r, "UnitTypeId");
+    const label = str(field(r, "Item")) ?? id;
+
+    if (!itemId || !itemIds.has(itemId)) {
+      orphan("InventoryInward.ItemId -> ItemMaster.ItemId", id, itemId, deletedItems, (kind) =>
+        `inventory arrival ${label} references item ${itemId}, which is ${kind === "deleted" ? "deleted" : "absent"}`,
+      );
+      continue;
+    }
+
+    if (unitId === null || unitId === undefined || !unitIds.has(unitId)) {
+      report.orphans.push({
+        relationship: "InventoryInward.UnitTypeId -> UnitMaster.UnitId",
+        id,
+        kind: "missing",
+        detail: `inventory arrival ${label} references unit ${unitId}, which does not exist`,
+      });
+      continue;
+    }
+
+    // A site that is present but gone from `sites` is cleared rather than
+    // refused: the column is nullable and most rows have none anyway.
+    let siteId = uuid(field(r, "SiteId"));
+    if (siteId && !siteIds.has(siteId)) {
+      orphan("InventoryInward.SiteId -> Site.SiteId", id, siteId, deletedSites, (kind) =>
+        `inventory arrival ${label} references site ${siteId}, which is ${kind === "deleted" ? "deleted" : "absent"} — kept, with the site reference cleared`,
+      );
+      siteId = null;
+    }
+    if (siteId) inventorySiteCount += 1;
+
+    outInventoryInward.push({
+      id,
+      site_id: siteId,
+      item_id: itemId,
+      item_name: str(field(r, "Item")),
+      unit_id: unitId,
+      quantity: num(field(r, "Quantity")) ?? "0",
+      document_date: date(field(r, "Date")),
+      details: str(field(r, "Details")),
+      is_approved: bool(field(r, "IsApproved")),
+      is_deleted: false,
+      created_by: uuid(field(r, "CreatedBy")),
+      created_at: date(field(r, "CreatedOn")) ?? new Date(),
+      updated_by: uuid(field(r, "UpdatedBy")),
+      updated_at: date(field(r, "UpdatedOn")),
+    });
+  }
+
+  /**
+   * Stated rather than assumed. The screen shows a notice while unallocated
+   * rows exist, and this is where the number it will report comes from — if it
+   * is not equal to the row count, something DOES write SiteId and the reading
+   * of the source is wrong.
+   */
+  report.notes.push(
+    `InventoryInward: ${outInventoryInward.length - inventorySiteCount} of ${outInventoryInward.length} arrivals have no site — the .NET create form has no site field`,
+  );
+
   const upperOrNull = (v) => (v === null || v === undefined ? null : String(v).toUpperCase().trim());
   const lowerOrNull = (v) => (v === null || v === undefined ? null : String(v).toLowerCase().trim());
 
@@ -776,6 +854,12 @@ try {
   // every eleventh request of a year (it parses the sequence with
   // Substring(11), which reads ONE character). So duplicates are expected here,
   // and each one named is a document that exists twice in the old system.
+  const finalInventoryInward = outInventoryInward.map((row) => ({
+    ...row,
+    unit_id: unitRemap.has(row.unit_id) ? unitRemap.get(row.unit_id) : row.unit_id,
+    item_id: itemRemap.has(row.item_id) ? itemRemap.get(row.item_id) : row.item_id,
+  }));
+
   finalPurchaseRequests = enforceUnique(
     finalPurchaseRequests,
     "purchase_requests_pr_no_key",
@@ -828,6 +912,7 @@ try {
     ["forms", outForms],
     ["user_form_permissions", outPermissions],
     ["purchase_requests", finalPurchaseRequests],
+    ["inventory_inward", finalInventoryInward],
     ["document_counters", outDocumentCounters],
   ];
   for (const [name, rows] of plan) {
@@ -934,6 +1019,7 @@ try {
     await tx.unsafe(`
       truncate table
         document_counters,
+        inventory_inward,
         purchase_requests,
         refresh_tokens,
         user_form_permissions, user_sites, user_companies,

@@ -48,3 +48,28 @@ Because it lives inside `SalesRepo`, check what else that repository does before
 extracting it. The dead `query.FirstOrDefault().GetType()` line removed from
 `SalesRepo` in this repo was one round trip per sorted report and threw on empty
 results — the file has form.
+
+---
+
+## PORTED — 7 Sep 2026
+
+Live at `/inventory`. Schema `inventory_inward`, migration `0005`, module
+`apps/api/src/modules/inventory-inward/`, screen
+`apps/web/src/features/inventory/`. Permission subject `inventory-inward`, from
+`Form.FormName` — NOT from the `Sales` controller.
+
+Four things found in `SalesRepo.cs` that the capture could not show, all
+departed from and all recorded in SESSION-HANDOFF §5i:
+
+- **`SiteId` exists on the table and nothing ever writes it.** Every production
+  row has none, so the site-scoped list filters "this site OR no site" and the
+  screen carries a notice while unallocated rows remain.
+- **`IsApproved = true` is hard-coded on insert**, so the Approve column has
+  never gated anything. New rows are created unapproved. Needs sign-off.
+- **The delete is a hard delete** — `IsDeleted = true` followed by `Remove()` on
+  the same entity. Ours is a real soft delete.
+- **The list and the edit form read different item names** (`i.ItemName` vs
+  `a.Item`), so renaming an item makes them disagree. Both read the master here.
+
+It also surfaced a bug of ours: paging any list by `createdAt` threw on the
+second page. See §5i.

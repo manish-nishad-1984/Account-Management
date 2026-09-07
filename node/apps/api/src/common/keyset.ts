@@ -65,11 +65,37 @@ export function keysetWhere(
   if (!cursor) {
     return undefined;
   }
-  const beyond = direction === "asc" ? gt : lt;
+  const beyond = direction === "asc" ? "> " : "< ";
+  const value = cursorValue(sortColumn, cursor.value);
+
   return or(
-    beyond(sortColumn, cursor.value),
-    and(sql`${sortColumn} = ${cursor.value}`, beyond(idColumn, cursor.id)),
+    sql`${sortColumn} ${sql.raw(beyond)} ${value}`,
+    and(sql`${sortColumn} = ${value}`, direction === "asc" ? gt(idColumn, cursor.id) : lt(idColumn, cursor.id)),
   );
+}
+
+/**
+ * The cursor value, cast IN SQL to the sort column's own type.
+ *
+ * A cursor is produced as `${sortColumn}::text` and comes back a string, so
+ * comparing it with Drizzle's `gt(column, value)` hands that string to the
+ * column's driver mapper. For a text or numeric column the mapper passes it
+ * through; for a TIMESTAMP it calls `value.toISOString()` and throws
+ * `value.toISOString is not a function`.
+ *
+ * That made every list in the application fail on the SECOND page whenever it
+ * was sorted by `createdAt` — which is nine repositories, all of them offering
+ * `createdAt` as a sortable field, and none of them exercising it past page one
+ * until inventory inward made it the default sort. The first page worked, so
+ * nothing looked wrong.
+ *
+ * Casting in SQL instead means the value never passes through the column mapper.
+ * The round trip is exact: `timestamptz::text` renders a fixed format that casts
+ * back to the same instant, and `numeric::text` likewise. `getSQLType()` comes
+ * from our own schema, never from a request, so `sql.raw` is safe here.
+ */
+function cursorValue(sortColumn: PgColumn, value: string): SQL {
+  return sql`cast(${value} as ${sql.raw(sortColumn.getSQLType())})`;
 }
 
 export function keysetOrder(

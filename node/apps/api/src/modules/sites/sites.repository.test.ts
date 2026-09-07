@@ -43,6 +43,45 @@ describe("SitesRepository (real PostgreSQL)", () => {
     expect(new Set(seen).size).toBe(20);
   });
 
+  /**
+   * REGRESSION. Paging by a TIMESTAMP column threw on the second page.
+   *
+   * A cursor is produced as `${sortColumn}::text`, so it comes back a string,
+   * and `gt(timestampColumn, "2026-09-07 13:36:18.022+00")` handed that string
+   * to Drizzle's timestamp mapper, which called `.toISOString()` on it and threw
+   * `value.toISOString is not a function`.
+   *
+   * Every repository in the application offers `createdAt` as a sortable field
+   * and none of them paged past the first page in a test, so this was live in
+   * nine list endpoints. Page one always worked, which is why nothing looked
+   * wrong. Found when inventory inward made `createdAt` its default sort.
+   */
+  it("pages by createdAt, a timestamp column, without throwing on page two", async () => {
+    const seen: string[] = [];
+    let cursor: string | undefined;
+
+    for (let guard = 0; guard < 20; guard++) {
+      const page = await repo.list(query({ limit: 6, sortBy: "createdAt", cursor }));
+      seen.push(...page.rows.map((r) => r.name));
+      if (!page.nextCursor) break;
+      cursor = page.nextCursor;
+    }
+
+    expect(seen).toHaveLength(20);
+    expect(new Set(seen).size).toBe(20);
+  });
+
+  it("pages by createdAt descending too", async () => {
+    const first = await repo.list(query({ limit: 6, sortBy: "createdAt", sortDir: "desc" }));
+    const second = await repo.list(
+      query({ limit: 6, sortBy: "createdAt", sortDir: "desc", cursor: first.nextCursor! }),
+    );
+
+    expect(second.rows).toHaveLength(6);
+    const overlap = second.rows.filter((r) => first.rows.some((f) => f.id === r.id));
+    expect(overlap).toHaveLength(0);
+  });
+
   it("searches the contact person, not only the site name", async () => {
     const page = await repo.list(query({ search: "Bhavin" }));
     expect(page.rows.map((r) => r.name)).toEqual(["Site 03"]);

@@ -15,6 +15,7 @@ import { SiteGroupsModule } from "./modules/site-groups/site-groups.module";
 import { SuppliersModule } from "./modules/suppliers/suppliers.module";
 import { ItemsModule } from "./modules/items/items.module";
 import { PurchaseRequestsModule } from "./modules/purchase-requests/purchase-requests.module";
+import { InventoryInwardModule } from "./modules/inventory-inward/inventory-inward.module";
 
 const env = loadEnv();
 
@@ -39,6 +40,7 @@ const env = loadEnv();
     SuppliersModule,
     ItemsModule,
     PurchaseRequestsModule,
+    InventoryInwardModule,
   ],
   providers: [
     // Order matters: authenticate, then authorise.

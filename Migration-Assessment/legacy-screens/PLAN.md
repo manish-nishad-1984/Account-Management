@@ -147,8 +147,8 @@ set and only then paged.
 
 ```
 DONE     site selector                                    (7 Sep 2026, §1.1)
+         Inventory Inward                                 (7 Sep 2026, §15)
 NOW      master-detail decision                          <- business call, do not skip
-         Inventory Inward                                 (small, proves the selector)
 NEXT     Inward Challan  (file upload, aggregates)        <- completes Phase 3
          Excel import/export, item price history          (parallel, independent)
 BLOCKED  Purchase Invoice -> Purchase Order -> Sales      <- needs B-2 and D7

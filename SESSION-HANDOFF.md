@@ -658,6 +658,76 @@ Tests: 361 Node (12 domain + 221 API + 128 web) + 19 .NET. Up 24.
 
 ---
 
+## 5i. Inventory Inward, and a paging bug it uncovered (7 Sep 2026)
+
+The second transaction module, and the first built against the site scope from
+the start. `/Sales/CreateInventory` in the source — five methods buried in
+`SalesRepo.cs`, sharing nothing with sales invoices but the file.
+
+Schema, migration `0005`, contract, API module, web feature, dev seed, importer.
+
+### The paging bug — it was live in NINE list endpoints
+
+Sorting any list by `createdAt` and asking for the SECOND page threw
+`value.toISOString is not a function`. A cursor is produced as
+`${sortColumn}::text`, so it comes back a string, and `gt(timestampColumn, "…")`
+handed that string to Drizzle's timestamp mapper.
+
+Every repository offers `createdAt` as a sortable field. None had ever paged past
+page one in a test, and page one always worked — so nothing looked wrong. Found
+only because inventory inward makes `createdAt` its DEFAULT sort.
+
+`keysetWhere` now casts the cursor in SQL — `cast(${value} as ${getSQLType()})`
+— so the value never passes through the column mapper. The regression test lives
+in `sites.repository.test.ts`, not in the inventory tests, because the bug was
+never inventory's. **Verified by reverting the fix: both new tests fail, then
+pass.**
+
+### `InventoryInward.SiteId` exists and is ALWAYS NULL
+
+Nothing in the .NET application writes it. `InsertInventoryDetails` builds the
+entity without it, `UpdateInventoryDetails` does not touch it, and the create
+form has six fields, none of them a site.
+
+So a site-scoped list CANNOT be `where site_id = :siteId` — that shows an empty
+screen to every user under every scope. The filter is **this site OR no site**,
+and the list response carries `unallocated`, a count of live rows with no site,
+so the screen can say why rows from nowhere are appearing under a chosen site.
+Both go away when the history is backfilled. New rows do carry the scoped site.
+
+The importer reports the same number, so the two can be compared: if it is not
+equal to the row count, something does write `SiteId` and this reading is wrong.
+
+### Three more defects in the source, all departed from
+
+1. **`IsApproved = true` is hard-coded on insert.** Every arrival in production
+   posted already approved, so the Approve column has never gated anything and
+   the pending state has never been seen on this screen. New rows here are
+   created unapproved. **Flagged for sign-off** — pre-approved arrivals may be
+   what the business wants, but that is a decision to state, not a constant
+   inside an insert.
+2. **The delete is a HARD delete.** `DeleteInventoryDetails` sets
+   `IsDeleted = true` and then calls `Context.InventoryInwards.Remove(...)` on
+   the same entity, so the row leaves the table and the flag write goes nowhere.
+   The list filters on the flag as though it were a soft delete, which is why
+   nobody has noticed that deleting an arrival is unrecoverable. Ours is a real
+   soft delete and the confirm dialog says so.
+3. **The list and the edit form read different item names.** `GetInventoryList`
+   projects `i.ItemName` from the master; `EditInventoryDetails` projects
+   `a.Item`, the snapshot taken when the row was keyed. Rename an item and the
+   two screens disagree. Here both read the master. The snapshot column is kept
+   and written, because the source has one and dropping it would silently pick a
+   winner — but nothing reads it.
+
+### Approval is stated, not toggled
+
+`ApproveInventoryDetails` reads the row and writes the opposite, so the API
+cannot express "approve this" at all. Same fix as purchase requests, same reason.
+
+Tests: 405 Node (12 domain + 249 API + 144 web) + 19 .NET, up 44.
+
+---
+
 ## 6. The Companies / Sites / Site Groups session (committed as `566b28ab`)
 
 **Companies, Sites and Site Groups master screens**, end to end:

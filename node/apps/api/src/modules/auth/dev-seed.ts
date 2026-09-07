@@ -10,6 +10,7 @@ import {
   forms,
   items,
   purchaseRequests,
+  inventoryInward,
   siteGroupAddresses,
   siteGroupSites,
   siteGroups,
@@ -169,6 +170,12 @@ export class DevSeed implements OnModuleInit {
        * precisely why the subject cannot come from the controller.
        */
       { id: 9, formName: "Purchase Request", controller: "PurchaseMaster", formGroup: "Purchase", isActive: true },
+      /**
+       * "Inventory Inward". The controller is `Sales` in the source — inventory
+       * inward lives inside `SalesRepo.cs` — which is exactly why the subject
+       * comes from the form name and not from there.
+       */
+      { id: 10, formName: "Inventory Inward", controller: "Sales", formGroup: "Purchase", isActive: true },
     ]);
 
     // Units first: items reference them, and the foreign key is real.
@@ -227,7 +234,7 @@ export class DevSeed implements OnModuleInit {
         };
       }),
       )
-      .returning({ id: items.id, unitId: items.unitId });
+      .returning({ id: items.id, name: items.name, unitId: items.unitId });
 
     // One administrator plus 40 others, so the grid has several pages to walk.
     const seeded = await db
@@ -293,6 +300,8 @@ export class DevSeed implements OnModuleInit {
        * would look like a broken page rather than a withheld permission.
        */
       { userId: admin.id, formId: 9, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true, isApproved: true },
+      // Inventory Inward, including APPROVE, for the same reason.
+      { userId: admin.id, formId: 10, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true, isApproved: true },
     ]);
 
     /**
@@ -337,6 +346,39 @@ export class DevSeed implements OnModuleInit {
       financialYear: financialYearLabel,
       nextValue: requestCount + 1,
     });
+
+    /**
+     * Inventory arrivals.
+     *
+     * TWO IN FIVE CARRY NO SITE, on purpose. Every row imported from production
+     * has `site_id IS NULL` because the .NET create form has no site field, so
+     * the local database has to contain that population or the site filter looks
+     * correct in development and empties the screen in production. It is also
+     * what makes the "recorded before this system" notice appear.
+     *
+     * Approval is mixed. The source creates every arrival approved, so nobody
+     * has ever seen the pending state on this screen.
+     */
+    await db.insert(inventoryInward).values(
+      Array.from({ length: 14 }, (_, i) => {
+        const item = insertedItems[(i * 3) % insertedItems.length]!;
+        const unallocated = i % 5 < 2;
+        return {
+          // Concentrated on the first few sites, so the site a seeded user is
+          // actually assigned to has both allocated and unallocated rows and the
+          // screen shows the mix rather than one half of it.
+          siteId: unallocated ? null : insertedSites[i % 3]!.id,
+          itemId: item.id,
+          itemName: item.name,
+          unitId: item.unitId,
+          quantity: i % 4 === 0 ? String((i + 1) * 10) + ".50" : String((i + 1) * 100) + ".00",
+          documentDate: new Date(Date.UTC(2026, 6, ((i * 5) % 27) + 1)),
+          details: i % 3 === 0 ? INVENTORY_DETAILS[i % INVENTORY_DETAILS.length]! : null,
+          isApproved: i % 4 !== 0,
+          createdBy: admin.id,
+        };
+      }),
+    );
 
     await db.insert(userSites).values(
       seeded.flatMap((user, index) =>
@@ -426,6 +468,7 @@ export class DevSeed implements OnModuleInit {
       ["user_sites", userSites as unknown as Record<string, unknown>],
       ["user_companies", userCompanies as unknown as Record<string, unknown>],
       ["user_form_permissions", userFormPermissions as unknown as Record<string, unknown>],
+      ["inventory_inward", inventoryInward as unknown as Record<string, unknown>],
     ];
 
     const counts: string[] = [];
@@ -739,4 +782,16 @@ const OFF_CATALOGUE_REQUESTS = [
   "Water tanker - 5000L",
   "Crane hire - half day",
   "Site survey - external",
+];
+
+/**
+ * Free text on an inventory arrival. Deliberately shaped like the real one —
+ * "TO RAJAOUL" in the captured row is a destination, not a description, and this
+ * column has never had an agreed meaning.
+ */
+const INVENTORY_DETAILS = [
+  "TO RAJAOUL",
+  "Received at gate 2, tally slip attached",
+  "Short by 2 bags, supplier informed",
+  "For the basement raft pour",
 ];

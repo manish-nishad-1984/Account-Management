@@ -47,7 +47,7 @@ export const listSearchParams = (params: ListParams): string => {
  * response schema this hook rebuilds on every render, and that is cheap only
  * because the schemas themselves are shared singletons.
  */
-export interface ListResourceOptions {
+export interface ListResourceOptions<R> {
   /**
    * Hold the request until the filters mean something.
    *
@@ -58,14 +58,23 @@ export interface ListResourceOptions {
    * must also report it as loading — see `PurchaseRequestsPage`.
    */
   enabled?: boolean;
+  /**
+   * A response schema wider than `{rows, nextCursor, total}`.
+   *
+   * Zod strips unknown keys, so a list that returns anything alongside the page
+   * — `unallocated` on inventory inward — loses it silently unless the schema
+   * knows about it. The extra field must be additive: everything
+   * `useMasterScreen.gridProps` reads still has to be there.
+   */
+  responseSchema?: z.ZodType<R>;
 }
 
-export function useListResource<T>(
+export function useListResource<T, R extends ListResponse<T> = ListResponse<T>>(
   resource: string,
   rowSchema: z.ZodType<T>,
   params: ListParams,
   filters: ListFilters = {},
-  { enabled = true }: ListResourceOptions = {},
+  { enabled = true, responseSchema }: ListResourceOptions<R> = {},
 ) {
   const search = new URLSearchParams(listSearchParams(params));
   for (const [key, value] of Object.entries(filters)) {
@@ -74,7 +83,7 @@ export function useListResource<T>(
     }
   }
 
-  return useQuery<ListResponse<T>>({
+  return useQuery<R>({
     // Filters belong in the KEY as well as the URL. Two filter settings sharing
     // one cache entry shows the previous site's rows for a frame after switching,
     // which reads as a bug in the data rather than in the cache.
@@ -82,7 +91,8 @@ export function useListResource<T>(
     enabled,
     queryFn: ({ signal }) =>
       apiRequest(`/${resource}?${search.toString()}`, {
-        schema: listResponseSchema(rowSchema) as unknown as z.ZodType<ListResponse<T>>,
+        schema: (responseSchema ??
+          listResponseSchema(rowSchema)) as unknown as z.ZodType<R>,
         signal,
       }),
     placeholderData: (previous) => previous,

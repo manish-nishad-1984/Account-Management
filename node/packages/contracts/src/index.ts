@@ -10,3 +10,4 @@ export * from "./site-groups";
 export * from "./suppliers";
 export * from "./items";
 export * from "./purchase-requests";
+export * from "./inventory-inward";

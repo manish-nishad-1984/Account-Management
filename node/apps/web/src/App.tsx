@@ -14,6 +14,7 @@ import { SiteGroupsPage } from "./features/site-groups/SiteGroupsPage";
 import { SuppliersPage } from "./features/suppliers/SuppliersPage";
 import { ItemsPage } from "./features/items/ItemsPage";
 import { PurchaseRequestsPage } from "./features/purchase-requests/PurchaseRequestsPage";
+import { InventoryPage } from "./features/inventory/InventoryPage";
 import { PermissionsPage } from "./features/users/PermissionsPage";
 import { createQueryClient } from "./lib/query-client";
 import { NAV } from "./navigation/nav";
@@ -38,6 +39,7 @@ const IMPLEMENTED: Record<string, React.ComponentType> = {
   "/suppliers": SuppliersPage,
   "/items": ItemsPage,
   "/purchase-requests": PurchaseRequestsPage,
+  "/inventory": InventoryPage,
 };
 
 /**
