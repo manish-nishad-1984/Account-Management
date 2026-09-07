@@ -728,6 +728,91 @@ Tests: 405 Node (12 domain + 249 API + 144 web) + 19 .NET, up 44.
 
 ---
 
+## 5j. Inward Challans — Phase 3 complete, except file upload (7 Sep 2026)
+
+`/ItemInWord/ItemInWord`. Schema `inward_challans` + `inward_challan_documents`,
+migration `0006`, contract, API module, screen, seed, importer.
+
+**THE ONE THING NOT DONE IS THE UPLOAD.** Attachments are modelled, imported,
+listed and counted; adding a NEW file is not possible yet. It needs three things
+that are not a code decision: somewhere to put the bytes (assessment 12 says
+object storage; the alternative is the VPS disk, which is what happens today), a
+multipart dependency the API does not carry, and a deploy change for the
+body-size limit and a writable path. The form says so rather than showing a
+disabled control.
+
+### There are TWO repositories for this table, and they disagree
+
+`ItemInwardRepository/ItemInwardRepo.cs` (447 lines) is the one registered in
+`Program.cs`. `ItemInWordRepository/ItemInWordRepo.cs` (450 lines) is a
+near-identical copy that nothing resolves — **dead code**. Anyone reading the
+dead one to understand production is reading the wrong file, and the two behave
+differently.
+
+### The live create path silently discards the supplier and the invoice number
+
+`AddItemInWordDetails`, in the registered repository, builds the entity without
+`SupplierId` and without `InvoiceNo` — both of which the list it feeds displays.
+`InsertMultipleItemInWordDetails`, in the SAME FILE, sets both.
+
+The single-row update has the same split: `UpdateItemInWordDetails` omits
+`SiteId`, `SupplierId` and `InvoiceNo` entirely; `UpdatetMultipleItemInWordDetails`
+writes them. So the table has two create paths and two update paths, one of each
+lossy, and which a challan gets depends on which endpoint the screen called.
+
+One path here, and it writes every field it is given. The list renders a missing
+supplier as "Not recorded" rather than blank, because that population is real.
+
+### Three more, all departed from
+
+- **`Date = DateTime.Now` on create** in `AddItemInWordDetails`, discarding the
+  date the user typed — a challan keyed a week late is dated today.
+- **`VehicleNumber.ToUpper()`** throws a NullReferenceException when the field is
+  blank, and the column is nullable and the form does not require it. The
+  upper-casing is kept; it is applied only when there is a value.
+- **`DocumentName` is stored twice** — a semicolon-joined string on the parent
+  AND one row per file in `ItemInWordDocument` — reconciled by hand with
+  `.Split(';')`, which NREs whenever the parent column is null (it is null on the
+  captured row). One representation here; the ETL explodes the parent string to
+  fill any gap the child table has, and reports how many it found that way.
+
+### The footer aggregate
+
+The legacy grid totals its Quantity column in a purple footer row — the only
+aggregate in the system. The source computes it correctly, over the filtered set,
+and then returns it by writing `TotalRows` and `TotalQuantity` onto **`list[0]`**:
+the totals ride on the first row and **vanish when the list is empty**, which is
+exactly when a `0.00` would tell the user their filter worked rather than that
+the screen broke.
+
+`DataGrid` grew a `footer` prop (a real `<tfoot>`, keyed by column id), the
+response carries `totalQuantity` as a decimal STRING, and the sum is done in SQL
+— `sum(quantity)::text`. Casting it to a float to "make it a number" is how a
+total of 70013.25 becomes 70013.249999999.
+
+### The only screen with explicit filtering
+
+Supplier, item, date range and status, applied by a Search button with a Reset —
+matching the legacy screen, which is the only one that filters explicitly. The
+legacy filters are ids parsed with `Guid.Parse` despite the boxes LOOKING like
+free text, so typing a supplier's name there has never matched anything; they are
+dropdowns here. The date range is a capability the source has
+(`startDate`/`enddate`) and never calls.
+
+`useMasterScreen` grew `resetPaging()` for this: a cursor carried across a filter
+change seeks into a sequence that no longer exists, and keyset paging gives no
+error for that.
+
+### `document_date` is deliberately NOT sortable
+
+It is nullable, and keyset paging needs a NOT NULL sort column — otherwise every
+undated challan silently disappears from the pages. `createdAt` is the source's
+own ordering and is the default.
+
+Tests: 451 Node (12 domain + 279 API + 160 web) + 19 .NET, up 46.
+
+---
+
 ## 6. The Companies / Sites / Site Groups session (committed as `566b28ab`)
 
 **Companies, Sites and Site Groups master screens**, end to end:

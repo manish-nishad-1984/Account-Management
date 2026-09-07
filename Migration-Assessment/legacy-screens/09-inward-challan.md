@@ -60,3 +60,27 @@ Site · Supplier · Invoice NO · **Document — "Choose Files", multiple** · S
    normalise it; carry it as free text.
 5. No money on this document, which is what makes it a safe Phase 3 companion to
    purchase requests.
+
+---
+
+## PORTED — 7 Sep 2026, except the upload
+
+Live at `/inward`. Schema `inward_challans` + `inward_challan_documents`,
+migration `0006`, module `apps/api/src/modules/inward-challans/`, screen
+`apps/web/src/features/inward-challans/`. Subject `inward-challan`.
+
+Done: the footer aggregate (a real `<tfoot>` on `DataGrid`, totalled over the
+filtered set and present when the set is empty — the source loses it exactly
+then), the explicit Supplier / Item / date-range / status filters with Search and
+Reset, and attachments listed and counted.
+
+**NOT done: attaching a file.** Names are carried; bytes are not. It needs a
+storage decision, a multipart dependency and a deploy change. See
+SESSION-HANDOFF §5j.
+
+Five defects found in `ItemInwardRepo.cs` that the capture could not show — two
+create paths and two update paths, one of each silently dropping the supplier and
+the invoice number; `Date` overwritten with `DateTime.Now` on create;
+`VehicleNumber.ToUpper()` throwing on a blank field; attachments stored twice and
+reconciled by hand with a `.Split(';')` that NREs on null. And a whole dead
+duplicate repository, `ItemInWordRepo.cs`, that nothing resolves.

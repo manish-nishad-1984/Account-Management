@@ -217,6 +217,8 @@ try {
     "UserwiseFormPermission",
     "PurchaseRequest",
     "InventoryInward",
+    "ItemInword",
+    "ItemInWordDocument",
   ];
   const schemas = await resolveSchemas(pool, SOURCE_TABLES);
   for (const note of report.notes) console.log(`  note: ${note}`);
@@ -234,6 +236,11 @@ try {
     permissions: await readAll(pool, schemas, "UserwiseFormPermission"),
     purchaseRequests: await readAll(pool, schemas, "PurchaseRequest"),
     inventoryInward: await readAll(pool, schemas, "InventoryInward"),
+    // `ItemInword` — the entity's spelling. `resolveSchemas` matches case
+    // insensitively, so `ItemInWord` would find it too; the entity name is used
+    // because that is what the DbContext maps.
+    inwardChallans: await readAll(pool, schemas, "ItemInword"),
+    inwardDocuments: await readAll(pool, schemas, "ItemInWordDocument"),
   };
   for (const [k, v] of Object.entries(raw)) {
     console.log(`  ${k.padEnd(12)} ${String(v.length).padStart(6)} rows`);
@@ -258,6 +265,8 @@ try {
      * still there, which is the correct live set anyway.
      */
     inventoryInward: liveRows(raw.inventoryInward, "InventoryInward"),
+    inwardChallans: liveRows(raw.inwardChallans, "ItemInword"),
+    inwardDocuments: raw.inwardDocuments,
   };
 
   // ── build target rows, collecting orphans ────────────────────────────────
@@ -655,6 +664,13 @@ try {
   );
   const deletedSites = deleted.sites;
 
+  // Suppliers, for the inward challans below. `supplier_id` is nullable there, so
+  // a missing supplier clears the reference rather than dropping the document.
+  const supplierIds = new Set(src.suppliers.map((r) => uuid(field(r, "SupplierId"))).filter(Boolean));
+  const deletedSuppliers = new Set(
+    [...allIds(raw.suppliers, "SupplierId")].filter((id) => !supplierIds.has(id)),
+  );
+
   const outPurchaseRequests = [];
   for (const r of src.purchaseRequests) {
     const id = uuid(field(r, "Pid"));
@@ -785,6 +801,123 @@ try {
     `InventoryInward: ${outInventoryInward.length - inventorySiteCount} of ${outInventoryInward.length} arrivals have no site — the .NET create form has no site field`,
   );
 
+  // ── inward challans ──────────────────────────────────────────────────────
+  // site_id, item_id and unit_id are all NOT NULL with real foreign keys, so a
+  // row missing any of them cannot be written. supplier_id is nullable — the
+  // source's registered create path never writes it — so a missing supplier is
+  // reported and cleared, never a reason to drop the challan.
+  const outInwardChallans = [];
+  const keptChallanIds = new Set();
+  let challanSupplierCount = 0;
+
+  for (const r of src.inwardChallans) {
+    const id = uuid(field(r, "InwordId"));
+    const siteId = uuid(field(r, "SiteId"));
+    const itemId = uuid(field(r, "ItemId"));
+    const unitId = field(r, "UnitTypeId");
+    const label = str(field(r, "Item")) ?? id;
+
+    if (!siteId || !siteIds.has(siteId)) {
+      orphan("ItemInword.SiteId -> Site.SiteId", id, siteId, deletedSites, (kind) =>
+        `inward challan ${label} references site ${siteId}, which is ${kind === "deleted" ? "deleted" : "absent"}`,
+      );
+      continue;
+    }
+
+    if (!itemId || !itemIds.has(itemId)) {
+      orphan("ItemInword.ItemId -> ItemMaster.ItemId", id, itemId, deletedItems, (kind) =>
+        `inward challan ${label} references item ${itemId}, which is ${kind === "deleted" ? "deleted" : "absent"}`,
+      );
+      continue;
+    }
+
+    if (unitId === null || unitId === undefined || !unitIds.has(unitId)) {
+      report.orphans.push({
+        relationship: "ItemInword.UnitTypeId -> UnitMaster.UnitId",
+        id,
+        kind: "missing",
+        detail: `inward challan ${label} references unit ${unitId}, which does not exist`,
+      });
+      continue;
+    }
+
+    let supplierId = uuid(field(r, "SupplierId"));
+    if (supplierId && !supplierIds.has(supplierId)) {
+      orphan("ItemInword.SupplierId -> SupplierMaster.SupplierId", id, supplierId, deletedSuppliers, (kind) =>
+        `inward challan ${label} references supplier ${supplierId}, which is ${kind === "deleted" ? "deleted" : "absent"} — kept, with the supplier reference cleared`,
+      );
+      supplierId = null;
+    }
+    if (supplierId) challanSupplierCount += 1;
+
+    keptChallanIds.add(id);
+    outInwardChallans.push({
+      id,
+      site_id: siteId,
+      item_id: itemId,
+      item_name: str(field(r, "Item")),
+      supplier_id: supplierId,
+      unit_id: unitId,
+      quantity: num(field(r, "Quantity")) ?? "0",
+      invoice_no: str(field(r, "InvoiceNo")),
+      document_date: date(field(r, "Date")),
+      vehicle_number: str(field(r, "VehicleNumber")),
+      receiver_name: str(field(r, "ReceiverName")),
+      is_approved: bool(field(r, "IsApproved")),
+      is_deleted: false,
+      created_by: uuid(field(r, "CreatedBy")),
+      created_at: date(field(r, "CreatedOn")) ?? new Date(),
+      updated_by: uuid(field(r, "UpdatedBy")),
+      updated_at: date(field(r, "UpdatedOn")),
+    });
+  }
+
+  report.notes.push(
+    `ItemInword: ${outInwardChallans.length - challanSupplierCount} of ${outInwardChallans.length} challans have no supplier — AddItemInWordDetails never writes SupplierId`,
+  );
+
+  /**
+   * Attachments. The source keeps these TWICE — a semicolon-joined string on
+   * `ItemInword.DocumentName` and one row per file in `ItemInWordDocument` —
+   * and reconciles them by hand. Only the child rows are carried, and the parent
+   * string is exploded to fill any gap the child table has, so a file recorded in
+   * one place and not the other is not lost.
+   */
+  const outInwardDocuments = [];
+  const documentsByChallan = new Map();
+  for (const r of src.inwardDocuments) {
+    const challanId = uuid(field(r, "RefInWordId"));
+    const name = str(field(r, "DocumentName"));
+    if (!challanId || !keptChallanIds.has(challanId) || !name) continue;
+    if (!documentsByChallan.has(challanId)) documentsByChallan.set(challanId, new Set());
+    if (documentsByChallan.get(challanId).has(name)) continue;
+    documentsByChallan.get(challanId).add(name);
+    outInwardDocuments.push({ challan_id: challanId, document_name: name, storage_key: null });
+  }
+
+  let explodedFromParent = 0;
+  for (const r of src.inwardChallans) {
+    const challanId = uuid(field(r, "InwordId"));
+    if (!challanId || !keptChallanIds.has(challanId)) continue;
+    const joined = str(field(r, "DocumentName"));
+    if (!joined) continue;
+    for (const name of joined.split(";").map((s) => s.trim()).filter(Boolean)) {
+      if (!documentsByChallan.has(challanId)) documentsByChallan.set(challanId, new Set());
+      if (documentsByChallan.get(challanId).has(name)) continue;
+      documentsByChallan.get(challanId).add(name);
+      outInwardDocuments.push({ challan_id: challanId, document_name: name, storage_key: null });
+      explodedFromParent += 1;
+    }
+  }
+  if (explodedFromParent > 0) {
+    report.notes.push(
+      `ItemInword: ${explodedFromParent} attachment name(s) existed only in the parent's semicolon-joined DocumentName column, not in ItemInWordDocument`,
+    );
+  }
+  report.notes.push(
+    `ItemInword: ${outInwardDocuments.length} attachment name(s) carried. The FILES themselves are on the old web server and are not migrated by this tool.`,
+  );
+
   const upperOrNull = (v) => (v === null || v === undefined ? null : String(v).toUpperCase().trim());
   const lowerOrNull = (v) => (v === null || v === undefined ? null : String(v).toLowerCase().trim());
 
@@ -815,18 +948,32 @@ try {
     (r) => r.name,
   ).kept;
 
-  let finalSuppliers = enforceUnique(
+  // Both passes are captured, not just `.kept`: an inward challan pointing at a
+  // supplier that was merged away must follow it to the winner rather than
+  // losing its supplier entirely.
+  const suppliersByGst = enforceUnique(
     outSuppliers,
     "suppliers_gst_no_key",
     (r) => upperOrNull(r.gst_no),
     (r) => r.name,
-  ).kept;
-  finalSuppliers = enforceUnique(
-    finalSuppliers,
+  );
+  const suppliersByName = enforceUnique(
+    suppliersByGst.kept,
     "suppliers_name_lower_key",
     (r) => lowerOrNull(r.name),
     (r) => r.name,
-  ).kept;
+  );
+  const finalSuppliers = suppliersByName.kept;
+
+  const supplierRemap = new Map();
+  for (const d of suppliersByGst.dropped) {
+    const winner = suppliersByGst.seen.get(upperOrNull(d.gst_no));
+    if (winner) supplierRemap.set(d.id, winner.id);
+  }
+  for (const d of suppliersByName.dropped) {
+    const winner = suppliersByName.seen.get(lowerOrNull(d.name));
+    if (winner) supplierRemap.set(d.id, winner.id);
+  }
 
   // Purchase requests follow their masters: a unit or item that was merged away
   // must not orphan the request that points at it.
@@ -858,6 +1005,16 @@ try {
     ...row,
     unit_id: unitRemap.has(row.unit_id) ? unitRemap.get(row.unit_id) : row.unit_id,
     item_id: itemRemap.has(row.item_id) ? itemRemap.get(row.item_id) : row.item_id,
+  }));
+
+  const finalInwardChallans = outInwardChallans.map((row) => ({
+    ...row,
+    unit_id: unitRemap.has(row.unit_id) ? unitRemap.get(row.unit_id) : row.unit_id,
+    item_id: itemRemap.has(row.item_id) ? itemRemap.get(row.item_id) : row.item_id,
+    supplier_id:
+      row.supplier_id && supplierRemap.has(row.supplier_id)
+        ? supplierRemap.get(row.supplier_id)
+        : row.supplier_id,
   }));
 
   finalPurchaseRequests = enforceUnique(
@@ -913,6 +1070,8 @@ try {
     ["user_form_permissions", outPermissions],
     ["purchase_requests", finalPurchaseRequests],
     ["inventory_inward", finalInventoryInward],
+    ["inward_challans", finalInwardChallans],
+    ["inward_challan_documents", outInwardDocuments],
     ["document_counters", outDocumentCounters],
   ];
   for (const [name, rows] of plan) {
@@ -1019,6 +1178,8 @@ try {
     await tx.unsafe(`
       truncate table
         document_counters,
+        inward_challan_documents,
+        inward_challans,
         inventory_inward,
         purchase_requests,
         refresh_tokens,

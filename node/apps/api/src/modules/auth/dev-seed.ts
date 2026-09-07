@@ -11,6 +11,8 @@ import {
   items,
   purchaseRequests,
   inventoryInward,
+  inwardChallans,
+  inwardChallanDocuments,
   siteGroupAddresses,
   siteGroupSites,
   siteGroups,
@@ -176,6 +178,8 @@ export class DevSeed implements OnModuleInit {
        * comes from the form name and not from there.
        */
       { id: 10, formName: "Inventory Inward", controller: "Sales", formGroup: "Purchase", isActive: true },
+      /** "Inward Challan". The controller is spelled `ItemInWord` in the source. */
+      { id: 11, formName: "Inward Challan", controller: "ItemInWord", formGroup: "Purchase", isActive: true },
     ]);
 
     // Units first: items reference them, and the foreign key is real.
@@ -184,7 +188,7 @@ export class DevSeed implements OnModuleInit {
       .values(UNIT_NAMES.map((name) => ({ name })))
       .returning({ id: units.id, name: units.name });
 
-    await db.insert(suppliers).values(
+    const insertedSuppliers = await db.insert(suppliers).values(
       SUPPLIER_NAMES.map((name, i) => ({
         name,
         mobile: "9" + String(700000000 + i * 137),
@@ -206,7 +210,7 @@ export class DevSeed implements OnModuleInit {
         openingBalance: (i % 4 === 0 ? null : String(12500 + i * 1375) + ".00") as string | null,
         openingBalanceDate: i % 4 === 0 ? null : new Date("2025-04-01T00:00:00Z"),
       })),
-    );
+    ).returning({ id: suppliers.id });
 
     const insertedItems = await db
       .insert(items)
@@ -302,6 +306,7 @@ export class DevSeed implements OnModuleInit {
       { userId: admin.id, formId: 9, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true, isApproved: true },
       // Inventory Inward, including APPROVE, for the same reason.
       { userId: admin.id, formId: 10, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true, isApproved: true },
+      { userId: admin.id, formId: 11, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true, isApproved: true },
     ]);
 
     /**
@@ -378,6 +383,57 @@ export class DevSeed implements OnModuleInit {
           createdBy: admin.id,
         };
       }),
+    );
+
+    /**
+     * Inward challans.
+     *
+     * One in four carries NO SUPPLIER, because the source's registered create
+     * path drops `SupplierId` on the floor — so that population exists in
+     * production and the screen has to render it as something other than blank.
+     * A couple carry no invoice number for the same reason.
+     *
+     * Quantities are deliberately mixed in scale, because the footer total is
+     * the point of this screen and a total of similar numbers proves nothing.
+     */
+    const insertedChallans = await db
+      .insert(inwardChallans)
+      .values(
+        Array.from({ length: 16 }, (_, i) => {
+          const item = insertedItems[(i * 5) % insertedItems.length]!;
+          const noSupplier = i % 4 === 3;
+          return {
+            siteId: insertedSites[i % 3]!.id,
+            itemId: item.id,
+            itemName: item.name,
+            supplierId: noSupplier ? null : insertedSuppliers[i % insertedSuppliers.length]!.id,
+            unitId: item.unitId,
+            quantity:
+              i % 3 === 0 ? String((i + 1) * 1000) + ".00" : String((i + 1) * 7) + ".62",
+            invoiceNo: noSupplier ? null : CHALLAN_INVOICE_NOS[i % CHALLAN_INVOICE_NOS.length]!,
+            documentDate: new Date(Date.UTC(2026, 5 + (i % 3), ((i * 4) % 27) + 1)),
+            vehicleNumber: i % 5 === 0 ? null : "GJ 06 " + String(1000 + i * 37),
+            // The site is chosen by i % 3, so anything else keyed on 3 aliases
+            // with it and one site ends up with a column of identical values.
+            receiverName: i % 4 === 0 ? RECEIVER_NAMES[(i >> 1) % RECEIVER_NAMES.length]! : null,
+            isApproved: i % 5 !== 1,
+            createdBy: admin.id,
+          };
+        }),
+      )
+      .returning({ id: inwardChallans.id });
+
+    // Attachments on a few of them. Names only: the bytes live on the old web
+    // server and there is nowhere to put them here yet.
+    await db.insert(inwardChallanDocuments).values(
+      insertedChallans.flatMap((challan, i) =>
+        i % 5 === 0
+          ? [
+              { challanId: challan.id, documentName: `challan-${i + 1}.pdf` },
+              { challanId: challan.id, documentName: `weighbridge-${i + 1}.jpg` },
+            ]
+          : [],
+      ),
     );
 
     await db.insert(userSites).values(
@@ -469,6 +525,7 @@ export class DevSeed implements OnModuleInit {
       ["user_companies", userCompanies as unknown as Record<string, unknown>],
       ["user_form_permissions", userFormPermissions as unknown as Record<string, unknown>],
       ["inventory_inward", inventoryInward as unknown as Record<string, unknown>],
+      ["inward_challans", inwardChallans as unknown as Record<string, unknown>],
     ];
 
     const counts: string[] = [];
@@ -794,4 +851,21 @@ const INVENTORY_DETAILS = [
   "Received at gate 2, tally slip attached",
   "Short by 2 bags, supplier informed",
   "For the basement raft pour",
+];
+
+/**
+ * Supplier invoice numbers as they actually appear: `922`, `1`, `253-1`. Free
+ * text, and the reason `invoice_no` is not an integer column.
+ */
+const CHALLAN_INVOICE_NOS = ["922", "1", "253-1", "1851", "1716", "44/A"];
+
+/**
+ * Receiver names in the shape the source holds them —
+ * `SURESHBHAI-CC-2000X2 7TH` is a person, a group code and a batch reference in
+ * one field. Not normalised; see the schema.
+ */
+const RECEIVER_NAMES = [
+  "SURESHBHAI-CC-2000X2 7TH",
+  "RAMESHBHAI - GATE 2",
+  "STOREKEEPER",
 ];

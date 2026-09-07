@@ -15,6 +15,7 @@ import { SuppliersPage } from "./features/suppliers/SuppliersPage";
 import { ItemsPage } from "./features/items/ItemsPage";
 import { PurchaseRequestsPage } from "./features/purchase-requests/PurchaseRequestsPage";
 import { InventoryPage } from "./features/inventory/InventoryPage";
+import { InwardChallansPage } from "./features/inward-challans/InwardChallansPage";
 import { PermissionsPage } from "./features/users/PermissionsPage";
 import { createQueryClient } from "./lib/query-client";
 import { NAV } from "./navigation/nav";
@@ -40,6 +41,7 @@ const IMPLEMENTED: Record<string, React.ComponentType> = {
   "/items": ItemsPage,
   "/purchase-requests": PurchaseRequestsPage,
   "/inventory": InventoryPage,
+  "/inward": InwardChallansPage,
 };
 
 /**

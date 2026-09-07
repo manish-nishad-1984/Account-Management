@@ -56,6 +56,17 @@ export function useMasterScreen<TRow extends { id: string | number }>({
     setCursors([]);
   }, []);
 
+  /**
+   * Back to page one, for a screen that changes the result set some way other
+   * than search or sort — the inward-challan filters are the first.
+   *
+   * Same reasoning as `changeSearch`: a cursor encodes a position in ONE ordering
+   * of ONE filter, and carried across a change to either it seeks into a
+   * sequence that no longer exists. Keyset paging gives no error for that, just
+   * a page of rows from nowhere in particular.
+   */
+  const resetPaging = useCallback(() => setCursors([]), []);
+
   const changeSort = useCallback((field: string, direction: SortDirection) => {
     setSortBy(field);
     setSortDir(direction);
@@ -133,6 +144,7 @@ export function useMasterScreen<TRow extends { id: string | number }>({
     formTarget,
     isFormOpen: formTarget !== null,
     editingId: formTarget?.id ?? null,
+    resetPaging,
     openCreate,
     openEdit,
     closeForm,

@@ -16,6 +16,7 @@ import { SuppliersModule } from "./modules/suppliers/suppliers.module";
 import { ItemsModule } from "./modules/items/items.module";
 import { PurchaseRequestsModule } from "./modules/purchase-requests/purchase-requests.module";
 import { InventoryInwardModule } from "./modules/inventory-inward/inventory-inward.module";
+import { InwardChallansModule } from "./modules/inward-challans/inward-challans.module";
 
 const env = loadEnv();
 
@@ -41,6 +42,7 @@ const env = loadEnv();
     ItemsModule,
     PurchaseRequestsModule,
     InventoryInwardModule,
+    InwardChallansModule,
   ],
   providers: [
     // Order matters: authenticate, then authorise.

@@ -69,7 +69,7 @@ export const NAV: NavSection[] = [
     items: [
       { label: "Purchase Requests", to: "/purchase-requests", icon: ClipboardList, permission: "purchase-request", status: "ready", legacy: "/PurchaseMaster/PurchaseRequestListView" },
       { label: "Purchase Orders", to: "/purchase-orders", icon: ShoppingCart, permission: "purchase-order", status: "planned", legacy: "/PurchaseMaster/POListView" },
-      { label: "Inward Challans", to: "/inward", icon: FileInput, permission: "inward-challan", status: "planned", legacy: "/ItemInWord/ItemInWord" },
+      { label: "Inward Challans", to: "/inward", icon: FileInput, permission: "inward-challan", status: "ready", legacy: "/ItemInWord/ItemInWord" },
       { label: "Inventory", to: "/inventory", icon: Boxes, permission: "inventory-inward", status: "ready", legacy: "/Sales/CreateInventory" },
     ],
   },

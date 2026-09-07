@@ -5,6 +5,7 @@ import {
   type ColumnDef,
 } from "@tanstack/react-table";
 import clsx from "clsx";
+import type { ReactNode } from "react";
 import type { SortDirection } from "@accountmanagement/contracts";
 import { ChevronLeft, ChevronRight, Inbox, Search } from "lucide-react";
 import { Button, EmptyState } from "../ui";
@@ -31,6 +32,20 @@ export interface DataGridProps<T> {
   onNext: () => void;
   pageIndex: number;
   emptyMessage?: string;
+
+  /**
+   * A footer row of aggregates, keyed by column id.
+   *
+   * Only the inward-challan grid has one — the legacy screen totals its Quantity
+   * column in a purple footer row, and it is the only grid in the system that
+   * does. Rendered as a real `<tfoot>` so a screen reader announces it as part of
+   * the table rather than as loose text underneath.
+   *
+   * The values must be totals over the whole FILTERED SET, not the page: a
+   * footer that silently means "this page only" is worse than none. The server
+   * computes them; this only draws them.
+   */
+  footer?: Record<string, ReactNode>;
 }
 
 /**
@@ -60,6 +75,7 @@ export function DataGrid<T>({
   onNext,
   pageIndex,
   emptyMessage = "Nothing to show",
+  footer,
 }: DataGridProps<T>) {
   const table = useReactTable({
     data: rows,
@@ -169,6 +185,23 @@ export function DataGrid<T>({
               ))
             )}
           </tbody>
+
+          {/* Shown even when the page is empty: a total of zero is the answer
+              to "did my filter work", and the source loses it precisely then. */}
+          {footer && !isLoading && (
+            <tfoot className="border-t-2 border-slate-200 bg-slate-50/80">
+              <tr>
+                {columns.map((column, index) => (
+                  <td
+                    key={column.id ?? index}
+                    className="whitespace-nowrap px-4 py-3 text-sm font-semibold text-slate-800"
+                  >
+                    {column.id ? footer[column.id] : null}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
 
