@@ -551,6 +551,38 @@ was left alone rather than half-fixed.
 
 ---
 
+## 5g. The legacy screens are now documented (7 Sep 2026)
+
+`Migration-Assessment/legacy-screens/` holds a written spec per screen of the
+ASP.NET app, taken from screenshots of `avinfraones.co.in`. **Read
+`00-shell-and-navigation.md` and `PLAN.md` before building another screen.**
+
+Four gaps in ALREADY-SHIPPED work came out of it, all verified against our code:
+
+1. **No global site selector.** Every legacy screen carries `All Site` in the
+   header and scopes everything below it. Our `AppShell` has nothing; Purchase
+   Requests grew its own per-screen dropdown that nothing else honours. Build
+   this BEFORE the next module, not after.
+2. **Master-detail split vs modal.** Legacy lists fill a right-hand pane on row
+   click; we open a blocking modal. A real change in how the screen is worked —
+   decide it now, while it is one change to `useMasterScreen`.
+3. **Item Master has no Excel import/export and no price history.** The clock
+   icon in the legacy Action column has no schema behind it here at all.
+4. **`companies.landmark` is missing**, and geography renders as ids because the
+   census has never run.
+
+Two things the captures add to Phase 4 planning: `document_counters` will need a
+**company dimension** (POs are numbered `DHP/PO/24-25/049` — the invoice prefix
+leads, and a free-text suffix is appended), and the PO editor needs a **rich text
+editor** for three stored Terms and Conditions templates, an unbudgeted
+dependency whose stored HTML also needs sanitising.
+
+The captures confirm the phase ordering in the roadmap: the purchase invoice line
+grid carries PRICE, DIS in both rupees and percent, GST in both, and totals TDS,
+Discount and Adjustment. It is the superset. Build `LineItemGrid` against it.
+
+---
+
 ## 6. The Companies / Sites / Site Groups session (committed as `566b28ab`)
 
 **Companies, Sites and Site Groups master screens**, end to end:
