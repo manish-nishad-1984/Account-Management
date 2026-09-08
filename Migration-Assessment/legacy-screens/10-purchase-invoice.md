@@ -40,6 +40,26 @@ invoices. See `04-group-master.md`.
 
 **Export To Excel** and **Export To Pdf**.
 
+## Built 8 Sep 2026
+
+The list, the form, single and bulk approval, and the sixth dashboard queue.
+Three things this document said, checked against the source while building:
+
+1. **"InvoiceNo is the SUPPLIER's number" — right, but there are TWO columns.**
+   `SupplierInvoice` has `SupplierInvoiceNo` AND `InvoiceNo`, and the partial
+   picks between them with `@if (item.SupplierInvoiceNo == "")`. That test is
+   `== ""`, which a NULL fails — so an invoice with no supplier number takes the
+   ELSE branch and renders an empty, unclickable link. Both columns are carried,
+   and the API computes a `displayNo` where null, empty and whitespace all mean
+   the same thing, with a last-resort placeholder so the cell is never blank.
+2. **Every sample total on this page ends in `.00`, and that is not a
+   coincidence.** The calculator rounds the grand total to a whole rupee with
+   exactly .50 going DOWN. See `11-create-purchase-invoice.md`.
+3. **There is no Active/Inactive filter, and there should not be.** The table has
+   no `IsActive` and no `IsDeleted`, which is also why deleting an invoice in the
+   new screen really deletes it — there is no soft-delete column to set, and the
+   confirmation says so rather than promising the record is kept.
+
 ## For the port
 
 1. Invoice numbers are supplier-issued free text, so **no uniqueness can be

@@ -122,14 +122,18 @@ export class PurchaseOrdersRepository extends BaseRepository {
     search: string | undefined,
     {
       siteId,
+      supplierId,
       isApproved,
       isActive,
-    }: { siteId?: string; isApproved?: boolean; isActive?: boolean },
+    }: { siteId?: string; supplierId?: string; isApproved?: boolean; isActive?: boolean },
   ) {
     const where = [eq(purchaseOrders.isDeleted, false)];
 
     if (siteId) {
       where.push(eq(purchaseOrders.siteId, siteId));
+    }
+    if (supplierId) {
+      where.push(eq(purchaseOrders.supplierId, supplierId));
     }
     if (isApproved !== undefined) {
       where.push(eq(purchaseOrders.isApproved, isApproved));
@@ -147,7 +151,7 @@ export class PurchaseOrdersRepository extends BaseRepository {
 
   async list(
     query: ListQuery,
-    filters: { siteId?: string; isApproved?: boolean; isActive?: boolean } = {},
+    filters: { siteId?: string; supplierId?: string; isApproved?: boolean; isActive?: boolean } = {},
   ): Promise<{ rows: PurchaseOrderListRow[]; nextCursor: string | null }> {
     const sortKey: PurchaseOrderSortKey =
       query.sortBy && query.sortBy in SORTABLE ? (query.sortBy as PurchaseOrderSortKey) : "poNo";
@@ -216,7 +220,7 @@ export class PurchaseOrdersRepository extends BaseRepository {
 
   async total(
     search?: string,
-    filters: { siteId?: string; isApproved?: boolean; isActive?: boolean } = {},
+    filters: { siteId?: string; supplierId?: string; isApproved?: boolean; isActive?: boolean } = {},
   ): Promise<number> {
     const [row] = await this.db
       .select({ value: count() })

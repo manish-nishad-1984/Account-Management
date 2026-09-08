@@ -131,6 +131,13 @@ the Action column opens an item's price over time.
   The lesson is worth keeping: this entry was written from a screenshot of a
   clock icon, and the icon's obvious meaning was the wrong one.
 
+  **UNBLOCKED 8 Sep 2026.** Those are exactly the two tables that landed as
+  `purchase_invoices` and `purchase_invoice_items`, and every column the partial
+  renders is now there: `displayNo` for InvoiceNo, the supplier and site joins,
+  `document_date`, and `unit_price` / `gst_amount` / `line_total` for Price, GST
+  and PriceWithGST. It is a query and a panel, with no business decision behind
+  it — back into NEXT.
+
 ### 1.4 Company is missing `landmark`, and geography shows ids not names
 
 `landmark` is on the legacy form and absent from our `companies` table —
@@ -238,14 +245,15 @@ DONE     site selector                                    (7 Sep 2026, §1.1)
          Item Master Excel import/export                  (8 Sep 2026, §1.3)
          Dashboard approval queues, 4 of 6                (8 Sep 2026, §01)
          Purchase Orders (list, form, approval)           (8 Sep 2026, §07/§08)
+         PO dashboard queue, 5 of 6                       (8 Sep 2026, §01)
+         Purchase Invoices (list, form, approval)         (8 Sep 2026, §10/§11)
+         Dashboard approval queues, ALL 6                 (8 Sep 2026, §01)
 NOW      master-detail ANSWER                            <- with the business now, doc 19 Q12
-NEXT     PO dashboard queue                              <- the table exists now; 5 of 6
+NEXT     Sales Invoices                                  <- same calculator, now written
          PO delivery addresses + T&C editor              <- see the two carve-outs below
-BLOCKED  item price history                              <- reads supplier invoices; NOT an audit log
+         item price history                              <- UNBLOCKED: reads purchase invoices
 BLOCKED  Supplier Excel import                           <- needs the States/Cities census
-BLOCKED  the 6th dashboard queue                         <- Purchase Invoice table
-BLOCKED  Purchase Invoice -> Sales                        <- needs B-2 and D7
-LAST     Reports, payments                                <- needs the payments model
+BLOCKED  Reports, payments, supplier balances            <- needs D7 and the payments model
 ```
 
 **Purchase orders moved out of BLOCKED on 8 Sep 2026, and the reason is worth
@@ -253,9 +261,49 @@ keeping.** They were listed behind B-2 because `08-create-purchase-order.md` sai
 PO totals become server-authoritative and that this needed the GST answer first.
 Checking the screen rather than the phase showed the opposite: it loads one
 calculator, and has no discount, TDS or round-off anywhere in it — so there is
-nothing for the three calculators to disagree about. **B-2 still blocks the two
-INVOICE screens**, which is where it always actually bit. See §5 of that document
-for the counts.
+nothing for the three calculators to disagree about. B-2 was said at the time to
+still block the two INVOICE screens. See §5 of that document for the counts.
+
+**Purchase invoices moved out of BLOCKED on 8 Sep 2026, and this one needs more
+care than the purchase order did**, because unlike that case the screen really
+does exercise the disagreement — three scripts, and TDS, Discount and RoundOff
+all present. What changed is not the screen but what B-2 is asking:
+
+- **The arithmetic was already settled, in code, before this session.**
+  `packages/domain/src/invoice-total.ts` carries `asProduced()` — the shipped
+  JavaScript reproduced in float, defects included — and `corrected()`, the
+  arithmetic the business believes it is getting. Both were written from running
+  the real scripts against the real markup, and 24 tests pin them. The invoice
+  screens are built on `corrected()`.
+- **The source was re-read from scratch before the table was written**, rather
+  than trusting that summary, and it agreed on every point. Two findings are
+  worth having in this file:
+  - **The discount is ONE number in two boxes, not two competing numbers.**
+    `11-create-purchase-invoice.md` asks which of rupees and percent is
+    authoritative when both are set. `updateDiscount` writes the percent from the
+    rupees and `UpdateDiscountPercentage` writes the rupees from the percent, and
+    both then write the effective price — so they cannot independently disagree.
+    The question cannot arise. The new form offers one input and derives the
+    other, so it cannot arise there either.
+  - **Every invoice total is a WHOLE RUPEE, with exactly .50 rounding DOWN.**
+    `grandTotal = (decimal <= 0.5) ? floor : ceil`. Corroborated by the data: all
+    six sample totals in `10-purchase-invoice.md` end in `.00`. This is a business
+    rule applied to every document ever issued, reproduced deliberately and
+    stated on the screen.
+- **What is still open in B-2 is historical remediation** — whether the live
+  server runs this build, how far back to investigate invoices saved with a total
+  that ignored their own TDS, and whether to keep the round-half-down rule. Those
+  are questions about EXISTING DATA and a future decision, not about what the new
+  table should hold. Nothing was guessed to build this.
+
+**D7 does not block the invoice screens either, and the reason is the same shape.**
+D7 is "purchase returns are added to supplier balances instead of subtracted".
+The adding happens in `SupplierInvoiceRepo.cs:227` and its four copies, which
+bucket `InvoiceType in ('Purchase Return','Credit Note')` into
+`PayOutTotalAmount`. That is a BALANCE aggregate, in reports and payments.
+Listing, detailing, creating and approving an invoice never computes a supplier
+balance. **D7 still blocks Phase 5**, and the seed now carries returns and credit
+notes so that work has data waiting for it.
 
 **Two parts of the PO screen were deliberately NOT built**, and neither is
 blocked on the business:

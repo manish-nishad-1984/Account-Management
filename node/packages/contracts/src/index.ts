@@ -13,6 +13,7 @@ export * from "./approvals";
 export * from "./items";
 export * from "./purchase-requests";
 export * from "./purchase-orders";
+export * from "./purchase-invoices";
 export * from "./inventory-inward";
 export * from "./inward-challans";
 export * from "./item-sheet";

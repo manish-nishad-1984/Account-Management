@@ -5,3 +5,4 @@ export * from "./procurement";
 export * from "./inventory";
 export * from "./inward-challans";
 export * from "./purchase-orders";
+export * from "./purchase-invoices";

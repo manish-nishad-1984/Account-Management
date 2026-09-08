@@ -89,11 +89,13 @@ const routes = (over: Partial<Record<string, unknown>> = {}) =>
     [/\/suppliers\/approvals$/, over.supplierApprove ?? { updated: 1 }],
     [/\/inward-challans\/approvals$/, over.challanApprove ?? { updated: 1 }],
     [/\/purchase-orders\/approvals$/, over.poApprove ?? { updated: 1 }],
+    [/\/purchase-invoices\/approvals$/, over.piApprove ?? { updated: 1 }],
     [/\/purchase-requests$/, over.pr ?? EMPTY],
     [/\/items$/, over.items ?? EMPTY],
     [/\/suppliers$/, over.suppliers ?? EMPTY],
     [/\/inward-challans$/, over.challans ?? challanList([])],
     [/\/purchase-orders$/, over.po ?? EMPTY],
+    [/\/purchase-invoices$/, over.pi ?? EMPTY],
     [/\/sites\/assignable$/, { rows: [], nextCursor: null, total: 0 }],
   ]);
 
@@ -108,6 +110,10 @@ const ALL = [
   "inward-challan.approve",
   "purchase-orders.view",
   "purchase-orders.approve",
+  // SINGULAR. The active production form row is "Purchase  Invoice"; its
+  // neighbour above is plural. Neither is a house style.
+  "purchase-invoice.view",
+  "purchase-invoice.approve",
 ];
 
 const panel = async (title: string) => {
@@ -171,20 +177,81 @@ describe("DashboardPage", () => {
   });
 
   /**
-   * Convention 2. The one remaining Phase 4 queue has no table behind it, so it
-   * must not render as an empty queue — which would read as "nothing is pending".
+   * ALL SIX QUEUES ARE REAL NOW.
    *
-   * Purchase Orders was the other one until 8 Sep 2026. It now has a table, so it
-   * renders a real queue; leaving its "not migrated" notice up would have been a
-   * false statement on the landing page.
+   * This test used to assert the opposite — that the Purchase Invoices panel said
+   * "Not migrated" and named the reason, which was convention 2 working as
+   * intended while the table did not exist. It does now, so the assertion is
+   * inverted rather than deleted: a notice claiming a built screen is missing is
+   * a false statement on the landing page, and this is what catches it coming
+   * back.
    */
-  it("says which queue is not migrated, and why", async () => {
+  it("renders all six queues, with no 'not migrated' notice left", async () => {
     routes();
     renderWithAuth(<DashboardPage />, { permissions: ALL });
 
     const invoices = await panel("Purchase Invoices");
-    expect(within(invoices).getByText("Not migrated")).toBeInTheDocument();
-    expect(within(invoices).getByText(/Supplier invoices are not migrated/)).toBeInTheDocument();
+    expect(within(invoices).queryByText("Not migrated")).not.toBeInTheDocument();
+    expect(screen.queryByText(/not migrated/i)).not.toBeInTheDocument();
+
+    for (const title of [
+      "Purchase Requests",
+      "Items",
+      "Suppliers",
+      "Inward Challans",
+      "Purchase Orders",
+      "Purchase Invoices",
+    ]) {
+      expect(await panel(title)).toBeInTheDocument();
+    }
+  });
+
+  /**
+   * The queue shows `displayNo`, which falls back when the SUPPLIER's number is
+   * absent. The legacy list renders that row as a blank, unclickable cell — worst
+   * of all in an approval queue, where the whole point is to decide about a
+   * specific document.
+   */
+  it("renders purchase invoices as a real queue, identified by displayNo", async () => {
+    routes({
+      pi: list([
+        {
+          id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+          displayNo: "BB/154",
+          supplierInvoiceNo: "BB/154",
+          invoiceNo: null,
+          invoiceType: "Purchase",
+          siteId: "22222222-2222-2222-2222-222222222222",
+          siteName: "Akwada Lake Front",
+          supplierId: "44444444-4444-4444-4444-444444444444",
+          supplierName: "AL BURHAN PIPES",
+          companyId: "55555555-5555-5555-5555-555555555555",
+          companyName: "DH PATEL",
+          siteGroupId: null,
+          siteGroupName: null,
+          documentDate: "2026-08-07T00:00:00.000Z",
+          subtotal: "15000.00",
+          totalGstAmount: "2700.00",
+          totalDiscount: "0.00",
+          tds: "0.00",
+          roundOff: "0.00",
+          totalAmount: "17673.00",
+          lineCount: 2,
+          paymentStatus: null,
+          isPaidOut: false,
+          isApproved: false,
+          createdAt: "2026-08-07T00:00:00.000Z",
+          capabilities: { canEdit: true, canDelete: true, canApprove: true },
+        },
+      ]),
+    });
+    renderWithAuth(<DashboardPage />, { permissions: ALL });
+
+    const invoices = await panel("Purchase Invoices");
+    expect(await within(invoices).findByText("BB/154")).toBeInTheDocument();
+    expect(within(invoices).getByText("AL BURHAN PIPES")).toBeInTheDocument();
+    // Indian digit grouping, as everywhere else.
+    expect(within(invoices).getByText("17,673.00")).toBeInTheDocument();
   });
 
   it("renders purchase orders as a real queue now that the table exists", async () => {

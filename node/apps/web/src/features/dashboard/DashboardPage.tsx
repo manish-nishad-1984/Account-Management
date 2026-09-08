@@ -3,6 +3,7 @@ import {
   APPROVAL_QUEUE_SIZE,
   type InwardChallanRow,
   type ItemRow,
+  type PurchaseInvoiceRow,
   type PurchaseOrderRow,
   type PurchaseRequestRow,
   type SupplierRow,
@@ -13,6 +14,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { usePurchaseRequestList } from "../purchase-requests/api";
 import { usePurchaseOrderList } from "../purchase-orders/api";
+import { usePurchaseInvoiceList } from "../purchase-invoices/api";
 import { useInwardChallanList } from "../inward-challans/api";
 import { useItemList } from "../items/api";
 import { useSupplierList } from "../suppliers/api";
@@ -23,13 +25,14 @@ import { formatMoney } from "../../lib/format";
  * The approval cockpit — `/Home/Index` in the source.
  *
  * Six pending-approval queues, each with a select-all in its Approve column
- * header and one bulk action. FIVE of the six are here.
+ * header and one bulk action. ALL SIX ARE HERE.
  *
- * Purchase Orders joined on 8 Sep 2026 when that module landed. The one still
- * missing — Purchase Invoice — reads a table that has not been migrated, so it
- * says which and why rather than rendering a queue that is empty because nothing
- * feeds it. A dashboard that looks populated and is not is worse than one that
- * admits what it cannot see (convention 2).
+ * Purchase Orders joined on 8 Sep 2026 when that module landed, and Purchase
+ * Invoices on the same day when theirs did — the last of the two that had stood
+ * as a `NotMigrated` panel naming the table it could not read. That component is
+ * gone with them; a dashboard that looks populated and is not is worse than one
+ * that admits what it cannot see (convention 2), but there is nothing left to
+ * admit here, and keeping the apology around would be its own kind of stale.
  *
  * The queues read the SAME hooks the list screens use, deliberately. A
  * dashboard with its own idea of what "pending" means drifts from the screen it
@@ -55,6 +58,13 @@ export function DashboardPage() {
   // Site-scoped like the two above. Pending means unapproved, whatever the
   // active flag says — an inactive order awaiting approval is still awaiting it.
   const orders = usePurchaseOrderList(
+    { ...QUEUE_PARAMS, sortBy: "createdAt", sortDir: "desc" },
+    PENDING,
+  );
+  // The SIXTH queue, and the last of the two §5p had to leave as "not migrated".
+  // Sorted on createdAt because documentDate is nullable and cannot be a keyset
+  // column — see the purchase invoice contract.
+  const invoices = usePurchaseInvoiceList(
     { ...QUEUE_PARAMS, sortBy: "createdAt", sortDir: "desc" },
     PENDING,
   );
@@ -119,9 +129,14 @@ export function DashboardPage() {
           columns={PURCHASE_ORDER_COLUMNS}
         />
 
-        <NotMigrated
+        <ApprovalQueue<PurchaseInvoiceRow>
           title="Purchase Invoices"
-          reason="Supplier invoices are not migrated yet. They are still behind the GST calculator question — doc 19, question 2 — which purchase orders turned out not to need."
+          subject="purchase-invoice"
+          resource="purchase-invoices"
+          to="/purchase-invoices"
+          query={invoices}
+          ready={scope.isReady}
+          columns={PURCHASE_INVOICE_COLUMNS}
         />
       </div>
 
@@ -160,24 +175,6 @@ export function DashboardPage() {
   );
 }
 
-/** A queue whose table does not exist yet. It names which, and why. */
-function NotMigrated({ title, reason }: { title: string; reason: string }) {
-  return (
-    <Card>
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <h2 className="heading text-sm">{title}</h2>
-          <p className="mt-0.5 text-xs text-slate-500">Not migrated</p>
-        </div>
-        <Badge tone="neutral">Pending</Badge>
-      </div>
-      <p className="rounded-lg bg-slate-50 px-3 py-2.5 text-xs leading-relaxed text-slate-500">
-        {reason}
-      </p>
-    </Card>
-  );
-}
-
 const Absent = () => <span className="text-slate-300">—</span>;
 
 const PURCHASE_REQUEST_COLUMNS: QueueColumn<PurchaseRequestRow>[] = [
@@ -192,6 +189,27 @@ const PURCHASE_REQUEST_COLUMNS: QueueColumn<PurchaseRequestRow>[] = [
 
 const PURCHASE_ORDER_COLUMNS: QueueColumn<PurchaseOrderRow>[] = [
   { key: "poNo", header: "PO No", cell: (row) => row.poNo },
+  { key: "supplierName", header: "Supplier", cell: (row) => row.supplierName ?? <Absent /> },
+  { key: "siteName", header: "Site", cell: (row) => row.siteName ?? <Absent /> },
+  {
+    key: "totalAmount",
+    header: "Total",
+    numeric: true,
+    cell: (row) => formatMoney(row.totalAmount),
+  },
+];
+
+/**
+ * The invoice queue shows `displayNo`, not `supplierInvoiceNo`.
+ *
+ * The number on a purchase invoice is the SUPPLIER'S and may be absent, in which
+ * case the legacy list renders a blank, unclickable cell. `displayNo` falls back
+ * to our own number and then to a placeholder, so a row in an approval queue can
+ * always be identified — which matters more here than anywhere, since the whole
+ * point of the panel is to decide about a specific document.
+ */
+const PURCHASE_INVOICE_COLUMNS: QueueColumn<PurchaseInvoiceRow>[] = [
+  { key: "displayNo", header: "Invoice", cell: (row) => row.displayNo },
   { key: "supplierName", header: "Supplier", cell: (row) => row.supplierName ?? <Absent /> },
   { key: "siteName", header: "Site", cell: (row) => row.siteName ?? <Absent /> },
   {

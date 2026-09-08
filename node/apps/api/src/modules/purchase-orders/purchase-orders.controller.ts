@@ -70,6 +70,13 @@ const SUBJECT = "purchase-orders";
 
 const filterSchema = z.object({
   siteId: z.string().uuid().optional(),
+  /**
+   * Added for the purchase invoice form, whose "bills against" dropdown must
+   * offer only orders from the SAME supplier. Without it Zod strips the unknown
+   * key and the dropdown silently lists every order in the system — a wrong
+   * answer that looks like a working one.
+   */
+  supplierId: z.string().uuid().optional(),
   isApproved: z
     .enum(["true", "false"])
     .optional()
@@ -107,6 +114,7 @@ export class PurchaseOrdersController {
 
     const filters = {
       siteId: query.siteId,
+      supplierId: query.supplierId,
       isApproved: query.isApproved,
       isActive: query.isActive,
     };

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { financialYear, purchaseOrderTotal } from "@accountmanagement/domain";
+import { financialYear, invoiceTotal, purchaseOrderTotal } from "@accountmanagement/domain";
 import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { InMemoryUserRepository, UserRepository } from "./user.repository";
 import { ENV, type Env } from "../../config/env";
@@ -10,6 +10,8 @@ import {
   documentCounters,
   forms,
   items,
+  purchaseInvoiceItems,
+  purchaseInvoices,
   purchaseOrderItems,
   purchaseOrders,
   purchaseRequests,
@@ -161,7 +163,27 @@ export class DevSeed implements OnModuleInit {
      */
     await db.insert(forms).values([
       { id: 1, formName: "User", controller: "User", formGroup: "Masters", isActive: true },
-      { id: 2, formName: "Supplier Invoice", controller: "Invoice", formGroup: "Invoicing", isActive: true },
+      /**
+       * "Purchase  Invoice" — TWO SPACES, copied from production byte for byte.
+       *
+       * It read "Supplier Invoice" until 8 Sep 2026, which slugs to
+       * `supplier-invoice` — so every call from the new screen would have 403'd
+       * the moment it stopped being a placeholder. Same defect as the purchase
+       * order row had, found the same way, this time BEFORE the deploy rather
+       * than from a live 403.
+       *
+       * The double space is deliberate and must not be tidied. Production's
+       * ACTIVE row really is `Purchase  Invoice` (id 9), so seeding the exact
+       * string is what makes local and production derive the same subject. It
+       * collapses to `purchase-invoice` because `slug()` replaces RUNS of
+       * non-alphanumerics — which means this row also pins that behaviour, and
+       * "fixing" the space here would hide a regression in `slug` rather than
+       * prevent one.
+       *
+       * SINGULAR, where purchase orders are PLURAL. Each matches its own active
+       * production row; neither is a house style to copy.
+       */
+      { id: 2, formName: "Purchase  Invoice", controller: "InvoiceMaster", formGroup: "Invoicing", isActive: true },
       /**
        * "Purchase Orders" — PLURAL, matching the only ACTIVE row in production.
        *
@@ -282,7 +304,23 @@ export class DevSeed implements OnModuleInit {
     const admin = seeded.find((u) => u.userName === "devuser")!;
     await db.insert(userFormPermissions).values([
       { userId: admin.id, formId: 1, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
-      { userId: admin.id, formId: 2, isViewAllow: true, isEditAllow: true, isApproved: true },
+      /**
+       * Purchase Invoice, with all five rights.
+       *
+       * View + edit + approve was enough while the screen was a placeholder. It
+       * now has a list, a form, single approval, bulk approval and a delete, and
+       * every one of those is guarded — so the missing add and delete would have
+       * been two 403s on a screen whose other buttons worked.
+       */
+      {
+        userId: admin.id,
+        formId: 2,
+        isViewAllow: true,
+        isAddAllow: true,
+        isEditAllow: true,
+        isDeleteAllow: true,
+        isApproved: true,
+      },
       /**
        * Purchase Order, with all five rights.
        *
@@ -538,6 +576,151 @@ export class DevSeed implements OnModuleInit {
         nextValue: ordersPerCompany + 1,
       })),
     );
+
+    /**
+     * Purchase invoices — the document B-2 was written about.
+     *
+     * Totals come from `invoiceTotal.corrected()`, the same function the API
+     * uses, for the reason the orders above give: a seed with hand-written
+     * totals disagrees with the application the moment either changes, and the
+     * disagreement reads as an arithmetic bug.
+     *
+     * WHAT THIS SEED IS SHAPED TO EXERCISE, because a screen that has never seen
+     * these locally is a screen that meets them first in production:
+     *
+     *  - EVERY invoice carries TDS or an adjustment or both, so the two terms
+     *    the live calculator silently drops are visible in every total here.
+     *  - Adjustments are NEGATIVE as often as positive — nudging a total down to
+     *    match a supplier's paperwork is the common case and a signed column
+     *    that only ever holds positives is untested.
+     *  - Discounts are per unit and on some lines only, so the derived percent
+     *    column has both a zero and a real value to render.
+     *  - Supplier numbers are in the real formats from `10-purchase-invoice.md`
+     *    — `BB/154`, `016`, `AE/26-27/00872` — including two suppliers reusing
+     *    the SAME number, which the contract deliberately permits.
+     *  - One invoice has NO supplier number at all, so `displayNo`'s fallback is
+     *    exercised rather than assumed. That is the row the legacy list renders
+     *    as an empty, unclickable link.
+     *  - All three invoice types appear, so the returns the reports will have to
+     *    treat differently (D7) already exist as data.
+     */
+    const invoicesPerCompany = 3;
+    const invoiceRows: (typeof purchaseInvoices.$inferInsert)[] = [];
+    const invoiceLineRows: (typeof purchaseInvoiceItems.$inferInsert)[] = [];
+
+    /** Per-site counter, for the reason `ordersAtSite` explains at length. */
+    const invoicesAtSite = new Map<number, number>();
+
+    const SUPPLIER_NUMBER_FORMATS = [
+      (n: number) => `BB/${150 + n}`,
+      (n: number) => String(10 + n).padStart(3, "0"),
+      (n: number) => `AE/26-27/${String(800 + n).padStart(5, "0")}`,
+      (n: number) => `BE-2026-27-${4700 + n}`,
+      // Deliberately CONSTANT: several suppliers all issue an invoice numbered
+      // "016". No uniqueness is claimed across suppliers or within one, and the
+      // list must stay usable when the number is not a key.
+      () => "016",
+    ];
+
+    insertedCompanies.forEach((company, companyIndex) => {
+      for (let n = 0; n < invoicesPerCompany; n += 1) {
+        const invoiceId = randomUUID();
+        const offset = companyIndex * invoicesPerCompany + n;
+
+        const siteIndex = offset % insertedSites.length;
+        const seqAtSite = invoicesAtSite.get(siteIndex) ?? 0;
+        invoicesAtSite.set(siteIndex, seqAtSite + 1);
+
+        const lineCount = 2 + (offset % 3);
+        const lines = Array.from({ length: lineCount }, (_, l) => {
+          const item = insertedItems[(offset * 5 + l) % insertedItems.length]!;
+          const quantity = l === 1 ? "3.50" : String((l + 1) * 8) + ".00";
+          const unitPrice = String(180 + offset * 41 + l * 17) + ".00";
+          // No discount on every third line, so the derived percent column shows
+          // both "0.00" and a real figure.
+          const discountPerUnit = l % 3 === 2 ? "0" : String(5 + l * 2) + ".00";
+          const gstPercent = ["18.00", "12.00", "5.00", "28.00"][l % 4]!;
+          return { item, quantity, unitPrice, discountPerUnit, gstPercent };
+        });
+
+        // Every invoice has at least one of the two, and the adjustment is
+        // negative half the time.
+        const tds = offset % 2 === 0 ? String(250 + offset * 15) + ".00" : "0";
+        const roundOff = offset % 2 === 0 ? "0" : (offset % 4 === 1 ? "-" : "") + "12.50";
+
+        const totals = invoiceTotal.corrected(
+          lines.map((line) => ({
+            unitPrice: line.unitPrice,
+            quantity: line.quantity,
+            discountPerUnit: line.discountPerUnit,
+            gstPercent: line.gstPercent,
+          })),
+          { tds, roundOff },
+        );
+
+        // One in nine has no supplier number, so `displayNo` falls back.
+        const hasSupplierNo = offset % 9 !== 4;
+        const format = SUPPLIER_NUMBER_FORMATS[offset % SUPPLIER_NUMBER_FORMATS.length]!;
+
+        invoiceRows.push({
+          id: invoiceId,
+          supplierInvoiceNo: hasSupplierNo ? format(offset) : null,
+          invoiceNo: hasSupplierNo ? null : `INV/${financialYearLabel}/${offset}`,
+          // One in seven is a return or a credit note. gcd(7, 45) = 1, so these
+          // do not land on the same sites every time.
+          invoiceType:
+            offset % 7 === 3 ? "Purchase Return" : offset % 7 === 5 ? "Credit Note" : "Purchase",
+          siteId: insertedSites[siteIndex]!.id,
+          supplierId: insertedSuppliers[offset % insertedSuppliers.length]!.id,
+          companyId: company.id,
+          // Every third invoice cites the purchase order it bills against — the
+          // text match that becomes a real foreign key here.
+          purchaseOrderId: offset % 3 === 0 ? orderRows[offset % orderRows.length]!.id! : null,
+          documentDate: new Date(Date.UTC(2026, 7, ((offset * 7) % 27) + 1)),
+          challanNo: `CH-${2000 + offset}`,
+          lrNo: offset % 2 === 0 ? `LR-${500 + offset}` : null,
+          vehicleNo: offset % 2 === 0 ? `GJ 01 AB ${1000 + offset}` : null,
+          dispatchBy: offset % 2 === 0 ? "Road" : "Rail",
+          paymentTerms: "30 days from invoice",
+          contactName: "Stores",
+          contactNumber: "9825054321",
+          subtotal: totals.subtotal,
+          totalGstAmount: totals.totalGst,
+          totalDiscount: totals.totalDiscount,
+          tds: totals.tds,
+          roundOff: totals.roundOff,
+          totalAmount: totals.grandTotal,
+          // Carried from the payments screens, which are Phase 5 — held so the
+          // list can show a state it does not itself write.
+          paymentStatus: offset % 4 === 0 ? "Paid" : offset % 4 === 1 ? "Part paid" : "Unpaid",
+          isPaidOut: offset % 4 === 0,
+          // First invoice at each site pending, the rest approved — so the sixth
+          // dashboard queue has a row at every site.
+          isApproved: seqAtSite > 0,
+          createdBy: admin.id,
+        });
+
+        lines.forEach((line, l) => {
+          invoiceLineRows.push({
+            purchaseInvoiceId: invoiceId,
+            itemId: line.item.id,
+            unitId: line.item.unitId,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            discountPerUnit: line.discountPerUnit,
+            gstPercent: line.gstPercent,
+            gstAmount: totals.lines[l]!.gstAmount,
+            netAmount: totals.lines[l]!.netAmount,
+            lineTotal: totals.lines[l]!.total,
+            lineNumber: l + 1,
+            createdBy: admin.id,
+          });
+        });
+      }
+    });
+
+    await db.insert(purchaseInvoices).values(invoiceRows);
+    await db.insert(purchaseInvoiceItems).values(invoiceLineRows);
 
     /**
      * Inventory arrivals.

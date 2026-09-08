@@ -18,9 +18,24 @@ without asking would silently change your invoice totals, your supplier balances
 your reports — and you would have no way of knowing it had happened. So we are
 asking instead.
 
-**Five of these block the work.** We cannot start on invoicing — the largest and
-most sensitive part of the rebuild — until questions 1 to 5 are answered. The rest
-we can work around for a while, but not indefinitely.
+~~**Five of these block the work.** We cannot start on invoicing — the largest and
+most sensitive part of the rebuild — until questions 1 to 5 are answered.~~
+
+**Updated 8 Sep 2026: invoicing is no longer blocked, and the purchase invoice
+screen is built.** We were able to settle the calculation ourselves by running
+your existing scripts rather than asking you to choose between them. Two things
+follow, and the difference between them matters:
+
+- **Nothing is waiting on you in order for us to keep building.** Purchase
+  orders and purchase invoices are done; sales invoices use the same
+  calculation and are next.
+- **What IS waiting on you is what to do about documents already issued.**
+  Questions 1, 2 and 3 are about existing data — totals that may not match their
+  own lines, TDS that may not have been deducted, returns added instead of
+  subtracted. Every day those go unanswered is a day more documents are added to
+  whatever the answer turns out to cover.
+
+The rest we can work around for a while, but not indefinitely.
 
 **What we need back:** a yes/no or a choice on each. Not a written report. A
 half-hour conversation would settle most of them.
@@ -32,7 +47,11 @@ listing them because the rebuild is the moment they can be fixed.
 
 ---
 
-# Part 1 — The five that block the work
+# Part 1 — The five most urgent
+
+*(Titled "the five that block the work" until 8 Sep 2026. They no longer block the
+building; three of them now decide what happens to documents already issued, and
+question 3 blocks the supplier balance reports. They are still the urgent five.)*
 
 ## Question 1 — Invoice totals may change by one paisa
 
@@ -77,9 +96,47 @@ same output.
 > loads only ONE calculator, and it has no discount, no TDS and no round-off
 > anywhere on it — which are the three things the calculators disagree about. So
 > a purchase order has one clear total, and we have built that screen without
-> pre-empting your answer here. **Nothing in this question needs to be rushed on
-> account of purchase orders.** It still holds up supplier invoices and sales
-> invoices, which is where the money risk actually sits.
+> pre-empting your answer here.
+
+> **THE PURCHASE INVOICE SCREEN IS NOW BUILT TOO, and this question is no longer
+> holding up any building work.** Added 8 Sep 2026, later the same day. We were
+> able to settle the arithmetic ourselves, by running your scripts rather than
+> asking you to arbitrate between them, so the new screen calculates correctly —
+> every line counted, discount applied, TDS deducted, adjustment added.
+>
+> **What we still need from you is about the invoices you have ALREADY issued,
+> not about the new screen.** That is questions 3 and 4 below, and the checks in
+> "We still need you to confirm it on the real screen" further down. Nothing is
+> waiting on you to write code; what is waiting is knowing how many existing
+> documents are affected and what you want done about them.
+>
+> One thing we found that you should know about regardless — see **"A rule
+> nobody had written down"** immediately below.
+
+### A rule nobody had written down
+
+**Every invoice total your system has ever produced is rounded to a whole rupee,
+and exactly 50 paise is rounded DOWN.**
+
+We found this in the calculator while checking something else. It is not in any
+document, and nobody mentioned it to us — but it is in the code, and your own
+invoice list corroborates it: every total on it ends in `.00`.
+
+Ordinary commercial rounding takes 50 paise UP. Yours takes it down, which is
+always in the supplier's favour and never in yours. On a single invoice it is at
+most 50 paise. Across a year of invoices it is not nothing.
+
+**We have reproduced it exactly**, because it is how every document you have
+issued was calculated and changing it quietly would be precisely the kind of
+silent change this document exists to prevent. The new screen also says so on
+screen, so nobody reports the missing paise as a bug.
+
+> **Decision:** keep the rule as it is? ☐ Keep (recommended — it matches every
+> invoice you have issued) ☐ Change to normal rounding (50 paise goes up) ☐ Stop
+> rounding to whole rupees entirely
+>
+> If you change it, new invoices and old ones will round differently. That is
+> fine, but it should be a decision rather than a surprise.
 
 ### What it showed
 
@@ -484,9 +541,10 @@ separate approval like hand-entered ones do?
 
 | # | Question | Blocks work? | Decision |
 |---|---|---|---|
-| 1 | Invoice totals may shift by ₹0.01 | **Yes** | |
-| 2 | Create Invoice may be dropping TDS | **Yes** | |
-| 3 | Purchase Returns added, not subtracted | **Yes** | |
+| 1 | Invoice totals may shift by ₹0.01 | Affects ISSUED invoices | |
+| 1a | **Totals are rounded to a whole rupee, 50p DOWN** — keep it? | Affects ISSUED invoices | |
+| 2 | Create Invoice may be dropping TDS | Affects ISSUED invoices | |
+| 3 | Purchase Returns added, not subtracted | **Yes — blocks reports** | |
 | 4 | April stamped with the wrong FY | **Yes** | |
 | 5 | Two reports always blank | **Yes** | |
 | 6 | Should PR link to PO? | No | |
@@ -498,10 +556,14 @@ separate approval like hand-entered ones do?
 | 12 | Record over the list, or beside it | **Gets dearer weekly** | |
 | 13 | Does uploading a spreadsheet approve the items? | No | |
 
-**The five blocking questions have roughly a 2–4 week turnaround in our experience,
-and nothing about the invoicing rebuild can start until they are settled.** Question
-2 is the one to act on first, because it may affect data that is being created right
-now.
+**Updated 8 Sep 2026.** The invoicing rebuild is no longer waiting on these — the
+purchase invoice screen is built, and it calculates correctly. What questions 1,
+1a and 2 now decide is **what happens to the invoices you have already issued**,
+and question 3 still blocks the supplier balance reports.
+
+**Question 2 is still the one to act on first**, because it may affect data that
+is being created right now, and every day it goes unanswered adds documents to
+whatever the answer turns out to cover.
 
 ---
 
@@ -512,6 +574,7 @@ now.
 | Question here | Rule in `07-Business-Rule-Inventory.md` |
 |---|---|
 | 1 | D2 group, consequence (b) and (c) |
+| 1a | `roundToWholeRupeeAsProduced` in `packages/domain/src/money.ts` |
 | 2 | D-JS-1 |
 | 3 | D7 (and `:272`, the zero-balance filter) |
 | 4 | D1–D4, shared defect 4 |
