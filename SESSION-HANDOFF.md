@@ -8,6 +8,12 @@ handoff. Sections §5, §5b … §5n are a log of days that already happened and
 never edited.** If the two disagree, the numbered sections win — run
 `/handoff check` and it will say which have drifted.
 
+**Starting a session? Type `/handoff`.** It reads this file, checks it against
+`git log` in case commits landed after it was written, reports what is live and
+what is running locally, and stops. **Ending one? Type `/handoff` again** — with
+work behind it, the same command re-measures and updates this file. It picks the
+direction from whether the session has done anything yet.
+
 Read this first, then `README.md`, then `Migration-Assessment/01-Executive-Summary.md`
 and `18-GO-NO-GO-Assessment.md`.
 
@@ -1242,8 +1248,30 @@ never carried forward from the section above it.
 `/handoff check` reports drift and changes nothing, which is how you decide
 whether the full pass is worth the time. `/handoff opener` prints the short
 message to paste into a new window — deliberately short, because the constraints
-belong in this file and in `CLAUDE.md`, not in a chat message that becomes a
-second copy to keep current.
+belong in this file, not in a chat message that becomes a second copy to keep
+current.
+
+### It has two ends, because that is where it gets typed
+
+The command was written as an end-of-session tool, and the user's first reaction
+was that they would type it at the *start* of the next one. That is the better
+interface and the design was wrong, so it now runs both ways:
+
+| Typed | Does |
+|---|---|
+| `/handoff` in a fresh session | **Reads** this file, checks it against `git log`, reports state, changes nothing |
+| `/handoff` after real work | Re-measures, refreshes, appends, commits |
+
+Bare invocation decides from whether the session has done anything yet, and when
+it is close, it reads rather than writes. **The failure the other way is the
+expensive one:** a write pass on a fresh session spends minutes on the suites and
+then appends a §5x recording a session in which nothing happened — a false
+section, in the one file whose value is that it can be trusted.
+
+`start` also checks whether ports 3000 and 5180 are already listening before
+offering `/run-local`. A previous session usually leaves them up, and the
+reflex to boot them again either fails on `--strictPort` or restarts a working
+stack for nothing.
 
 ### Also corrected in this pass
 

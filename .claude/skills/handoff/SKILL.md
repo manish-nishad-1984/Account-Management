@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Hand this session over to the next one by bringing SESSION-HANDOFF.md up to date - append what this session did, refresh the always-current sections that go stale, verify the claims by running the suites, and commit. Pass "check" to report the drift without writing anything, "opener" to print the message to paste into the new session. Use whenever the user asks to hand off, wrap up, end or summarise the session, to write the handoff, or to start a fresh session without losing context.
+description: Both ends of a session handoff for this project. At the START of a session it reads SESSION-HANDOFF.md and reports where the work stands, changing nothing. At the END it brings that file up to date - re-measures the test counts, refreshes the sections that go stale, appends what this session did, and commits. Bare invocation picks the right one from whether this session has done any work yet; "start" and "write" force it. Also "check" to report drift without writing, "opener" to print the paste-in message. Use whenever the user asks to hand off, wrap up, end or summarise a session, to write the handoff, or to pick up / get caught up / resume where the last session left off.
 ---
 
 # Hand this session over to the next one
@@ -40,9 +40,67 @@ their own section and none of them scrolled up.
 
 | Argument | Do |
 |---|---|
-| (none), `write` | The full pass: verify, refresh, append, commit |
+| `start` (`read`, `resume`) | **Read** the handoff and report where things stand. Change nothing. |
+| `write` | The full pass: verify, refresh, append, commit |
 | `check` | Report what has drifted. **Change nothing.** |
-| `opener` | Print the short message to paste into the new session |
+| `opener` | Print the short message to paste into the next session |
+| (none) | **Decide between `start` and `write` — see below** |
+
+### What a bare `/handoff` means
+
+It is genuinely ambiguous, and it is typed at both ends of a session. Decide from
+what this session has actually done:
+
+- **Nothing yet** — no files edited, no commits, the conversation is a few turns
+  old — then it means **`start`**. The user has just opened a window and wants to
+  know where things are.
+- **Real work has happened** — edits, commits, a deploy — then it means
+  **`write`**.
+
+When it is close to the line, do `start`: it is read-only, it costs seconds, and
+the user can then ask for `write`. **The failure the other way is expensive** — a
+`write` on a fresh session runs the full suites for several minutes and then
+appends a §5x section recording a session in which nothing happened, which is
+exactly the kind of false content this file must not accumulate.
+
+---
+
+## start
+
+The first thing a new session should do. It is read-only.
+
+1. **Read `SESSION-HANDOFF.md`.** All of it, not the first screen. It is ~1500
+   lines and that is the point — the traps in §5x and §7 are what stop the
+   session re-learning them the expensive way.
+2. **Check the file against reality**, quickly, because it was written before
+   whatever happened since:
+
+   ```bash
+   git log --oneline -8
+   git status --short
+   git rev-parse HEAD origin/main
+   ```
+
+   The header names the commit the doc was current at. If `git log` shows commits
+   after it, **say so** — the doc is behind and the newer commits win.
+3. **Check whether the dev servers are already up** before offering to start
+   them. A previous session often leaves 3000 and 5180 listening, and
+   `/run-local` would fail on `--strictPort` or needlessly restart them:
+
+   ```powershell
+   foreach ($p in 3000,5180) { Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue }
+   ```
+
+   Never inspect or kill **5173** — it is another of the user's apps.
+4. **Report in a few lines**: what is live and at which release, what is running
+   locally, the NOW row from `Migration-Assessment/legacy-screens/PLAN.md`, and
+   anything in §8 still waiting on the user. Then stop and let them say what they
+   want.
+
+**Do not start work off the back of `start`.** Reporting the state is the whole
+job; the user picks the task. And do not re-run the test suites here — the file
+records what they were last measured at, and re-measuring is `check`'s job, not
+an opening ritual.
 
 ---
 
