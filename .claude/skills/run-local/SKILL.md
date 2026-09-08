@@ -68,11 +68,20 @@ scratchpad so the output can be read if something fails.
 
 ```bash
 # API
-cd "<repo>/node/apps/api" && NODE_ENV=development PORT=3000 node dist/main.js > "<scratchpad>/api.log" 2>&1
+cd "<repo>/node/apps/api" && NODE_ENV=development PORT=3000 node dist/main.js > "<scratchpad>/api-<stamp>.log" 2>&1
 
 # Web
-cd "<repo>/node/apps/web" && npx vite --port 5180 --strictPort > "<scratchpad>/web.log" 2>&1
+cd "<repo>/node/apps/web" && npx vite --port 5180 --strictPort > "<scratchpad>/web-<stamp>.log" 2>&1
 ```
+
+**Give each boot its own log file** (`<stamp>` = `date +%H%M%S`). Appending every
+attempt to one `api.log` interleaves a healthy boot with a failed one, and the
+`EADDRINUSE` stack trace from a duplicate then reads as though the running server
+had crashed. That cost real time on 8 Sep 2026.
+
+**These servers do not outlive the session that starts them.** They are reaped at
+teardown, so a later session inherits nothing — do not tell the user, or the next
+session, that the stack is "already running" without curling it first.
 
 `--strictPort` is deliberate: it must fail loudly rather than silently drift onto
 5173 and collide with the user's other app.
@@ -133,8 +142,26 @@ foreach ($p in 3000,5180,5173) {
 
 Check 5173 in the readback only to confirm it was **not** disturbed. Never stop it.
 
-Background tasks that were killed report a non-zero exit (commonly 127). That is
-the kill being reported, not a failure — don't present it as an error.
+Background tasks that were killed report a non-zero exit (commonly 127). Under
+`stop`, that is the kill being reported, not a failure — don't present it as an
+error.
+
+**Outside `stop`, never read anything into the exit code. Check the port.**
+Observed on 8 Sep 2026, in one session:
+
+| Exit | What it actually meant |
+|---|---|
+| `127` | The API had **genuinely died**. Port 3000 was free. |
+| `127` | Vite had **genuinely died**. Port 5180 was free. |
+| `1` | A duplicate launch lost the bind race with `EADDRINUSE` — the app was serving fine |
+
+So the same code meant "dead" and "deliberately stopped", and a different code
+meant "perfectly healthy". A notification saying **failed** is not evidence the
+server is down, and one saying nothing is not evidence it is up. Curl the port.
+
+Treating 127 as always-benign is the dangerous half: it reads as reassurance
+about a server that has actually stopped, and the next thing anyone does is
+wonder why the app is broken.
 
 ---
 

@@ -1312,6 +1312,33 @@ prove it** with `git diff --name-only <measured-at>..HEAD` and say so. That is a
 measurement too, and a cheaper one. What is forbidden is a number that was
 neither run nor proved — and "I assume it still passes" is neither.
 
+### A background server's exit code means nothing — check the port
+
+Found at the very end of the session, by four "failed" task notifications
+arriving in a row while the app was, variously, fine and not fine.
+
+| Exit | What it actually meant |
+|---|---|
+| `127` | The API had **genuinely died**. Port 3000 was free. |
+| `127` | Vite had **genuinely died**. Port 5180 was free. |
+| `1` | A duplicate launch lost the bind race with `EADDRINUSE` — the app was serving perfectly |
+
+The same code meant "dead" and "deliberately stopped"; a different code meant
+"healthy". `/run-local` said a non-zero exit "is the kill being reported, not a
+failure — don't present it as an error", which is true under `stop` and
+**dangerously wrong elsewhere**: it reads as reassurance about a server that has
+actually stopped. Both skills now say to curl the port and ignore the code.
+
+**And these servers do not outlive the session that starts them.** Both were
+launched, verified answering, and reaped minutes later. So a handoff must never
+tell the next session the stack is "already running" — mine did, and it was false
+within the hour. `/handoff start` now says to expect the ports closed.
+
+One contributing mistake was mine: pointing every boot at the same `api.log`.
+A healthy boot and a failed one interleave there, and the `EADDRINUSE` trace from
+the duplicate reads as though the running server had crashed. Each boot gets its
+own stamped log now.
+
 ### The honest cost
 
 This session produced no application code. Four commits, all documentation and

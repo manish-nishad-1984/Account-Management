@@ -83,13 +83,22 @@ The first thing a new session should do. It is read-only.
 
    The header names the commit the doc was current at. If `git log` shows commits
    after it, **say so** — the doc is behind and the newer commits win.
-3. **Check whether the dev servers are already up** before offering to start
-   them. A previous session often leaves 3000 and 5180 listening, and
-   `/run-local` would fail on `--strictPort` or needlessly restart them:
+3. **Check whether the dev servers are up. Expect them not to be.**
 
    ```powershell
    foreach ($p in 3000,5180) { Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue }
    ```
+
+   Servers started in an agent session are **reaped when that session ends** —
+   observed repeatedly on 8 Sep 2026, both the API and Vite, each dying minutes
+   after being launched and verified. So a previous session almost never leaves
+   a usable stack behind, whatever its closing message claimed.
+
+   **Check the port, never the exit code.** A backgrounded server's exit status
+   is uninformative in both directions: `127` appeared both for a server that had
+   genuinely died and for one merely killed at teardown, and `1` appeared for a
+   duplicate that lost the bind race while the app was serving perfectly. The
+   only authority is whether the port answers.
 
    Never inspect or kill **5173** — it is another of the user's apps.
 4. **Report in a few lines**: what is live and at which release, what is running
