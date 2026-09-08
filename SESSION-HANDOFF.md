@@ -2046,7 +2046,7 @@ Failed: 0, Passed: 19`.
 
 ## 5q. Running it for the user to check, and the queue that looked broken and was not (8 Sep 2026)
 
-Committed as `<COMMIT>`. **No code changed in this session** — the 776 figure in
+Committed as `cea03b07`. **No code changed in this session** — the 776 figure in
 §3 and §4 is still the `5fdd81f6` measurement, and `git diff --name-only
 5fdd81f6..HEAD` returns nothing but `SESSION-HANDOFF.md`, which is how it was
 proved rather than re-run. What this session produced is three traps and one
