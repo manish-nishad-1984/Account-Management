@@ -7,6 +7,7 @@ import {
   formatBytes,
   isAllowedAttachment,
 } from "./attachments";
+import { uuidId } from "./fields";
 import { createInwardChallanSchema } from "./inward-challans";
 import { createPurchaseRequestSchema } from "./purchase-requests";
 
@@ -141,5 +142,35 @@ describe("an optional id from a select that was left blank", () => {
       quantity: "10.00",
     });
     expect(parsed.itemId).toBeNull();
+  });
+});
+
+/**
+ * REGRESSION. A required select that was never touched.
+ *
+ * `uuidId` was `z.string().uuid("Not a valid identifier")`, so leaving the
+ * supplier dropdown alone on the purchase order form and pressing Save put
+ * "Not a valid identifier" under it — a message about the shape of a value,
+ * on a field whose only problem was that it was empty. Reported from a
+ * screenshot of the form. The blank and the malformed cases now say different
+ * things, and this pins both.
+ */
+describe("a required id from a select that was left blank", () => {
+  it("asks for a choice rather than complaining about the value", () => {
+    const result = uuidId.safeParse("");
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues[0]!.message).toBe("Choose one");
+  });
+
+  it("still calls a present-but-malformed id what it is", () => {
+    const result = uuidId.safeParse("42");
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues[0]!.message).toBe("Not a valid identifier");
+  });
+
+  it("accepts a real one", () => {
+    expect(uuidId.parse("11111111-1111-1111-1111-111111111111")).toBe(
+      "11111111-1111-1111-1111-111111111111",
+    );
   });
 });

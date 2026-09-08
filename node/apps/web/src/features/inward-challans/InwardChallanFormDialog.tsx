@@ -224,7 +224,7 @@ export function InwardChallanFormDialog({
             />
           </FormSection>
 
-          <FormSection title="Attachments">
+          <FormSection title="Attachments" columns={1}>
             {isEdit ? (
               <ChallanAttachments
                 challanId={challanId}

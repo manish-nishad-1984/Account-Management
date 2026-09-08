@@ -186,7 +186,19 @@ export const optionalPercent = (label: string) =>
       }
     });
 
-export const uuidId = z.string().uuid("Not a valid identifier");
+/**
+ * A REQUIRED reference to another record.
+ *
+ * The two ways it can fail are told apart deliberately. An unselected `<select>`
+ * submits the empty string, and the entire message a person then saw under a
+ * dropdown they had simply not touched was **"Not a valid identifier"** — which
+ * describes the value rather than the mistake, and reads as a system fault on
+ * what is only an unfilled field. `min(1)` runs first, so blank now says what to
+ * do about it. A value that IS present and malformed still gets the identifier
+ * message, because there the value really is the problem and it did not come
+ * from the user's typing.
+ */
+export const uuidId = z.string().min(1, "Choose one").uuid("Not a valid identifier");
 
 /**
  * An OPTIONAL reference, from a select with a blank option.

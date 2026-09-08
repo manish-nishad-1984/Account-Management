@@ -273,6 +273,8 @@ export function PurchaseOrderFormDialog({
       formError={formError}
       pending={pending}
       submitLabel={isEdit ? "Save changes" : "Add purchase order"}
+      // Wider than every other form dialog, because this one's body is a grid.
+      size="xl"
     >
       {isEdit && detail.isLoading ? (
         <p className="py-8 text-center text-sm text-slate-500">Loading order…</p>
@@ -344,7 +346,14 @@ export function PurchaseOrderFormDialog({
           </FormSection>
 
           {/* ---------------------------------------------------------------- */}
-          <FormSection title="Products">
+          {/*
+            `columns={1}` IS LOAD-BEARING. FormSection defaults to TWO, so
+            without it the grid and the Add-product button below it become two
+            cells of a two-column layout, side by side — the table is squeezed
+            into half the dialog and cut off after the Unit column, and the
+            button sits in the space where the price and GST boxes should be.
+          */}
+          <FormSection title="Products" columns={1}>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[52rem] text-sm">
                 <thead>
@@ -467,14 +476,14 @@ export function PurchaseOrderFormDialog({
               </table>
             </div>
 
-            <div className="mt-3">
+            <div>
               <Button variant="secondary" icon={Plus} onClick={() => append(EMPTY_LINE)}>
                 Add product
               </Button>
             </div>
 
             {itemsTruncated && (
-              <Alert tone="info" className="mt-3">
+              <Alert tone="info">
                 Showing the first {items.length} of {itemTotal} items. If the one you need is not
                 listed, type its name beside the dropdown — an order line can name a product that
                 is not in the catalogue.
@@ -543,7 +552,8 @@ export function PurchaseOrderFormDialog({
             />
           </FormSection>
 
-          <FormSection title="Terms and conditions">
+          {/* Same reason as Products: these stack, they do not sit side by side. */}
+          <FormSection title="Terms and conditions" columns={1}>
             <TextAreaField
               label="Terms"
               rows={6}
@@ -557,7 +567,7 @@ export function PurchaseOrderFormDialog({
               error={errors.description?.message}
               {...register("description")}
             />
-            <Alert tone="info" className="mt-3">
+            <Alert tone="info">
               The old screen offered three saved templates in a rich text editor. This field is
               plain text until that editor and an HTML sanitiser are added — storing rich text
               without one would put scripts from a saved order onto everyone who opens it.

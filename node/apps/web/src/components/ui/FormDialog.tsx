@@ -43,7 +43,7 @@ export function FormDialog({
   formError?: string | null;
   pending?: boolean;
   submitLabel?: string;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
   children: ReactNode;
 }) {
   const formId = "form-dialog";

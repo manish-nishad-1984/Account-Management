@@ -33,8 +33,11 @@ export interface ModalProps {
   description?: string;
   children: ReactNode;
   footer?: ReactNode;
-  /** `lg` for the multi-section master forms, `sm` for a confirmation. */
-  size?: "sm" | "md" | "lg";
+  /**
+   * `lg` for the multi-section master forms, `sm` for a confirmation, `xl` for
+   * a form whose body is a data-entry GRID rather than a column of fields.
+   */
+  size?: "sm" | "md" | "lg" | "xl";
 }
 
 export function Modal({
@@ -127,6 +130,10 @@ export function Modal({
           size === "sm" && "max-w-md",
           size === "md" && "max-w-xl",
           size === "lg" && "max-w-3xl",
+          // The purchase order grid needs 52rem for its eight columns, so in a
+          // 48rem `lg` it scrolls sideways — which puts the price and GST boxes
+          // off screen while you are typing the line they belong to.
+          size === "xl" && "max-w-5xl",
         )}
       >
         <div className="flex items-start justify-between gap-4 border-b border-slate-200/80 px-5 py-4">
