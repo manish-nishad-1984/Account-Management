@@ -96,7 +96,7 @@ AC/
 ```
 
 **776 tests pass** — 757 Node (34 contracts + 41 domain + 453 API + 229 web)
-plus 19 .NET. Measured at `<COMMIT>` on 8 Sep 2026, not carried forward from the
+plus 19 .NET. Measured at `5fdd81f6` on 8 Sep 2026, not carried forward from the
 previous section. The .NET suite was RUN this time, not proved.
 
 > These two figures — here and in §4 — said **310** for five consecutive sessions
@@ -148,7 +148,7 @@ Branch **`main`**, working tree clean, pushed to `origin/main`. Builds,
 typechecks, and all **776 tests pass** — 757 Node (34 contracts + 41 domain +
 453 API + 229 web) + 19 .NET.
 
-The suites were last measured at **`<COMMIT>`**, the final code commit of
+The suites were last measured at **`5fdd81f6`**, the final code commit of
 8 Sep 2026. Anything after that on `main` is documentation — a handoff always
 commits after its own measurement, so the newest hash is never the one the
 numbers were taken at, and naming it here would be a lie that looks precise.
@@ -163,7 +163,7 @@ numbers were taken at, and naming it here would be a lie that looks precise.
   purchase requests, `a821d564` the legacy-screen documentation, `7a068bde` the
   site scope, `bd97a238` inventory inward, `dbd72d25` inward challans,
   `abf027a2` the money calculators, `53c8a620` attachments, `028a42a9` both
-  record layouts, `65c7dcbd` the Item Master Excel import/export, `<COMMIT>` the
+  record layouts, `65c7dcbd` the Item Master Excel import/export, `5fdd81f6` the
   dashboard approval queues.
 - **`main` is pushed to `origin/main`** and the working tree is clean.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
@@ -1861,7 +1861,7 @@ Tests: **721 Node** (34 contracts + 41 domain + 431 API + 215 web) + 19 .NET =
 
 ## 5p. The dashboard approval queues, and the permission they are NOT gated on (8 Sep 2026)
 
-Committed as `<COMMIT>`. Four of the six panels of `/Home/Index` — the approval
+Committed as `5fdd81f6`. Four of the six panels of `/Home/Index` — the approval
 cockpit, and the reason `approve` is a first-class right rather than a flavour
 of edit.
 
