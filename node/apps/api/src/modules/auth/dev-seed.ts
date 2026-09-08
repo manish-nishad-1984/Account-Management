@@ -428,11 +428,35 @@ export class DevSeed implements OnModuleInit {
     const orderRows: (typeof purchaseOrders.$inferInsert)[] = [];
     const orderLineRows: (typeof purchaseOrderItems.$inferInsert)[] = [];
 
+    /**
+     * How many orders have already been placed at each site.
+     *
+     * Approval is decided from THIS, not from any expression in `offset`, and the
+     * reason is worth stating because two attempts got it wrong before this one.
+     *
+     * The site is `offset % 45`. Anything of the form `f(offset) % 3` is constant
+     * within a site whenever stepping the offset by 45 leaves `f` unchanged mod 3
+     * — which `offset % 3` does (3 divides 45) and which `(companyIndex + n) % 3`
+     * also does (stepping by 45 moves it by exactly 12, and 3 divides 12). Both
+     * produced sites that were uniformly approved, an empty dashboard queue, and
+     * a screen that looks broken while working correctly — the §5q trap arrived
+     * at by arithmetic.
+     *
+     * A per-site counter cannot have that failure by construction: the first
+     * order at every site is pending and the rest are approved, so every site
+     * shows both states no matter how the offsets happen to fall.
+     */
+    const ordersAtSite = new Map<number, number>();
+
     insertedCompanies.forEach((company, companyIndex) => {
       for (let n = 0; n < ordersPerCompany; n += 1) {
         const orderId = randomUUID();
         const seq = n + 1;
         const offset = companyIndex * ordersPerCompany + n;
+
+        const siteIndex = offset % insertedSites.length;
+        const seqAtSite = ordersAtSite.get(siteIndex) ?? 0;
+        ordersAtSite.set(siteIndex, seqAtSite + 1);
 
         // Two or three lines each, so the line count column is not always the
         // same number and the footer aggregate has something to add up.
@@ -476,9 +500,13 @@ export class DevSeed implements OnModuleInit {
           totalAmount: totals.grandTotal,
           // One in four inactive, because the list's status filter defaults to
           // Active and a filter with nothing to exclude proves nothing.
+          // gcd(4, 45) = 1, so this genuinely varies within any one site.
           isActive: offset % 4 !== 3,
-          // A third approved, so both states and both buttons are on screen.
-          isApproved: offset % 3 === 0,
+          // The FIRST order at each site is pending, the rest are approved — so
+          // every site shows both states and every site's dashboard queue has a
+          // row in it. See the note on `ordersAtSite` for the two arithmetic
+          // versions of this that silently did the opposite.
+          isApproved: seqAtSite > 0,
           createdBy: admin.id,
         });
 

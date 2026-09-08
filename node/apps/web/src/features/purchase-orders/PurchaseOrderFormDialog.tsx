@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
 import { Plus, Trash2 } from "lucide-react";
@@ -84,6 +84,37 @@ const EMPTY: FormValues = {
 
 const dateInput = (value: string | null): string => (value ? value.slice(0, 10) : "");
 
+/**
+ * A half-typed number, made safe for the live total.
+ *
+ * `money.decimal` THROWS on anything that is not a plain decimal, and it is right
+ * to: silently accepting "1,234.56" is how a locale-formatted string becomes a
+ * wrong number. But a person typing "1000.00" passes through **"1000."** on the
+ * way, and a preview that throws on an intermediate keystroke takes the whole
+ * form down mid-entry.
+ *
+ * So the intermediate states are normalised HERE, in the presentation layer,
+ * rather than by weakening the domain: a trailing point is dropped, a leading
+ * point gains its zero, and anything still unparseable previews as zero. The
+ * value that is SUBMITTED is untouched — the contract validates it strictly and
+ * the server computes the stored total from it.
+ *
+ * Found by a test that types character by character. The browser check missed it
+ * because `fill()` sets the whole value at once and never produces "1000.".
+ */
+const previewNumber = (value: unknown): string => {
+  const text = String(value ?? "").trim();
+  if (text === "") return "0";
+
+  const candidate = text.endsWith(".")
+    ? text.slice(0, -1)
+    : text.startsWith(".")
+      ? `0${text}`
+      : text;
+
+  return /^-?\d+(\.\d+)?$/.test(candidate) ? candidate : "0";
+};
+
 const toFormValues = (detail: PurchaseOrderDetail): FormValues => ({
   siteId: detail.siteId,
   supplierId: detail.supplierId,
@@ -166,18 +197,28 @@ export function PurchaseOrderFormDialog({
   /**
    * Live totals, from the domain calculator rather than a copy of it.
    *
-   * `watch("items")` re-runs this on every keystroke, which is what the legacy
-   * screen does too — its `updateTotals` is bound to the change event of every
-   * price, quantity and GST box.
+   * Recomputed on every keystroke, which is what the legacy screen does too —
+   * its `updateTotals` is bound to the change event of every price, quantity and
+   * GST box.
+   *
+   * `useWatch`, NOT `watch("items")`. The first version used `watch` and the
+   * totals never moved off 0.00: with a `useFieldArray` the values come back
+   * without the per-keystroke re-render, so `totals.lines` stayed empty and every
+   * computed cell fell through to its `?? "0"` fallback. That reads as "the
+   * arithmetic is broken" when the arithmetic was never called.
+   *
+   * Caught in a browser, not by a test: the unit tests cover the calculator
+   * directly and the page tests never type into the grid, so both were green
+   * while the screen showed zeros. The regression test below it now types.
    */
-  const lines = watch("items");
+  const lines = useWatch({ control, name: "items" });
   const totals = useMemo(
     () =>
       purchaseOrderTotal.compute(
         (lines ?? []).map((line) => ({
-          unitPrice: String(line?.unitPrice ?? ""),
-          quantity: String(line?.quantity ?? ""),
-          gstPercent: String(line?.gstPercent ?? ""),
+          unitPrice: previewNumber(line?.unitPrice),
+          quantity: previewNumber(line?.quantity),
+          gstPercent: previewNumber(line?.gstPercent),
         })),
       ),
     [lines],
