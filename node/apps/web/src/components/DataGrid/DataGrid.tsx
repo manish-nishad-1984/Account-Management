@@ -5,7 +5,7 @@ import {
   type ColumnDef,
 } from "@tanstack/react-table";
 import clsx from "clsx";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import type { SortDirection } from "@accountmanagement/contracts";
 import { ChevronLeft, ChevronRight, Inbox, Search } from "lucide-react";
 import { Button, EmptyState } from "../ui";
@@ -46,6 +46,19 @@ export interface DataGridProps<T> {
    * computes them; this only draws them.
    */
   footer?: Record<string, ReactNode>;
+
+  /**
+   * Open the record by clicking anywhere in its row.
+   *
+   * Supplied only in the SPLIT layout, by `useMasterScreen` — the legacy screens
+   * work this way and a docked pane is useless without it. In the modal layout
+   * it is undefined and a row is inert, because a stray click that throws a
+   * blocking dialog over the list is not a feature.
+   */
+  onRowClick?: (row: T) => void;
+
+  /** The row currently open beside the list, so it can be marked as such. */
+  selectedRowId?: string | number | null;
 }
 
 /**
@@ -56,6 +69,30 @@ export interface DataGridProps<T> {
  * 16 of 19 grids do this, and the three using DataTables set `serverSide: true`
  * AND `paging: false`, defeating the plumbing they already had.
  */
+/**
+ * A click on a CONTROL inside the row belongs to that control, not to the row.
+ *
+ * Rows carry Edit, Delete and Approve buttons. Without this, clicking Delete
+ * would also open the record beside the list, and the confirmation would appear
+ * over a pane that had just filled with the same record — which reads as the app
+ * doing two things at once because it is.
+ */
+function handleRowActivate<T>(
+  event: MouseEvent<HTMLTableRowElement>,
+  row: T,
+  onRowClick: (row: T) => void,
+): void {
+  const target = event.target as HTMLElement;
+  if (target.closest("button, a, input, select, textarea, label, [role=\"menu\"]")) {
+    return;
+  }
+  // A drag to select text in a cell is reading, not clicking.
+  if ((window.getSelection()?.toString() ?? "") !== "") {
+    return;
+  }
+  onRowClick(row);
+}
+
 export function DataGrid<T>({
   columns,
   rows,
@@ -76,6 +113,8 @@ export function DataGrid<T>({
   pageIndex,
   emptyMessage = "Nothing to show",
   footer,
+  onRowClick,
+  selectedRowId = null,
 }: DataGridProps<T>) {
   const table = useReactTable({
     data: rows,
@@ -174,15 +213,49 @@ export function DataGrid<T>({
                 </td>
               </tr>
             ) : (
-              table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="transition-colors hover:bg-slate-50/70">
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="whitespace-nowrap px-4 py-3 text-slate-600">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              table.getRowModel().rows.map((row) => {
+                const id = (row.original as { id?: string | number }).id;
+                const selected =
+                  selectedRowId !== null && selectedRowId !== undefined && id === selectedRowId;
+
+                return (
+                  <tr
+                    key={row.id}
+                    /**
+                     * `aria-current`, not `aria-selected`: a plain table row is
+                     * not in a selection widget, and `aria-selected` on one is
+                     * ignored or reported oddly depending on the reader.
+                     */
+                    aria-current={selected ? true : undefined}
+                    tabIndex={onRowClick ? 0 : undefined}
+                    onClick={onRowClick ? (event) => handleRowActivate(event, row.original, onRowClick) : undefined}
+                    onKeyDown={
+                      onRowClick
+                        ? (event) => {
+                            if (event.key !== "Enter" && event.key !== " ") return;
+                            // Space scrolls the page otherwise, and the row is
+                            // the thing the user is pointing at.
+                            event.preventDefault();
+                            onRowClick(row.original);
+                          }
+                        : undefined
+                    }
+                    className={clsx(
+                      "transition-colors",
+                      onRowClick && "cursor-pointer focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-brand-500",
+                      selected
+                        ? "bg-brand-50/80 hover:bg-brand-50"
+                        : "hover:bg-slate-50/70",
+                    )}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })
             )}
           </tbody>
 

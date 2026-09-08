@@ -359,6 +359,52 @@ are set correctly before go-live.
 
 ---
 
+## Question 12 — Should a record open OVER the list, or BESIDE it?
+
+**This one you can answer in two minutes, on the real screens, today.** It is not
+about data. It is about how your staff work all day, and it gets more expensive
+to change the longer it is left.
+
+**How the old system works.** You click a row and the right-hand pane fills with
+that record. The list stays where it is. You can click straight down it, reading
+one record after another, without closing anything.
+
+**How the new one was built.** The list is full width, and clicking Edit opens the
+record in a box on top of it. Better for concentrating on one record. Worse for
+looking through many, because the list is hidden while the box is open.
+
+**Both are now in the new system, and you can switch between them.** Top right of
+every screen there is a small control with two options — **Dialog** and **Side by
+side**. It remembers your choice, and it is per user, so trying it does not
+change anything for anyone else.
+
+### Please try this
+
+1. Open **Suppliers** or **Items** — something with a lot of rows.
+2. Set the switch to **Side by side**. Click a row, then the next, then the next.
+3. Set it to **Dialog**. Open a record, close it, open the next one.
+4. Ask whoever spends the most time in these screens which one they want.
+
+### The honest trade-off
+
+Side by side takes about a third of the width, so the last column or two of a
+wide list gets pushed off and you scroll sideways to see them. Dialog keeps the
+full list width but hides it entirely while a record is open.
+
+There is no third option that avoids both. The question is which one costs your
+staff less.
+
+**Why we are asking now.** Whichever you choose, the other is deleted. Today that
+is one shared change. Once ten more screens are built on the wrong one it is ten
+times the work, and by then people will have got used to it.
+
+> **Decision:** ☐ Side by side, like the old system  ☐ Dialog  ☐ Keep both and let each user choose
+>
+> _(We would advise against the third. Two layouts is two of everything to test
+> and support, and it leaves the question permanently open.)_
+
+---
+
 # Summary sheet
 
 | # | Question | Blocks work? | Decision |
@@ -374,6 +420,7 @@ are set correctly before go-live.
 | 9 | Over-invoicing allowed | No | |
 | 10 | Deleted items resurrected on re-create | No | |
 | 11 | Who can edit suppliers | Before cutover | |
+| 12 | Record over the list, or beside it | **Gets dearer weekly** | |
 
 **The five blocking questions have roughly a 2–4 week turnaround in our experience,
 and nothing about the invoicing rebuild can start until they are settled.** Question
@@ -398,4 +445,5 @@ now.
 | 8 | D10, grouping defect |
 | 9 | D10, no clamping |
 | 10 | D19 |
+| 12 | `legacy-screens/PLAN.md` §1.2; `contexts/RecordLayoutContext.tsx` |
 | 11 | `SESSION-HANDOFF.md` §5b decision 1; finding C-6 |

@@ -1080,6 +1080,71 @@ up 137.
 
 ---
 
+## 5m. Both record layouts, so the business can actually answer (8 Sep 2026)
+
+Committed as `<COMMIT>`. PLAN.md §1.2 said to put the master-detail question to
+the business **with both on screen**. Both are now on screen.
+
+The legacy screens fill a right-hand pane when a row is clicked and leave the
+list usable. The port opened with a modal that blocks it. That is a real change
+to how the screens are worked, and asking about it in prose is a poor way to ask
+— so the header carries a two-option switch and every screen has both layouts.
+
+### Three shared files, and NO page changes
+
+| File | Does |
+|---|---|
+| `contexts/RecordLayoutContext.tsx` | the preference, per user, in localStorage |
+| `components/ui/FormDialog.tsx` | renders `Modal` or the new `SidePanel` |
+| `lib/use-master-screen.ts` | adds row-click and selection to `gridProps` in split mode |
+
+Every page already spreads `screen.gridProps(query)`, so row-click-to-open and
+the selected-row highlight arrived on twelve screens without one of them being
+edited. **That is the argument for deciding now rather than later**, and it is
+not rhetorical: the machinery is shared today, and each screen built against one
+layout is another to re-check against the other.
+
+Outside a provider the context answers `modal` — what every screen shipped with —
+so all 177 existing web tests passed unchanged, first run. A context that threw
+there would have turned one shared change into 177 test edits, which is how a
+reversible experiment stops being reversible.
+
+`SidePanel` is deliberately NOT a modal: no backdrop, no focus trap, no
+`aria-modal`, and the body scroll is left alone. A modal that merely looked
+docked would be the worst of both — still blocking the list while appearing not
+to. Escape closes it, but only when focus is inside it: Escape while the user is
+in the list belongs to the list.
+
+### Two things the browser caught that reading could not
+
+**The pane was `complementary`, and so is the nav sidebar.** `<aside>` maps to
+that role, so the page had two identically-roled landmarks and a query for one
+matched both. It is now a labelled `region`. Found only because the QA script
+failed with a strict-mode violation naming both elements.
+
+**The reserved width was silently not applied.** `<main>` had a base `lg:px-8`
+and a conditional `sm:pr-[29rem]`; Tailwind emits `sm:` rules before `lg:` ones,
+so at desktop width the base won and the padding stayed 32px. The pane sat on top
+of 415px of the list — defeating the entire purpose of the layout — and it
+**looked correct in a screenshot**. Only measuring the boxes caught it:
+`mainPaddingRight: "32px"`, `paneCoversVisibleList: true`. The right padding is
+now expressed once, as one class or the other, never as a base plus an override.
+
+### The trade-off, stated rather than hidden
+
+The pane takes ~448px, so on a 1440 screen the last column or two of a wide list
+is pushed off and has to be scrolled to. Measured, not guessed: the visible list
+area goes from 1118px to 686px. There is no third option that avoids both costs,
+and doc 19 Question 12 says so plainly rather than selling the split view.
+
+**When the answer comes back, delete the loser and the switch.** A permanent
+toggle is two layouts to test and support, and a question that never closes.
+
+Tests: **635 Node** (25 contracts + 41 domain + 374 API + 195 web) + 19 .NET,
+up 18.
+
+---
+
 ## 6. The Companies / Sites / Site Groups session (committed as `566b28ab`)
 
 **Companies, Sites and Site Groups master screens**, end to end:

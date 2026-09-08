@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { DEFAULT_PAGE_SIZE, type ListResponse, type SortDirection } from "@accountmanagement/contracts";
 import { ApiError } from "./api-client";
 import type { ListParams } from "./list-query";
+import { useRecordLayout } from "../contexts/RecordLayoutContext";
 
 /**
  * The state every master screen has: search, sort, a cursor stack, which record
@@ -27,6 +28,7 @@ export function useMasterScreen<TRow extends { id: string | number }>({
   defaultSortDir = "asc",
   pageSize = DEFAULT_PAGE_SIZE,
 }: MasterScreenOptions) {
+  const { layout } = useRecordLayout();
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState(defaultSortBy);
   const [sortDir, setSortDir] = useState<SortDirection>(defaultSortDir);
@@ -109,7 +111,15 @@ export function useMasterScreen<TRow extends { id: string | number }>({
     [deleteTarget],
   );
 
-  /** The paging and sorting half of DataGrid's props, so screens spread one object. */
+  /**
+   * The paging and sorting half of DataGrid's props, so screens spread one object.
+   *
+   * The split-layout behaviour rides in here rather than being added to twelve
+   * pages: every screen already spreads this, so row-click-to-open and the
+   * selected-row highlight arrive with no page edit at all. That is the same
+   * property that makes the layout question cheap to answer now and expensive to
+   * answer later.
+   */
   const gridProps = (query: {
     data?: ListResponse<TRow>;
     isLoading: boolean;
@@ -136,6 +146,19 @@ export function useMasterScreen<TRow extends { id: string | number }>({
       const next = query.data?.nextCursor;
       if (next) setCursors((stack) => [...stack, next]);
     },
+
+    /**
+     * ONLY in the split layout. With a modal, a click anywhere in a row would
+     * throw a blocking dialog over the list — the exact behaviour the legacy
+     * screens do not have and the reason this comparison exists.
+     */
+    onRowClick: layout === "split" ? (row: TRow) => setFormTarget({ id: String(row.id) }) : undefined,
+    /**
+     * Marking the open record only makes sense when it is visible beside the
+     * list. Under a modal the highlight is hidden by the dialog and then
+     * lingers, unexplained, after it closes.
+     */
+    selectedRowId: layout === "split" ? (formTarget?.id ?? null) : null,
   });
 
   return {

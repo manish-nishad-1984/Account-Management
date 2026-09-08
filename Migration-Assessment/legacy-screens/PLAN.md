@@ -39,7 +39,10 @@ not asked about yet.
 
 **Do NOT put a site dropdown on a screen.** The header owns that choice.
 
-### 1.2 Master-detail split vs modal dialog
+### 1.2 Master-detail split vs modal dialog  ·  **BOTH BUILT — awaiting the business**
+
+_Both layouts shipped 8 Sep 2026. The question is now doc 19 Question 12, and it
+can be answered on the real screens in two minutes._
 
 Legacy: click a row, the right pane fills. No modal. The list stays usable and a
 user can walk down it reading records.
@@ -49,9 +52,37 @@ Ours: full-width grid plus a modal `FormDialog` that blocks the list.
 **This is a real change to how the screen is worked**, not a cosmetic one. It is
 arguably better for editing and clearly worse for browsing.
 
-**Do:** put it to the business with both on screen. If the split view wins, it is
-a change to `useMasterScreen` and one shared layout — every screen inherits it.
-Deciding this AFTER five more screens are built makes it five times the work.
+A written description is a poor way to ask, so both are in the header switch
+(`RecordLayoutPicker`) and every screen has both. **It is three shared files and
+no page changes:**
+
+| File | Does |
+|---|---|
+| `contexts/RecordLayoutContext.tsx` | the preference, per user, in localStorage |
+| `components/ui/FormDialog.tsx` | renders `Modal` or `SidePanel` |
+| `lib/use-master-screen.ts` | adds row-click and selection to `gridProps` in split mode |
+
+Every page already spreads `screen.gridProps(query)`, which is why row-click and
+the selected-row highlight arrived on twelve screens without touching one of
+them. **That property is the whole argument for deciding now:** the machinery is
+shared today, and each new screen built against one layout is another that has to
+be re-checked against the other.
+
+Outside a provider the context answers `modal` — what every screen shipped with —
+so nothing changed for any existing test.
+
+**Two things worth knowing when the answer comes back:**
+
+- The pane is a labelled `region`, not `complementary`: the nav sidebar is an
+  `<aside>` and already owns that role. Found by driving a real browser, where
+  the query for one landmark matched both.
+- The reserved width was silently not applied at first — a conditional
+  `sm:pr-[29rem]` lost to a base `lg:px-8`, because Tailwind emits `sm:` before
+  `lg:`. The pane sat on top of 415px of the list and **looked correct in a
+  screenshot**. Only measuring the boxes in the browser caught it.
+
+**When the business answers, delete the loser and the switch.** A permanent
+toggle is two layouts to test and support, and a question that never closes.
 
 ### 1.3 Item Master has no Excel import/export and no price history
 
@@ -167,7 +198,8 @@ DONE     site selector                                    (7 Sep 2026, §1.1)
          Inventory Inward                                 (7 Sep 2026, §15)
          Inward Challan  (aggregates, filters)            (7 Sep 2026, §09)
          file upload for challans                         (7 Sep 2026, §09)
-NOW      master-detail decision                          <- business call, do not skip
+         both record layouts, for comparison              (8 Sep 2026, §1.2)
+NOW      master-detail ANSWER                            <- with the business now, doc 19 Q12
 NEXT     Excel import/export, item price history          (parallel, independent)
 BLOCKED  Purchase Invoice -> Purchase Order -> Sales      <- needs B-2 and D7
 LAST     Reports, payments, dashboard queues              <- needs the payments model

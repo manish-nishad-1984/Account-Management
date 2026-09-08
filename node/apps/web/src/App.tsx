@@ -5,6 +5,7 @@ import { PlaceholderPage } from "./components/PlaceholderPage";
 import { RequireAuth } from "./components/RequireAuth";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { SiteScopeProvider } from "./contexts/SiteScopeContext";
+import { RecordLayoutProvider } from "./contexts/RecordLayoutContext";
 import { LoginPage } from "./features/auth/LoginPage";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { UsersPage } from "./features/users/UsersPage";
@@ -56,7 +57,14 @@ function ScopedShell({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   return (
     <SiteScopeProvider key={user?.id ?? "anonymous"} userId={user?.id ?? null}>
-      <AppShell>{children}</AppShell>
+      {/*
+        The record layout is per user for the same reason the site scope is: a
+        site office shares a keyboard, and one person preferring the side-by-side
+        view should not change how it opens for the next person to sign in.
+      */}
+      <RecordLayoutProvider key={user?.id ?? "anonymous"} userId={user?.id ?? null}>
+        <AppShell>{children}</AppShell>
+      </RecordLayoutProvider>
     </SiteScopeProvider>
   );
 }

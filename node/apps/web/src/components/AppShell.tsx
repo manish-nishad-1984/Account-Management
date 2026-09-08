@@ -6,6 +6,8 @@ import { financialYear } from "@accountmanagement/domain";
 import { useAuth } from "../contexts/AuthContext";
 import { NAV } from "../navigation/nav";
 import { SiteScopePicker } from "./SiteScopePicker";
+import { RecordLayoutPicker } from "./RecordLayoutPicker";
+import { useRecordLayout } from "../contexts/RecordLayoutContext";
 
 /**
  * Account Book panel shell: a fixed module rail, a slim top bar, and the routed
@@ -18,6 +20,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { paneOpen } = useRecordLayout();
 
   const initials = (user?.userName ?? "?").slice(0, 2).toUpperCase();
   const fy = financialYear.format(financialYear.currentAsProduced(new Date()));
@@ -151,6 +154,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Temporary: here so the business can compare the two layouts on
+                real data and answer the question in doc 19. It goes when they do. */}
+            <RecordLayoutPicker />
+
             <SiteScopePicker />
 
             {/* The financial year yields the width on a phone; the site does not. */}
@@ -162,7 +169,32 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto px-4 py-6 lg:px-8">
+        {/*
+          Room for the docked record, and only while one is open.
+
+          The pane is `position: fixed`, so without this it would sit ON TOP of
+          the right-hand columns of the grid — which would look like the split
+          layout while hiding exactly the data the split layout exists to keep
+          visible. Narrow screens get no padding: there the pane is full width
+          and covering the list is the only thing it can do.
+        */}
+        <main
+          className={clsx(
+            "flex-1 overflow-y-auto py-6 transition-[padding] duration-200",
+            "pl-4 lg:pl-8",
+            /*
+             * The right padding is expressed ONCE, as one class or the other.
+             *
+             * It was written as a base `lg:px-8` plus a conditional
+             * `sm:pr-[29rem]`, and the conditional lost: Tailwind emits `sm:`
+             * rules before `lg:` ones, so at desktop width `lg:px-8` overrode
+             * it and the padding stayed 32px. The pane then sat ON TOP of 415px
+             * of the list — the layout looked right in a screenshot and defeated
+             * its own purpose. Measured in a real browser, not reasoned about.
+             */
+            paneOpen ? "pr-4 sm:pr-[29rem]" : "pr-4 lg:pr-8",
+          )}
+        >
           <div className="mx-auto max-w-7xl">{children}</div>
         </main>
       </div>

@@ -5,6 +5,7 @@ import { vi } from "vitest";
 import type { AuthenticatedUser } from "@accountmanagement/contracts";
 import { AuthContext } from "../contexts/AuthContext";
 import { StaticSiteScope, type SiteScope } from "../contexts/SiteScopeContext";
+import { StaticRecordLayout, type RecordLayout } from "../contexts/RecordLayoutContext";
 
 /**
  * Renders a screen with a signed-in user, so permission-gated UI can be tested.
@@ -24,8 +25,14 @@ export function renderWithAuth(
   {
     permissions = [] as string[],
     scope,
+    layout,
   }: {
     permissions?: string[];
+    /**
+     * How a record opens. Defaults to "modal" — what every screen shipped with,
+     * and what a test that says nothing about layout should get.
+     */
+    layout?: RecordLayout;
     /**
      * The site scope the screen sees. Defaults to every site and READY, so a
      * test that has nothing to say about site scoping is not held on a loading
@@ -48,7 +55,9 @@ export function renderWithAuth(
           logout: vi.fn(),
         }}
       >
-        <StaticSiteScope {...scope}>{node}</StaticSiteScope>
+        <StaticSiteScope {...scope}>
+          <StaticRecordLayout layout={layout}>{node}</StaticRecordLayout>
+        </StaticSiteScope>
       </AuthContext.Provider>
     </QueryClientProvider>,
   );
