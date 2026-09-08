@@ -1,8 +1,13 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
-**Written:** 2 September 2026, after the unblocking session; extended 3 September
-2026 with the deployment session (§5e). Supersedes all earlier handoffs of the
-same name.
+**Written:** 2 September 2026, after the unblocking session. **Last extended
+8 September 2026** (§5n). Supersedes all earlier handoffs of the same name.
+
+**Sections §3, §4, §8, §10 and §11 describe _now_ and are re-measured on every
+handoff. Sections §5, §5b … §5n are a log of days that already happened and are
+never edited.** If the two disagree, the numbered sections win — run
+`/handoff check` and it will say which have drifted.
+
 Read this first, then `README.md`, then `Migration-Assessment/01-Executive-Summary.md`
 and `18-GO-NO-GO-Assessment.md`.
 
@@ -10,6 +15,12 @@ and `18-GO-NO-GO-Assessment.md`.
 before touching nginx or the server. The live ASP.NET app now answers on
 **https://www.avfast.in**, and it is **broken for reasons that predate this
 work** (§5e, "The live MVC app is down").
+
+**Live release is `20260908-132107`, which is commit `723cd97b`** — file upload
+(§5l) and everything before it. The two record layouts of §5m are committed and
+tested but **NOT deployed**: they exist so the business can answer doc 19
+Question 12, and shipping a temporary switch to production before the answer
+would put a control there that is meant to be deleted.
 
 ---
 
@@ -23,7 +34,10 @@ inventory → supplier/sales invoices → payments, plus reports.
 **Current stack:** ASP.NET Core MVC (Razor) → ASP.NET Core Web API → repository
 layer → EF Core 7 → SQL Server.
 **Target stack:** React 19 + Vite + **Tailwind** → NestJS 11 (Fastify) → Drizzle →
-PostgreSQL 17.
+PostgreSQL 17. _(The assessment specifies 17. The VPS was provisioned with
+**PostgreSQL 16**, and that is what production actually runs. Nothing depends on
+a 17-only feature, so it has been left alone rather than upgraded under a live
+database — but do not write a migration that assumes 17.)_
 
 A full 18-document assessment already exists in `Migration-Assessment/`. It is
 evidence-based — every finding cites a file and line. **Do not re-derive it.**
@@ -55,14 +69,21 @@ AC/
 ├── .github/workflows/ci.yml       build + test + gitleaks + node job
 ├── Migration-Assessment/          the 18-doc assessment + tools/ + db-extract/
 └── node/                          npm workspaces
-    ├── packages/domain/           shared business rules (12 tests)
-    ├── packages/contracts/        Zod schemas shared by API and web
+    ├── packages/domain/           shared business rules (41 tests)
+    ├── packages/contracts/        Zod schemas shared by API and web (25 tests)
     └── apps/
-        ├── api/                   NestJS + Fastify + Drizzle (188 tests)
-        └── web/                   React 19 + Vite + Tailwind (91 tests)
+        ├── api/                   NestJS + Fastify + Drizzle (374 tests)
+        └── web/                   React 19 + Vite + Tailwind (195 tests)
 ```
 
-**310 tests pass** (19 .NET + 12 domain + 188 API + 91 web).
+**654 tests pass** — 635 Node (25 contracts + 41 domain + 374 API + 195 web) plus
+19 .NET. Measured at `36fcc82f` on 8 Sep 2026, not carried forward from the
+previous section.
+
+> These two figures — here and in §4 — said **310** for five consecutive sessions
+> while the true count more than doubled. Nobody was careless: each session
+> appended its own §5x and none scrolled up. `/handoff` now re-measures them
+> before writing. If you are reading this and the number looks old, it is.
 
 ### Verify everything
 
@@ -104,8 +125,9 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 
 ## 4. Repository state
 
-Branch **`main`**. HEAD builds and all **310 tests pass**
-(19 .NET + 12 domain + 188 API + 91 web).
+Branch **`main`**, HEAD **`36fcc82f`**, working tree clean, pushed to
+`origin/main`. Builds, typechecks, and all **654 tests pass** — 635 Node
+(25 contracts + 41 domain + 374 API + 195 web) + 19 .NET.
 
 - `b8d03922` completed the broken commit `6cefc164` (see §5).
 - `f0f69f95` merged `newNode` into `main`, resolving 3 conflicts.
@@ -113,6 +135,11 @@ Branch **`main`**. HEAD builds and all **310 tests pass**
 - `410e3198` deployed to the VPS and added `/deploy`. The §5c work went in with
   it, so it is no longer uncommitted.
 - The domain move, the systemd PEM fix and the real-data import followed (§5e).
+- Then one commit per module, each with its own §5x section: `b1b25802`
+  purchase requests, `a821d564` the legacy-screen documentation, `7a068bde` the
+  site scope, `bd97a238` inventory inward, `dbd72d25` inward challans,
+  `abf027a2` the money calculators, `53c8a620` attachments, `028a42a9` both
+  record layouts.
 - **`main` is pushed to `origin/main`** and the working tree is clean.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
   credential is in the HISTORY, not the working tree. Rotation is the fix.
@@ -1145,6 +1172,97 @@ up 18.
 
 ---
 
+## 5n. The handoff is now a command, and the drift it found (8 Sep 2026)
+
+Committed as `<COMMIT>`. Adds `.claude/skills/handoff/SKILL.md` — the `/handoff`
+slash command — and applies it to this file for the first time.
+
+### Why a command, when a handoff is just writing
+
+Because the writing was never the part that failed. This file has **two halves
+that age differently**, and only one of them was being maintained:
+
+| Half | Sections | Ages how |
+|---|---|---|
+| Append-only log | §5, §5b … §5n | Never wrong. Each records a day that happened. |
+| Always-current state | §3, §4, §8, §10, §11 | **Silently wrong.** They describe *now*. |
+
+Appending a §5x is the satisfying half, and it is the half that got done every
+time. So the newest section was always accurate and the **opening** was not —
+which is the wrong way round, because the opening is what a fresh session reads
+first and trusts most.
+
+### The drift, which is worse than it sounds
+
+§3 and §4 both said **"310 tests pass (19 .NET + 12 domain + 188 API + 91 web)"**.
+The measured figure is **654** — 635 Node (25 contracts + 41 domain + 374 API +
+195 web) + 19 .NET. **More than double, wrong in two places, across five
+sessions.**
+
+And it was not invisible: §5i, §5j and §5k each end with a `Tests: N Node` line
+saying 361, 405, 451. The document contradicted itself four times over and every
+session read past it, because nobody scrolls up to §3 after writing §5k. The
+contracts package had 25 tests that §3 did not list as existing at all.
+
+Nothing was lost to this — but the next session to trust "310" as its baseline
+would have concluded that ~340 tests had vanished, and gone looking.
+
+The command's answer is ordering: **refresh first, append last.** Step 1 runs the
+suites and `git rev-parse HEAD origin/main`; step 2 corrects §3, §4, §8, §10, §11
+against what step 1 measured; appending the new section is step 4. A number is
+never carried forward from the section above it.
+
+### What else it makes non-optional
+
+- **Never state a green suite you did not run.** A handoff that claims tests pass
+  over a red suite is the most expensive sentence that can go in this file: the
+  next session builds on it and loses a day to a defect it was told did not
+  exist. Write the failure and what you think is wrong.
+- **The §8 blocked list is the user's.** Items sit there for weeks — rotating
+  `sa`, running the census, sending doc 19. They are not cleared by a session
+  working harder, so they are not to be quietly dropped or re-argued.
+- **Old §5x sections are never edited or deleted.** They are the archaeology. If
+  one is now wrong, note it in place and leave the rest standing.
+- **Three documents must agree** and drift apart: this file, `PLAN.md`'s NOW/NEXT
+  rows, and doc 19 with its summary sheet. The summary sheet is the page that
+  actually gets sent, so a question missing from it does not exist.
+- **A section with no trap in it was probably written from memory.** The most
+  valuable paragraphs here are the ones that cost hours once — the PEM that
+  cannot travel in a systemd variable, the migration runner that printed success
+  while skipping migrations, the Tailwind variant order that silently dropped a
+  padding class. Those are the reason the file is 1400 lines, and the reason its
+  length is not a problem: it is read once, by an agent, at the start of a
+  session. Every trap deleted to save a screenful costs someone an afternoon.
+
+`/handoff check` reports drift and changes nothing, which is how you decide
+whether the full pass is worth the time. `/handoff opener` prints the short
+message to paste into a new window — deliberately short, because the constraints
+belong in this file and in `CLAUDE.md`, not in a chat message that becomes a
+second copy to keep current.
+
+### Also corrected in this pass
+
+- **`PostgreSQL 17` in §1 is the assessment's target, not what runs.** The VPS
+  was provisioned with **PostgreSQL 16**. Nothing depends on a 17-only feature,
+  so it was left alone rather than upgraded under a live database — but a
+  migration must not assume 17.
+- §4 listed commits up to `410e3198` and then "the domain move … followed",
+  which had stopped being a useful description eight commits ago. It now names
+  each module commit against its section.
+- §11 still proposed purchase requests as "the next module". They shipped in §5f.
+  It now leads with PLAN.md's NOW/NEXT rows rather than restating them from
+  memory, and Phase 4 is marked gated on B-2 and D7 rather than merely listed.
+- Recorded in the header that **the live release is `723cd97b`, and that §5m's
+  two layouts are NOT deployed** — they are a question for the business, and
+  shipping a switch meant to be deleted would be the wrong thing to put in front
+  of real users.
+
+Tests: **654** — 635 Node (25 contracts + 41 domain + 374 API + 195 web) + 19
+.NET. Unchanged; this session wrote documentation and one skill, no application
+code.
+
+---
+
 ## 6. The Companies / Sites / Site Groups session (committed as `566b28ab`)
 
 **Companies, Sites and Site Groups master screens**, end to end:
@@ -1307,6 +1425,7 @@ the screens whose UI is gated on `usePermission`.
 | **10 business-rule questions unanswered** | 2-4 week lead time — the longest pole. The money calculator cannot start without them. They are now written to be sent: `Migration-Assessment/19-Business-Decisions-Required.md` (§5c). **The clock does not start until someone sends it.** |
 | **Credentials not rotated** | The `sa` account on `srv1925876.hstgr.cloud` is still live, and its password is still in git history in earlier commits of `appsettings.json`. Removing it from the file did not remove it from history. `gitleaks` in CI will fail on the first push, correctly. **Rotation is the fix, not a history rewrite.** |
 | **Which of 3 jQuery money calculators is correct** | Blocks all invoicing work (Phase 4, the risk centre). The Items screen stores the GST amount as entered rather than deriving it, precisely so this stays an open question rather than being answered by implication. |
+| **Record over the list, or beside it** | Doc 19 **Question 12**. Both layouts are built and switchable (§5m), so this is answerable on the real screens in two minutes — it needs a person, not a session. It gets dearer every week: today the answer is one shared change, and every new screen built against the wrong one is another to re-check. **When it comes back, delete the loser and the `RecordLayoutPicker`.** |
 | **Supplier edit/delete permission change** | The port guards `supplier.edit` and `supplier.delete`; the source guards neither (§5b decision 1). Whoever edits suppliers today needs those boxes ticked before cutover, or they lose the ability. Needs a decision, not code. |
 
 ---
@@ -1351,9 +1470,26 @@ the screens whose UI is gated on `usePermission`.
 
 ## 11. Suggested next steps
 
-The masters are done and deployed (§5e). Everything below is either blocked on
-the business or is the next tranche of build. **The first items are still on the
-user — but most are now cheap, which was the point of §5c.**
+Masters, purchase requests, inventory inward and inward challans are all built
+(§5f — §5l), and everything up to and including file upload is deployed.
+`Migration-Assessment/legacy-screens/PLAN.md` holds the authoritative sequencing;
+its rows currently read:
+
+```
+NOW      master-detail ANSWER                     <- with the business, doc 19 Q12
+NEXT     Excel import/export, item price history     (parallel, independent)
+```
+
+**The NOW row is not code.** Both layouts are built (§5m); what is missing is a
+decision, and the answer deletes the loser and the switch. Item price history
+needs a modelling decision first — `items.price_per_unit` is a single mutable
+column with no history behind it, so audit-table vs temporal-rows has to be
+chosen before a screen can be drawn. That one is ours to make with a stated
+rationale; the layout one is not.
+
+Everything below is either blocked on the business or is the next tranche of
+build. **The first items are still on the user — but most are now cheap, which
+was the point of §5c.**
 
 **Server housekeeping, from the deployment session — do these first:**
 
@@ -1397,12 +1533,15 @@ Then, in rough order of value:
   step 2, not before. "No orphan entries" means deciding, per relationship,
   whether an orphan is cleaned, quarantined or rejected — that decision needs the
   counts in front of you.
-- **Purchase requests and purchase orders** — the next module, and the first
-  with header/detail writes. Two conventions become load-bearing there:
-  everything in a transaction (§7.6), and the in-use delete checks that
-  suppliers and items are currently missing (§5b decision 4) can finally be
-  written against real tables. Deliberately NOT started this session: the census
-  is what says whether `PurchaseOrderDetails.PORefId` can carry a real FK.
+- **Purchase orders** — purchase requests shipped in §5f, so orders are the next
+  header/detail module. The census is still what says whether
+  `PurchaseOrderDetails.PORefId` can carry a real FK.
+- **Phase 4, the money modules** (supplier and sales invoices) — **gated**, and
+  deliberately so. It needs B-2 / doc 19 Question 2 answered (which of the three
+  jQuery calculators is correct) and D7 resolved (purchase returns are *added*
+  where they should be subtracted). §5k ran all three calculators rather than
+  reading them, so the arithmetic exists in decimals with both versions — but
+  which version is *right* is a business answer, not a code one.
 - **More .NET Phase 0 performance work.** P2 and P5 are done (§5c). The remaining
   ranked items are P4 (`AsNoTracking`), P6 (`.ToList().Count` existence tests),
   P3 (six N+1 loops) and P1 (pagination). **Do P1 after the DMV data arrives** —
