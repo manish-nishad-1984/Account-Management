@@ -94,7 +94,7 @@ AC/
 ```
 
 **740 tests pass** — 721 Node (34 contracts + 41 domain + 431 API + 215 web)
-plus 19 .NET. Measured at `<COMMIT>` on 8 Sep 2026, not carried forward from the
+plus 19 .NET. Measured at `65c7dcbd` on 8 Sep 2026, not carried forward from the
 previous section. The .NET figure was proved rather than re-run: no `.cs`,
 `.csproj` or `.sln` file has changed since it was last measured.
 
@@ -147,7 +147,7 @@ Branch **`main`**, working tree clean, pushed to `origin/main`. Builds,
 typechecks, and all **740 tests pass** — 721 Node (34 contracts + 41 domain +
 431 API + 215 web) + 19 .NET.
 
-The suites were last measured at **`<COMMIT>`**, the final code commit of
+The suites were last measured at **`65c7dcbd`**, the final code commit of
 8 Sep 2026. Anything after that on `main` is documentation — a handoff always
 commits after its own measurement, so the newest hash is never the one the
 numbers were taken at, and naming it here would be a lie that looks precise.
@@ -162,7 +162,7 @@ numbers were taken at, and naming it here would be a lie that looks precise.
   purchase requests, `a821d564` the legacy-screen documentation, `7a068bde` the
   site scope, `bd97a238` inventory inward, `dbd72d25` inward challans,
   `abf027a2` the money calculators, `53c8a620` attachments, `028a42a9` both
-  record layouts, `<COMMIT>` the Item Master Excel import/export.
+  record layouts, `65c7dcbd` the Item Master Excel import/export.
 - **`main` is pushed to `origin/main`** and the working tree is clean.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
   credential is in the HISTORY, not the working tree. Rotation is the fix.
@@ -1649,7 +1649,7 @@ Then, in rough order of value:
 
 ## 5o. Item Master Excel, and the round trip the source never closed (8 Sep 2026)
 
-Committed as `<COMMIT>`. The NEXT row of `PLAN.md`, and the first legacy
+Committed as `65c7dcbd`. The NEXT row of `PLAN.md`, and the first legacy
 capability ported rather than the next legacy screen — Download File and Upload
 File on `/ItemMaster/ItemListView`.
 
