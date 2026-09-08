@@ -33,7 +33,7 @@ const ACTIVE_OPTIONS = [
 ];
 
 export function PurchaseOrdersPage() {
-  const canAdd = usePermission("purchase-order", "add");
+  const canAdd = usePermission("purchase-orders", "add");
   const screen = useMasterScreen<PurchaseOrderRow>({
     defaultSortBy: "poNo",
     defaultSortDir: "desc",

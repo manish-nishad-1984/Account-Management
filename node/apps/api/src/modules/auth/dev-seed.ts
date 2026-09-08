@@ -162,7 +162,16 @@ export class DevSeed implements OnModuleInit {
     await db.insert(forms).values([
       { id: 1, formName: "User", controller: "User", formGroup: "Masters", isActive: true },
       { id: 2, formName: "Supplier Invoice", controller: "Invoice", formGroup: "Invoicing", isActive: true },
-      { id: 3, formName: "Purchase Order", controller: "PurchaseOrder", formGroup: "Purchase", isActive: true },
+      /**
+       * "Purchase Orders" — PLURAL, matching the only ACTIVE row in production.
+       *
+       * Production carries three rows for this screen: "Purchase Order" (id 10,
+       * INACTIVE), "Create PurchaseOrder" (id 12, INACTIVE) and "Purchase Orders"
+       * (id 14, active). The permission builder filters on is_active, so only the
+       * plural ever reaches a token. Seeding the singular here made development
+       * disagree with production and the screen 403d on its first live call.
+       */
+      { id: 3, formName: "Purchase Orders", controller: "PurchaseMaster", formGroup: "Purchase", isActive: true },
       { id: 4, formName: "Company", formGroup: "Masters", isActive: true },
       { id: 5, formName: "Site", formGroup: "Masters", isActive: true },
       { id: 6, formName: "Group", formGroup: "Masters", isActive: true },

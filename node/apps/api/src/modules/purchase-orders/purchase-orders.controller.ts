@@ -35,25 +35,38 @@ import { actorId } from "../../common/actor";
 import type { AccessTokenClaims } from "../auth/token.service";
 
 /**
- * The subject is `purchase-order`, from `Form.FormName` = "Purchase Order".
+ * The subject is `purchase-orders` — PLURAL — from the ACTIVE `Form.FormName`
+ * row, "Purchase Orders".
  *
- * UNRESOLVED, AND IT MUST BE CHECKED BEFORE THIS SCREEN GOES LIVE.
+ * RESOLVED AGAINST PRODUCTION, 8 Sep 2026, after the first deploy of this screen
+ * answered it the expensive way: `GET /purchase-orders` returned
+ * `403 Missing permission: purchase-order.view` for a user holding every right
+ * the screen needs. This module shipped singular and was unusable for ten
+ * minutes.
  *
- * The PO Razor views check `FormName == "Purchase Orders"` — PLURAL, seven times
- * across `POListView.cshtml` and its partials, counted not sampled. The dev seed
- * and §5f's enumeration of the production `forms` table both say "Purchase Order",
- * SINGULAR. They cannot both be right, and `Migration-Assessment/db-extract/` is
- * still empty, so the production table cannot be consulted from here.
+ * The reason is worth keeping, because it is not simply "the plural won".
+ * Production's `forms` table holds THREE rows for this one screen:
  *
- * If production holds the plural, the derived subject is `purchase-orders` and
- * every call from this controller 403s for everyone — which is precisely the §5f
- * trap, where six screens carried subjects no `Form` row granted and were inert
- * only because they were placeholders.
+ *   id | form_name            | is_active
+ *   10 | Purchase Order       | f
+ *   12 | Create PurchaseOrder | f
+ *   14 | Purchase Orders      | t
  *
- * One line to change if it goes the other way. Do not guess it a second time:
- * read it off `forms`.
+ * All three are granted to all three users, so counting grants distinguishes
+ * nothing. Only id 14 is ACTIVE, and the permission builder filters on
+ * `is_active` — so only `purchase-orders.*` ever reaches a token. That also
+ * matches the seven `FormName == "Purchase Orders"` checks in the Razor views,
+ * which were right all along.
+ *
+ * §5f's enumeration listed "Purchase Order" and was not careless: that row is
+ * really there. It read a form name WITHOUT filtering on `is_active` and picked
+ * a retired one.
+ *
+ * SO THE §5f RULE NEEDS A CLAUSE: read the subject off `forms`, and read it off
+ * a row where `is_active` is true. A retired row with the obvious name will
+ * happily mislead you, and every call 403s for everyone.
  */
-const SUBJECT = "purchase-order";
+const SUBJECT = "purchase-orders";
 
 const filterSchema = z.object({
   siteId: z.string().uuid().optional(),
@@ -79,7 +92,7 @@ export class PurchaseOrdersController {
   constructor(private readonly orders: PurchaseOrdersRepository) {}
 
   @Get()
-  @Permissions("purchase-order.view")
+  @Permissions("purchase-orders.view")
   async list(
     @Query(new ZodValidationPipe(listRequestSchema))
     query: ReturnType<typeof listRequestSchema.parse>,
@@ -111,14 +124,14 @@ export class PurchaseOrdersController {
   }
 
   @Get(":id")
-  @Permissions("purchase-order.view")
+  @Permissions("purchase-orders.view")
   findOne(@Param("id", ParseUUIDPipe) id: string): Promise<PurchaseOrderDetail> {
     return this.orders.findById(id);
   }
 
   /** The order number is issued here, per company, not accepted from the body. */
   @Post()
-  @Permissions("purchase-order.add")
+  @Permissions("purchase-orders.add")
   create(
     @Body(new ZodValidationPipe(createPurchaseOrderSchema)) body: CreatePurchaseOrder,
     @CurrentUser() caller: AccessTokenClaims | undefined,
@@ -127,7 +140,7 @@ export class PurchaseOrdersController {
   }
 
   @Patch(":id")
-  @Permissions("purchase-order.edit")
+  @Permissions("purchase-orders.edit")
   update(
     @Param("id", ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(updatePurchaseOrderSchema)) body: UpdatePurchaseOrder,
@@ -137,7 +150,7 @@ export class PurchaseOrdersController {
   }
 
   @Patch(":id/approval")
-  @Permissions("purchase-order.approve")
+  @Permissions("purchase-orders.approve")
   setApproval(
     @Param("id", ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(setApprovalSchema)) body: SetApproval,
@@ -152,7 +165,7 @@ export class PurchaseOrdersController {
    * not exist.
    */
   @Post("approvals")
-  @Permissions("purchase-order.approve")
+  @Permissions("purchase-orders.approve")
   async setApprovalMany(
     @Body(new ZodValidationPipe(bulkApprovalSchema)) body: BulkApproval,
     @CurrentUser() caller: AccessTokenClaims | undefined,
@@ -162,7 +175,7 @@ export class PurchaseOrdersController {
   }
 
   @Delete(":id")
-  @Permissions("purchase-order.delete")
+  @Permissions("purchase-orders.delete")
   @HttpCode(204)
   remove(
     @Param("id", ParseUUIDPipe) id: string,

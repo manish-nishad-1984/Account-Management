@@ -68,7 +68,7 @@ export const NAV: NavSection[] = [
     title: "Procurement",
     items: [
       { label: "Purchase Requests", to: "/purchase-requests", icon: ClipboardList, permission: "purchase-request", status: "ready", legacy: "/PurchaseMaster/PurchaseRequestListView" },
-      { label: "Purchase Orders", to: "/purchase-orders", icon: ShoppingCart, permission: "purchase-order", status: "ready", legacy: "/PurchaseMaster/POListView" },
+      { label: "Purchase Orders", to: "/purchase-orders", icon: ShoppingCart, permission: "purchase-orders", status: "ready", legacy: "/PurchaseMaster/POListView" },
       { label: "Inward Challans", to: "/inward", icon: FileInput, permission: "inward-challan", status: "ready", legacy: "/ItemInWord/ItemInWord" },
       { label: "Inventory", to: "/inventory", icon: Boxes, permission: "inventory-inward", status: "ready", legacy: "/Sales/CreateInventory" },
     ],

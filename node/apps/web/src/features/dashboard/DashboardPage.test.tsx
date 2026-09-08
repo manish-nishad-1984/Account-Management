@@ -106,8 +106,8 @@ const ALL = [
   "supplier.approve",
   "inward-challan.view",
   "inward-challan.approve",
-  "purchase-order.view",
-  "purchase-order.approve",
+  "purchase-orders.view",
+  "purchase-orders.approve",
 ];
 
 const panel = async (title: string) => {

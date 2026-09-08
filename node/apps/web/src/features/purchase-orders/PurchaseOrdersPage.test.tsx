@@ -5,11 +5,11 @@ import { PurchaseOrdersPage } from "./PurchaseOrdersPage";
 import { json, renderWithAuth, routeFetch } from "../../test/render";
 
 const ALL_RIGHTS = [
-  "purchase-order.view",
-  "purchase-order.add",
-  "purchase-order.edit",
-  "purchase-order.delete",
-  "purchase-order.approve",
+  "purchase-orders.view",
+  "purchase-orders.add",
+  "purchase-orders.edit",
+  "purchase-orders.delete",
+  "purchase-orders.approve",
 ];
 
 const SITE = "22222222-2222-2222-2222-222222222222";
@@ -137,7 +137,7 @@ describe("PurchaseOrdersPage", () => {
 
   it("hides New order from someone without the add right", async () => {
     routes([row()]);
-    renderWithAuth(<PurchaseOrdersPage />, { permissions: ["purchase-order.view"] });
+    renderWithAuth(<PurchaseOrdersPage />, { permissions: ["purchase-orders.view"] });
 
     await screen.findByText("DHP/PO/24-25/049");
     expect(screen.queryByRole("button", { name: /new order/i })).not.toBeInTheDocument();
@@ -152,7 +152,7 @@ describe("PurchaseOrdersPage", () => {
 
   it("hides Approve from someone without the approve right", async () => {
     routes([row({ capabilities: { canEdit: true, canDelete: true, canApprove: false } })]);
-    renderWithAuth(<PurchaseOrdersPage />, { permissions: ["purchase-order.view"] });
+    renderWithAuth(<PurchaseOrdersPage />, { permissions: ["purchase-orders.view"] });
 
     await screen.findByText("DHP/PO/24-25/049");
     expect(screen.queryByRole("button", { name: /^approve/i })).not.toBeInTheDocument();

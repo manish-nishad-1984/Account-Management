@@ -111,7 +111,7 @@ export function DashboardPage() {
 
         <ApprovalQueue<PurchaseOrderRow>
           title="Purchase Orders"
-          subject="purchase-order"
+          subject="purchase-orders"
           resource="purchase-orders"
           to="/purchase-orders"
           query={orders}
