@@ -338,7 +338,7 @@ deletion — or is it unwanted?
 
 ---
 
-## Question 11 — Who should be allowed to edit and delete suppliers?
+## Question 11 — Who should be allowed to edit, delete and APPROVE suppliers?
 
 **What we found.** In the current system, **editing and deleting a supplier is not
 permission-checked at all**. Anyone who can log in can change or delete any

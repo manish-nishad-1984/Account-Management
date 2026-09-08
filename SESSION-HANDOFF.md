@@ -1,15 +1,15 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
 **Written:** 2 September 2026, after the unblocking session. **Last extended
-8 September 2026** (§5p). Supersedes all earlier handoffs of the same name.
+8 September 2026** (§5q). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `58323e63`.** If `git log` shows commits after
+> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
 
 **Sections §3, §4, §8, §10 and §11 describe _now_ and are re-measured on every
-handoff. Sections §5, §5b … §5p are a log of days that already happened and are
+handoff. Sections §5, §5b … §5q are a log of days that already happened and are
 never edited.** If the two disagree, the numbered sections win — run
 `/handoff check` and it will say which have drifted.
 
@@ -1505,7 +1505,7 @@ the screens whose UI is gated on `usePermission`.
 | **Credentials not rotated** | The `sa` account on `srv1925876.hstgr.cloud` is still live, and its password is still in git history in earlier commits of `appsettings.json`. Removing it from the file did not remove it from history. `gitleaks` in CI will fail on the first push, correctly. **Rotation is the fix, not a history rewrite.** |
 | **Which of 3 jQuery money calculators is correct** | Blocks all invoicing work (Phase 4, the risk centre). The Items screen stores the GST amount as entered rather than deriving it, precisely so this stays an open question rather than being answered by implication. |
 | **Record over the list, or beside it** | Doc 19 **Question 12**. Both layouts are built and switchable (§5m), so this is answerable on the real screens in two minutes — it needs a person, not a session. It gets dearer every week: today the answer is one shared change, and every new screen built against the wrong one is another to re-check. **When it comes back, delete the loser and the `RecordLayoutPicker`.** |
-| **Supplier edit/delete permission change** | The port guards `supplier.edit` and `supplier.delete`; the source guards neither (§5b decision 1). Whoever edits suppliers today needs those boxes ticked before cutover, or they lose the ability. Needs a decision, not code. |
+| **Supplier edit/delete/APPROVE permission change** | The port guards `supplier.edit` and `supplier.delete`; the source guards neither (§5b decision 1). Whoever edits suppliers today needs those boxes ticked before cutover, or they lose the ability. **§5p adds a third right to the same question: `supplier.approve` exists in the port and NO production user holds it**, because supplier approval only ever happened through the source’s single `Dashboard` permission. Until an administrator grants it, the Suppliers queue is read-only on the live database. All three are doc 19 Question 11. Needs a decision, not code. |
 
 ---
 
@@ -1566,6 +1566,11 @@ the screens whose UI is gated on `usePermission`.
   deliberately not in the repo). See §5d for what was found and three traps.
   The user is still the better judge of whether a screen looks *right*; the
   driver only proves it renders.
+- **Driving the API by curl? Two things will 404 or 400 you first (§5q).** Every
+  route is behind the global prefix **`api/v1`** — `POST /auth/login` does not
+  exist, `POST /api/v1/auth/login` does. And the login field is **`userName`**,
+  not `username`; the wrong one returns a Zod `Required` error naming the right
+  one, which is the fastest way to spot it.
 - Node v24.15.0 locally; CI pins 22 LTS.
 - `git clone` of this repo needs `-c core.longpaths=true` — some
   `AccountManegments.Web/wwwroot` paths exceed MAX_PATH.
@@ -2036,3 +2041,110 @@ Question 11 and an administrator ticks a box.
 Tests: **776 Node + .NET** — 757 Node (34 contracts + 41 domain + 453 API + 229
 web) + 19 .NET, up 36. The .NET suite was RUN this time, not proved: `Passed! -
 Failed: 0, Passed: 19`.
+
+---
+
+## 5q. Running it for the user to check, and the queue that looked broken and was not (8 Sep 2026)
+
+Committed as `<COMMIT>`. **No code changed in this session** — the 776 figure in
+§3 and §4 is still the `5fdd81f6` measurement, and `git diff --name-only
+5fdd81f6..HEAD` returns nothing but `SESSION-HANDOFF.md`, which is how it was
+proved rather than re-run. What this session produced is three traps and one
+documentation correction.
+
+### The dashboard's Purchase Requests queue came up EMPTY, and that was correct
+
+The user asked for the app on localhost so they could look at §5p. Both servers
+were still up from the previous turn, so the job was to prove they served the
+*current* build rather than to restart them. They did: all four
+`POST .../approvals` routes answered `400` (the "Select at least one row"
+validation — routed, not missing), and `GET /items/export` answered `200`.
+
+Then the dashboard rendered with **Purchase Requests empty**, showing
+"No data found for the selected criteria", while the API held **11 pending
+purchase requests**. That reads as a bug in the screen just built.
+
+It is not. `devuser` is assigned to exactly **one** site:
+
+```
+GET /api/v1/sites/assignable
+  {"scope":"assigned","sites":[{"id":"09eaf457…","name":"Ahmedabad Riverfront"}]}
+```
+
+and the 11 pending requests are spread one-per-site across eleven **other**
+sites — Surat Diamond Park, Gandhinagar Sector 21, Bhavnagar Port Yard and so
+on. Not one of them is at Ahmedabad Riverfront. The panel was honouring the site
+scope exactly as §1.1 requires, and the legacy wording "for the selected
+**criteria**" is the source's own acknowledgement that this state is reachable.
+
+**The trap, and it will recur on every site-scoped screen:** the seed spreads
+site-scoped documents evenly across 45 sites, and `devuser` is assigned to one of
+them. So the expected number of seeded rows visible in any site-scoped queue is
+**about one**, and frequently **zero**. A screen that is working correctly and a
+screen that is broken look identical under those conditions. Check
+`sites/assignable` and the per-site distribution *before* concluding anything
+about a scoped list:
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "$API/purchase-requests?isApproved=false&limit=20" \
+  | node -pe "const j=JSON.parse(require('fs').readFileSync(0,'utf8'));
+              const b={};j.rows.forEach(r=>b[r.siteName]=(b[r.siteName]||0)+1);
+              JSON.stringify(b,null,1)"
+```
+
+**Fixed as data, not as code.** Three pending purchase requests were created at
+Ahmedabad Riverfront over the API so the queue demonstrates itself — one of them
+with `itemName` free text and no `itemId`, because that exercises the §5f LEFT
+JOIN decision (a request with no master row still appears, labelled by what was
+typed). Five items were taken back to pending with `PATCH /items/:id/approval`,
+the previous turn's verification having approved the queue down to two. All of
+that lives in the in-memory PGlite and dies on restart; **the dev seed was not
+touched**, because a seed edited to make a demo look better is a seed that stops
+representing anything.
+
+Final state, API and screen agreeing row for row: Purchase Requests 3, Items 5,
+Suppliers 5, Inward Challans 1, and the two unmigrated panels saying so. Header
+select-all produced **"Approve 3"**, no horizontal overflow, **0 console
+errors**.
+
+### Two ways to waste four calls against this API
+
+Both cost real time this session and neither is discoverable from the outside:
+
+1. **Every route is behind the global prefix `api/v1`**, set in
+   `bootstrap.ts:37`, not in `main.ts` where it was looked for first.
+   `POST /auth/login` returns a Nest 404 whose body says
+   `"Cannot POST /auth/login"` — which reads like a missing controller and is
+   actually a missing prefix.
+2. **The login field is `userName`, not `username`.** The 400 names the right
+   field (`{"path":"userName","message":"Required"}`), so read the issue rather
+   than assuming the credentials are wrong.
+
+There was a third, worth recording because it nearly caused a false alarm: a
+probe printed `rows=?` for all four queues because it read `j.data`, and **the
+list envelope is `{rows, nextCursor}`**, not `{data}`. A probe that cannot parse
+the response looks exactly like an endpoint returning nothing.
+
+### The one thing that was actually wrong in the documents
+
+Doc 19's **Question 11 heading** still read "Who should be allowed to edit and
+delete suppliers?" after §5p had added an entire section to its body about
+approval, and after the summary sheet row had been updated to
+"Who can edit suppliers, and who can APPROVE suppliers and items". Body and
+summary were right; the heading was a session behind.
+
+That is the §5n drift in miniature and it is worth naming: **§5p correctly
+updated the two places it was thinking about and missed the line above them.**
+The heading is what a reader scans, so a stale one mislabels a question that is
+otherwise complete. Now reads "edit, delete and APPROVE". §8's supplier row was
+folded together for the same reason — it described a two-right decision that has
+been a three-right decision since §5p.
+
+### The honest cost
+
+Three purchase requests and five un-approvals of state that exist only in one
+running process. Anyone restarting the API gets the plain seed back and the
+Purchase Requests queue returns to empty — which will look like a regression to
+whoever sees it next, and is the reason this section exists rather than a note in
+the chat window.
