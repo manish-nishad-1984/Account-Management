@@ -1082,7 +1082,7 @@ up 137.
 
 ## 5m. Both record layouts, so the business can actually answer (8 Sep 2026)
 
-Committed as `<COMMIT>`. PLAN.md §1.2 said to put the master-detail question to
+Committed as `028a42a9`. PLAN.md §1.2 said to put the master-detail question to
 the business **with both on screen**. Both are now on screen.
 
 The legacy screens fill a right-hand pane when a row is clicked and leave the
