@@ -9,7 +9,7 @@
 ## Why you are reading this
 
 We are rebuilding Account Book on newer technology. Before we write the parts that
-handle money, we need decisions on **eleven points** where the current system does
+handle money, we need decisions on **thirteen points** where the current system does
 something we cannot safely guess about.
 
 Most of these are places where the software today does something that looks like a
@@ -405,6 +405,33 @@ times the work, and by then people will have got used to it.
 
 ---
 
+## Question 13 — Should uploading a spreadsheet of items approve them automatically?
+
+**What we found.** Items have an **Approved** tick. An item added one at a time
+through the form starts **not approved**. An item added by uploading a spreadsheet
+is marked **approved immediately** — the current system does this, and we have kept
+it.
+
+**Why it matters.** It means the permission to upload a file is quietly a bigger
+permission than the one to add an item by hand. Somebody who may add items can
+approve 700 of them in one action, without anyone else looking at them. In the
+current system this is partly hidden, because the item list only shows approved
+items — so an upload that did not approve would appear to have done nothing at all.
+
+**Why we kept it for now.** Changing it would mean an upload of 700 items lands
+invisibly and someone then has to tick 700 boxes. That is almost certainly not what
+anyone wants. But "the alternative is worse" is not the same as "this is right", so
+it is worth one minute of your time.
+
+**What we need to know.** Is bulk upload itself the approval — i.e. the person doing
+it is trusted to have checked the file — or should uploaded items wait for a
+separate approval like hand-entered ones do?
+
+> **Decision:** ☐ Upload approves them, as now  ☐ Uploaded items must be approved
+> separately  ☐ Discuss
+
+---
+
 # Summary sheet
 
 | # | Question | Blocks work? | Decision |
@@ -421,6 +448,7 @@ times the work, and by then people will have got used to it.
 | 10 | Deleted items resurrected on re-create | No | |
 | 11 | Who can edit suppliers | Before cutover | |
 | 12 | Record over the list, or beside it | **Gets dearer weekly** | |
+| 13 | Does uploading a spreadsheet approve the items? | No | |
 
 **The five blocking questions have roughly a 2–4 week turnaround in our experience,
 and nothing about the invoicing rebuild can start until they are settled.** Question
@@ -447,3 +475,4 @@ now.
 | 10 | D19 |
 | 12 | `legacy-screens/PLAN.md` §1.2; `contexts/RecordLayoutContext.tsx` |
 | 11 | `SESSION-HANDOFF.md` §5b decision 1; finding C-6 |
+| 13 | `SESSION-HANDOFF.md` §5o; `modules/items/item-sheet.service.ts` `toCreateItem` |

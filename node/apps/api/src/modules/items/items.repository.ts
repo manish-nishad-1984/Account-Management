@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { and, count, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import type {
   CreateItem,
   ItemDetail,
@@ -160,6 +160,98 @@ export class ItemsRepository extends BaseRepository {
       throw new NotFoundException("Item not found");
     }
     return row;
+  }
+
+  /**
+   * Every item matching the search, for the spreadsheet export.
+   *
+   * NOT keyset-paginated, and it is the only read in the codebase that is not.
+   * An export is one file of the whole filtered set by definition — a paged
+   * export would hand the user page one and let them believe it is the
+   * catalogue. The row cap is the guard instead, and one row beyond it is
+   * fetched so that "more than the limit" is distinguishable from "exactly the
+   * limit".
+   *
+   * Ordered by name, which is what a person reads down a price list by. The
+   * list screen defaults to the same, and the legacy export inherits
+   * `GetItemList`'s `CreatedOn descending` — newest first, which is the one
+   * order a catalogue is never wanted in.
+   */
+  async exportRows(search: string | undefined, limit: number): Promise<ItemListRow[]> {
+    const filters = [eq(items.isDeleted, false)];
+    const match = this.searchFilter(search);
+    if (match) {
+      filters.push(match);
+    }
+
+    return this.db
+      .select({ ...DETAIL_COLUMNS, unitName: units.name })
+      .from(items)
+      .innerJoin(units, eq(items.unitId, units.id))
+      .where(and(...filters))
+      .orderBy(asc(items.name))
+      .limit(limit + 1);
+  }
+
+  /** Every unit, keyed by lower-cased name — how a sheet's "Unit Type" resolves. */
+  async unitsByName(): Promise<Map<string, { id: number; name: string }>> {
+    const rows = await this.db.select({ id: units.id, name: units.name }).from(units);
+    return new Map(rows.map((row) => [row.name.trim().toLowerCase(), row]));
+  }
+
+  /**
+   * Items already carrying any of these names, keyed by lower-cased name.
+   *
+   * Case-INSENSITIVE, because `items` has a `lower(name)` unique index: a
+   * case-sensitive existence check would pass and the INSERT would then fail on
+   * the constraint, turning a row-level message into a whole-file 409. The
+   * legacy check is `x.ItemName == itemDetails.ItemName` in EF Core, which
+   * against SQL Server's default case-insensitive collation behaves the way
+   * this does — so matching case-insensitively reproduces it rather than
+   * departing from it.
+   */
+  async existingByName(
+    names: string[],
+  ): Promise<Map<string, { id: string; isDeleted: boolean; name: string }>> {
+    if (names.length === 0) return new Map();
+
+    const lowered = [...new Set(names.map((name) => name.toLowerCase()))];
+    const rows = await this.db
+      .select({ id: items.id, name: items.name, isDeleted: items.isDeleted })
+      .from(items)
+      .where(inArray(sql`lower(${items.name})`, lowered));
+
+    return new Map(rows.map((row) => [row.name.toLowerCase(), row]));
+  }
+
+  /**
+   * Writes an import, all of it or none of it.
+   *
+   * One transaction for the whole file. The legacy version accumulates into two
+   * lists and calls `SaveChangesAsync` once, which is atomic by accident of EF
+   * Core's change tracker rather than by intent — and it returns early on the
+   * first bad row, so a file that is 90% valid writes nothing while telling the
+   * user about one problem out of fifteen. Every check happens before this is
+   * called; by here the rows are known good.
+   */
+  async applyImport(
+    creates: (CreateItem & { name: string })[],
+    revives: { id: string; values: CreateItem }[],
+    actorId: string,
+  ): Promise<void> {
+    await writing(() =>
+      this.db.transaction(async (tx) => {
+        if (creates.length > 0) {
+          await tx.insert(items).values(creates.map((row) => ({ ...row, ...createdBy(actorId) })));
+        }
+        for (const revive of revives) {
+          await tx
+            .update(items)
+            .set({ ...revive.values, isDeleted: false, ...updatedBy(actorId) })
+            .where(eq(items.id, revive.id));
+        }
+      }),
+    );
   }
 
   /**

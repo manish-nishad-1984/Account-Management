@@ -13,6 +13,17 @@ export class ApiError extends Error {
     readonly status: number,
     message: string,
     readonly issues?: Array<{ path: string; message: string }>,
+    /**
+     * The problem body as it arrived.
+     *
+     * Most failures are a sentence and, at most, a list of field issues. A few
+     * carry a structured result the screen renders instead — the spreadsheet
+     * import answers 400 with every bad row and its number, which is the point
+     * of that response rather than a detail of it. Keeping the raw body means
+     * such an endpoint needs no second error channel: the screen parses what it
+     * expects, and everything else still gets the sentence.
+     */
+    readonly body?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "ApiError";
@@ -63,6 +74,7 @@ async function problemFrom(response: Response): Promise<ApiError> {
     response.status,
     typeof problem.message === "string" ? problem.message : response.statusText,
     Array.isArray(problem.issues) ? problem.issues : undefined,
+    problem,
   );
 }
 

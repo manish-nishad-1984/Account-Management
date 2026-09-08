@@ -84,16 +84,36 @@ so nothing changed for any existing test.
 **When the business answers, delete the loser and the switch.** A permanent
 toggle is two layouts to test and support, and a question that never closes.
 
-### 1.3 Item Master has no Excel import/export and no price history
+### 1.3 Item Master Excel · **ITEM DONE** · price history and Supplier still open
 
 `Download File` / `Upload File` sit on Item and Supplier, and the clock icon in
-the Action column opens an item's price over time. We have neither.
+the Action column opens an item's price over time.
 
-- **Excel** is how a 758-item catalogue is maintained. Roadmap Phase 2 already
-  scoped it to a BullMQ worker; it was not done.
+**Item Master's pair shipped 8 Sep 2026. See SESSION-HANDOFF §5o.**
+
+- **Excel, on Item** — done. `GET /items/export` and `POST /items/import`, one
+  shared column list in `contracts/item-sheet.ts`, all-or-nothing with every bad
+  row reported at once. **Not** a BullMQ worker: 758 items validate and insert in
+  one transaction in well under a second, and a queue would have added Redis to
+  the deployment to make a fast thing asynchronous. Revisit only if a real file
+  ever takes long enough to time out.
+- **The legacy pair does not round-trip, and that is the headline.** Its exporter
+  writes `Item Name | Unit type | PricePerUnit | Gst(%) | HSN Code`; its importer
+  reads `ItemName | UnitType | PricePerUnit | GSTPer | HSNCode`. Four of five
+  disagree, so the downloaded file cannot be uploaded back — silently, because
+  the missing column throws per row inside a `catch` that only writes to the
+  console. Ours is one list both halves share, with a test that fails if they
+  ever drift.
+- **Excel, on Supplier — BLOCKED, and not on effort.**
+  `SupplierMasterRepo.ImportSupplierListFromExcel` resolves a State NAME and a
+  City NAME against the `States` and `Cities` tables to get their ids. Those
+  tables have never been extracted (blocker 1), and our `suppliers.city_id` /
+  `state_id` are bare integers with no lookup behind them — §1.4 below. There is
+  nothing to resolve a name against, so the import cannot be written honestly.
+  **This one needs the census, not a session.**
 - **Price history** has no schema behind it at all: `items.price_per_unit` is a
   single mutable column. Needs a modelling decision (audit table vs temporal
-  rows) before a screen.
+  rows) before a screen. Now the NEXT row on its own.
 
 ### 1.4 Company is missing `landmark`, and geography shows ids not names
 
@@ -199,8 +219,10 @@ DONE     site selector                                    (7 Sep 2026, §1.1)
          Inward Challan  (aggregates, filters)            (7 Sep 2026, §09)
          file upload for challans                         (7 Sep 2026, §09)
          both record layouts, for comparison              (8 Sep 2026, §1.2)
+         Item Master Excel import/export                  (8 Sep 2026, §1.3)
 NOW      master-detail ANSWER                            <- with the business now, doc 19 Q12
-NEXT     Excel import/export, item price history          (parallel, independent)
+NEXT     item price history                               (needs a modelling decision — ours)
+BLOCKED  Supplier Excel import                           <- needs the States/Cities census
 BLOCKED  Purchase Invoice -> Purchase Order -> Sales      <- needs B-2 and D7
 LAST     Reports, payments, dashboard queues              <- needs the payments model
 ```

@@ -1,15 +1,15 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
 **Written:** 2 September 2026, after the unblocking session. **Last extended
-8 September 2026** (§5n). Supersedes all earlier handoffs of the same name.
+8 September 2026** (§5o). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `e3b3739c`.** If `git log` shows commits after
+> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
 
 **Sections §3, §4, §8, §10 and §11 describe _now_ and are re-measured on every
-handoff. Sections §5, §5b … §5n are a log of days that already happened and are
+handoff. Sections §5, §5b … §5o are a log of days that already happened and are
 never edited.** If the two disagree, the numbered sections win — run
 `/handoff check` and it will say which have drifted.
 
@@ -28,10 +28,16 @@ before touching nginx or the server. The live ASP.NET app now answers on
 work** (§5e, "The live MVC app is down").
 
 **Live release is `20260908-132107`, which is commit `723cd97b`** — file upload
-(§5l) and everything before it. The two record layouts of §5m are committed and
-tested but **NOT deployed**: they exist so the business can answer doc 19
-Question 12, and shipping a temporary switch to production before the answer
-would put a control there that is meant to be deleted.
+(§5l) and everything before it. **This session did NOT deploy.** Two things are
+committed and tested but not shipped:
+
+- the two record layouts of §5m — they exist so the business can answer doc 19
+  Question 12, and shipping a temporary switch to production before the answer
+  would put a control there that is meant to be deleted;
+- **the Item Master Excel import/export of §5o.** Deployable whenever wanted —
+  it needs no migration, no new environment variable and no nginx change, since
+  the upload is parsed in memory and never written to disk. It rides along with
+  whatever ships next, or on its own.
 
 ---
 
@@ -75,21 +81,22 @@ evidence-based — every finding cites a file and line. **Do not re-derive it.**
 ```
 AC/
 ├── AccountManagement.sln          .NET — all 4 projects on net8.0
-├── AccountManagement.Tests/       xUnit (12 tests)
+├── AccountManagement.Tests/       xUnit (19 tests)
 ├── AccountManegment.Repo/Domain/FinancialYear.cs
 ├── .github/workflows/ci.yml       build + test + gitleaks + node job
 ├── Migration-Assessment/          the 18-doc assessment + tools/ + db-extract/
 └── node/                          npm workspaces
     ├── packages/domain/           shared business rules (41 tests)
-    ├── packages/contracts/        Zod schemas shared by API and web (25 tests)
+    ├── packages/contracts/        Zod schemas shared by API and web (34 tests)
     └── apps/
-        ├── api/                   NestJS + Fastify + Drizzle (374 tests)
-        └── web/                   React 19 + Vite + Tailwind (195 tests)
+        ├── api/                   NestJS + Fastify + Drizzle (431 tests)
+        └── web/                   React 19 + Vite + Tailwind (215 tests)
 ```
 
-**654 tests pass** — 635 Node (25 contracts + 41 domain + 374 API + 195 web) plus
-19 .NET. Measured at `36fcc82f` on 8 Sep 2026, not carried forward from the
-previous section.
+**740 tests pass** — 721 Node (34 contracts + 41 domain + 431 API + 215 web)
+plus 19 .NET. Measured at `<COMMIT>` on 8 Sep 2026, not carried forward from the
+previous section. The .NET figure was proved rather than re-run: no `.cs`,
+`.csproj` or `.sln` file has changed since it was last measured.
 
 > These two figures — here and in §4 — said **310** for five consecutive sessions
 > while the true count more than doubled. Nobody was careless: each session
@@ -137,10 +144,10 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 ## 4. Repository state
 
 Branch **`main`**, working tree clean, pushed to `origin/main`. Builds,
-typechecks, and all **654 tests pass** — 635 Node (25 contracts + 41 domain +
-374 API + 195 web) + 19 .NET.
+typechecks, and all **740 tests pass** — 721 Node (34 contracts + 41 domain +
+431 API + 215 web) + 19 .NET.
 
-The suites were last measured at **`36fcc82f`**, the final code commit of
+The suites were last measured at **`<COMMIT>`**, the final code commit of
 8 Sep 2026. Anything after that on `main` is documentation — a handoff always
 commits after its own measurement, so the newest hash is never the one the
 numbers were taken at, and naming it here would be a lie that looks precise.
@@ -155,7 +162,7 @@ numbers were taken at, and naming it here would be a lie that looks precise.
   purchase requests, `a821d564` the legacy-screen documentation, `7a068bde` the
   site scope, `bd97a238` inventory inward, `dbd72d25` inward challans,
   `abf027a2` the money calculators, `53c8a620` attachments, `028a42a9` both
-  record layouts.
+  record layouts, `<COMMIT>` the Item Master Excel import/export.
 - **`main` is pushed to `origin/main`** and the working tree is clean.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
   credential is in the HISTORY, not the working tree. Rotation is the fix.
@@ -1491,8 +1498,8 @@ the screens whose UI is gated on `usePermission`.
 
 | Blocker | Detail |
 |---|---|
-| **`Migration-Assessment/db-extract/` is empty** | The 3 read-only scripts have never been run. Until then the orphan volume across ~62 unconstrained FK columns is unknown, and no schema can be *finalised*. **This is the binding constraint.** No longer a day in SSMS — it is now one command, `tools/run-db-extract.ps1` (§5c). It still needs the rotated credential. |
-| **10 business-rule questions unanswered** | 2-4 week lead time — the longest pole. The money calculator cannot start without them. They are now written to be sent: `Migration-Assessment/19-Business-Decisions-Required.md` (§5c). **The clock does not start until someone sends it.** |
+| **`Migration-Assessment/db-extract/` is empty** | The 3 read-only scripts have never been run. Until then the orphan volume across ~62 unconstrained FK columns is unknown, and no schema can be *finalised*. **This is the binding constraint.** No longer a day in SSMS — it is now one command, `tools/run-db-extract.ps1` (§5c). It still needs the rotated credential. **As of §5o this blocker now stops ordinary feature work, not just schema work:** Supplier's Excel import resolves State and City by NAME against tables that have never been extracted, so it cannot be written until the census runs. |
+| **13 business-rule questions unanswered** | 2-4 week lead time — the longest pole. The money calculator cannot start without them. They are now written to be sent: `Migration-Assessment/19-Business-Decisions-Required.md` (§5c). **The clock does not start until someone sends it.** |
 | **Credentials not rotated** | The `sa` account on `srv1925876.hstgr.cloud` is still live, and its password is still in git history in earlier commits of `appsettings.json`. Removing it from the file did not remove it from history. `gitleaks` in CI will fail on the first push, correctly. **Rotation is the fix, not a history rewrite.** |
 | **Which of 3 jQuery money calculators is correct** | Blocks all invoicing work (Phase 4, the risk centre). The Items screen stores the GST amount as entered rather than deriving it, precisely so this stays an open question rather than being answered by implication. |
 | **Record over the list, or beside it** | Doc 19 **Question 12**. Both layouts are built and switchable (§5m), so this is answerable on the real screens in two minutes — it needs a person, not a session. It gets dearer every week: today the answer is one shared change, and every new screen built against the wrong one is another to re-check. **When it comes back, delete the loser and the `RecordLayoutPicker`.** |
@@ -1541,21 +1548,36 @@ the screens whose UI is gated on `usePermission`.
 ## 11. Suggested next steps
 
 Masters, purchase requests, inventory inward and inward challans are all built
-(§5f — §5l), and everything up to and including file upload is deployed.
+(§5f — §5l), Item Master's Excel import/export shipped in §5o, and everything up
+to and including file upload is deployed.
 `Migration-Assessment/legacy-screens/PLAN.md` holds the authoritative sequencing;
 its rows currently read:
 
 ```
-NOW      master-detail ANSWER                     <- with the business, doc 19 Q12
-NEXT     Excel import/export, item price history     (parallel, independent)
+NOW      master-detail ANSWER             <- with the business, doc 19 Q12
+NEXT     item price history                  (needs a modelling decision — ours)
+BLOCKED  Supplier Excel import            <- needs the States/Cities census
+BLOCKED  Purchase Invoice -> PO -> Sales  <- needs B-2 and D7
 ```
 
 **The NOW row is not code.** Both layouts are built (§5m); what is missing is a
-decision, and the answer deletes the loser and the switch. Item price history
-needs a modelling decision first — `items.price_per_unit` is a single mutable
-column with no history behind it, so audit-table vs temporal-rows has to be
-chosen before a screen can be drawn. That one is ours to make with a stated
-rationale; the layout one is not.
+decision, and the answer deletes the loser and the switch.
+
+**The NEXT row is one modelling decision, and it is ours to make.**
+`items.price_per_unit` is a single mutable column with no history behind it, so
+audit-table versus temporal-rows has to be settled before a screen can be drawn.
+Note that whichever wins, the screen is **empty on day one for all 758 items** —
+no history exists to backfill, and inventing one would breach convention 2. Say
+that on the screen rather than shipping a clock icon that opens a blank pane.
+
+**Supplier's Excel pair is blocked on the census, not on effort**, and it is the
+first piece of ordinary feature work that blocker has actually stopped.
+`SupplierMasterRepo.ImportSupplierListFromExcel` resolves a State NAME and a City
+NAME against the `States` and `Cities` tables; those tables have never been
+extracted, and our `suppliers.city_id` / `state_id` are bare integers with
+nothing behind them. Everything it would reuse — `common/spreadsheet/`, the
+shared column list, the all-or-nothing import with per-row errors — is generic
+and already in place, so it is a short job the day the census lands.
 
 Everything below is either blocked on the business or is the next tranche of
 build. **The first items are still on the user — but most are now cheap, which
@@ -1622,3 +1644,177 @@ Then, in rough order of value:
   suggests writes do not lean on change tracking — but a single read-modify-save
   path that omits `.Update()` would start failing silently, and 19 tests is not a
   net for that. Check all 35 save paths first; call it half a day.
+
+---
+
+## 5o. Item Master Excel, and the round trip the source never closed (8 Sep 2026)
+
+Committed as `<COMMIT>`. The NEXT row of `PLAN.md`, and the first legacy
+capability ported rather than the next legacy screen — Download File and Upload
+File on `/ItemMaster/ItemListView`.
+
+The next SCREEN would have been the purchase order, and it is blocked. PLAN.md
+marks Phase 4 on B-2 and D7, and `08-create-purchase-order.md` says why: PO
+totals become server-authoritative in the port, which is precisely the
+arithmetic nobody has ruled on. Building it now would mean choosing a GST
+calculator by implication, in the one screen where the choice is money.
+
+### The finding: the two halves of the legacy feature do not fit together
+
+`DownloadItemListDemoExcelFile` (`ItemMasterController.cs:665`) writes the
+headers
+
+    Item Name | Unit type | PricePerUnit | Gst(%) | HSN Code
+
+and `ImportExcelFile` (`:264-268`) reads its columns by the names
+
+    ItemName | UnitType | PricePerUnit | GSTPer | HSNCode
+
+**Only `PricePerUnit` matches.** The file the Download button produces cannot be
+fed to the Upload button beside it — so download-edit-upload, the entire reason
+a pair of buttons exists on a screen holding 758 items, has never worked.
+
+And it fails **silently**, which is what makes it expensive. `row["ItemName"]`
+against a DataTable whose column is called `Item Name` throws, and the throw
+lands in a per-row `catch` that does `Console.WriteLine` and continues. Every
+row is dropped, `items` ends up empty, and the API answers ": Failed to insert
+item details" — a message about the database, for a fault in the header row.
+
+The fix is not to pick one of the two spellings. It is **one list, in the
+contracts package**, that the exporter writes and the importer reads, plus a
+test that fails if they ever drift. Headers are matched leniently on the way in
+— lower-cased, letters and digits only — so `Item Name`, `ItemName` and
+`ITEM NAME` are one column, and a file from EITHER legacy spelling still
+imports. Only the GST column needed aliases; `Unit type` and `UnitType` both
+normalise to `unittype` on their own.
+
+### Four more defects in the same hundred lines
+
+- **A row that will not parse is discarded in silence.** That same `catch`
+  swallows `Convert.ToDecimal` failures, so `₹27.00` or `1,234.56` — what a
+  maintained catalogue actually contains — removes the item and reports nothing.
+  Ours strips `₹`, commas, spaces and a trailing `%`, and refuses anything
+  genuinely wrong **by row number and column**.
+- **The upload is written into the web root under its own name.**
+  `wwwroot/UploadExcelFile/<FormFile.FileName>` with `FileMode.Create`:
+  caller-controlled path, truncating on collision, inside a directory the web
+  server hands out. Findings H-9 and H-10 again, on a second screen after the
+  challan upload. The GUID prefix that would have fixed the collision **is
+  computed on the very next line**, with the comment `// Fixing incorrect usage
+  of Guid`, and is then used only for its file extension. Ours never writes the
+  upload to disk at all — it is parsed in memory and dropped.
+- **`.xlsx` gets the wrong OLE provider.** `Microsoft.ACE.OLEDB.12.0` with
+  `Extended Properties='Excel 8.0'`, which is the BIFF8 setting; and any
+  extension that is neither `.xls` nor `.xlsx` leaves the connection string
+  empty and throws from inside the driver.
+- **The row number reported is off by one against the file.**
+  `itemDetailsList.IndexOf(itemDetails) + 1` counts data rows, not spreadsheet
+  rows, so "row 4" sends the user to row 5 of the sheet in front of them. Ours
+  reports the number in Excel's own gutter.
+
+### Two departures, both forced rather than chosen
+
+1. **`isWithGst` is derived, not hard-coded `false`.** The legacy importer writes
+   `IsWithGst = false` while also writing `Gstamount` and `Gstper` — which is
+   exactly the contradiction `createItemSchema` refuses, and exactly the shape of
+   the production row captured in `05-item-master.md` (IsWithGST off, 18% and
+   ₹4.86 populated beside it). Reproducing it would import rows our own edit form
+   then refuses to save, so the choice was between weakening the validation and
+   setting the flag honestly. An item with a GST percentage is a GST item.
+2. **`isApproved` is `true` on import**, which our create form does not default
+   to. This one IS the legacy behaviour and it is kept: the legacy list filters
+   `IsApproved == true`, so an import leaving items unapproved would load 758
+   rows that are invisible in the system they came from. But it means `item.add`
+   grants in bulk what a single create does not, so it is now **doc 19
+   Question 13** rather than a constant nobody ever wrote down.
+
+The revive-on-matching-name path — a soft-deleted item brought back and
+overwritten — is reproduced as-is. It is already **doc 19 Question 10**, so the
+import inherits that answer rather than asking a second time.
+
+### `GST Amount` is a column, and that is the interesting decision
+
+The legacy sheet has no such column: it derives the amount as
+`pricePerUnit / 100 * gstper` and stores the result. Had our exporter left the
+column out and our importer derived it the same way, then **downloading the
+catalogue and uploading it back would silently rewrite every stored GST amount
+with a computed one** — answering finding B-2 by accident, in bulk, across 758
+items, on the one figure the business reconciles against its invoices.
+
+So the export writes what is stored, and the import uses the column when it is
+present. Deriving happens only when the column is absent, which is exactly the
+legacy file, where there is nothing to preserve. The derivation is in decimals on
+BigInt via `packages/domain/src/money.ts`: 27 at 18% is `4.86`, where the same
+expression in JavaScript floats gives 4.859999999999999.
+
+### Every cell is written as TEXT, prices included
+
+Handing a price to a spreadsheet as a number puts a binary double in the file.
+For a catalogue meant to be round-tripped that turns a stored `395.00` into
+`395`, and `1234.56` into whatever the double renders as. The visible cost is
+Excel's green "number stored as text" marker and a column that will not sum; the
+column is a price list, and the legacy sheet has no totals row either. Verified
+both ways in `workbook.test.ts` — trailing zeros survive the round trip.
+
+### The library choice, and the capability it costs
+
+**ExcelJS 4.4.0**, behind `common/spreadsheet/workbook.ts` so it is one import to
+replace. The JavaScript options here are all compromised in some way: SheetJS's
+maintained releases left npm, and the `xlsx` package still on the public registry
+is 0.18.5 with live prototype-pollution and ReDoS advisories — not something to
+point at user-uploaded files. ExcelJS adds one moderate transitive advisory
+(`uuid` <11.1.1, a bounds check in the v3/v5/v6 paths it does not use). The high
+and critical entries in `npm audit` are the pre-existing `vite`/`vitest` dev
+chain, unchanged by this.
+
+**ExcelJS cannot read legacy BIFF8 `.xls`, and the legacy importer accepts one.**
+That is a real capability the port drops. It is detected by the OLE
+compound-document signature rather than by extension — so a genuinely old file
+renamed `.xlsx` gets the same answer — and the message carries the remedy:
+_"Open it in Excel and use Save As to save it as .xlsx"_. `.csv` is refused
+deliberately: Excel writes CSV in the machine's locale, so `1.234,56` and
+`1,234.56` are the same file to Excel and different numbers to a parser.
+
+### A defect the tests found in this session's own code
+
+The first run of the service test came back with error rows `[3, 4, 2]`. The cell
+checks run over the whole file first, and the unit and duplicate checks only
+afterwards — once, against a single read of the database rather than one per row
+— so the errors are **found** out of order. Reported that way, a file with a bad
+unit on row 2 and a bad price on row 400 lists row 400 first, and there is no way
+to work down a long sheet. They are now sorted by row before the response is
+built, with a test that pins it.
+
+### Verified by running it, not by asserting
+
+Against the real API on port 3000, over HTTP, after a rebuild and restart:
+
+| | |
+|---|---|
+| `GET /items/export` | 200, 9,277 bytes, `attachment; filename="items-2026-09-08.xlsx"`, `nosniff`, `private, no-store` |
+| the file itself | sheet `Items`, 50 rows, headers exactly the shared list, `"520.00"` as text with its trailing zeros intact |
+| export with no token | 401 |
+| re-importing that export | 400 — all 50 rows refused as "already exists", the legacy rule reported for all 50 at once instead of stopping at the first |
+| a file in the **legacy** five-column layout | 200, `{"rowCount":3,"created":3,"revived":0,"errors":[]}` |
+| `₹ 1,250.00` and `18%` inside it | stored as `1250.00`, GST `225.00` |
+| `27.00` at `18` with no amount column | GST `4.86`, `isWithGst` true |
+| six broken rows | all five distinct problems reported at once, in row order, each naming its column |
+| a real `.xls` | 400 — "is an older Excel file (.xls) … Save As" |
+| a CSV renamed `.xlsx` | 400 — "its name says .xlsx and its contents say otherwise" |
+| after that failed import | 0 rows written — all-or-nothing holds |
+
+### The honest cost
+
+`node_modules` gains ExcelJS and 91 transitive packages for a feature two buttons
+wide. It is a server bundle so nobody downloads it, but it is the largest single
+dependency added to this project so far, and it is there for one screen — with a
+second, Supplier, that **cannot use it yet**.
+`SupplierMasterRepo.ImportSupplierListFromExcel` resolves a State NAME and a City
+NAME against the `States` and `Cities` tables to get their ids, and those tables
+have never been extracted. `suppliers.city_id` and `state_id` are bare integers
+with no lookup behind them. That import is blocked on the census, not on effort,
+and PLAN.md now says so.
+
+Tests: **721 Node** (34 contracts + 41 domain + 431 API + 215 web) + 19 .NET =
+**740**, up 86. The .NET figure was not re-run: `git status` shows no `.cs`,
+`.csproj` or `.sln` file touched this session.

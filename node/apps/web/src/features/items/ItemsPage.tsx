@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ITEM_SORT_FIELDS, type ItemRow } from "@accountmanagement/contracts";
-import { Plus, Ruler } from "lucide-react";
+import { AlertTriangle, Download, Plus, Ruler, Upload } from "lucide-react";
 import { DataGrid, RowActions } from "../../components/DataGrid";
-import { Badge, Button, ConfirmDialog, PageHeader } from "../../components/ui";
-import { useDeleteItem, useItemList } from "./api";
+import { Alert, Badge, Button, ConfirmDialog, PageHeader } from "../../components/ui";
+import { downloadItemSheet, useDeleteItem, useItemList } from "./api";
+import { ApiError } from "../../lib/api-client";
 import { ItemFormDialog } from "./ItemFormDialog";
+import { ItemImportDialog } from "./ItemImportDialog";
 import { UnitsDialog } from "./UnitsDialog";
 import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
@@ -20,8 +22,31 @@ export function ItemsPage() {
   const query = useItemList(screen.listParams);
   const remove = useDeleteItem();
   const [unitsOpen, setUnitsOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const { openEdit, askDelete } = screen;
+
+  /**
+   * The download is a plain async handler, not a mutation.
+   *
+   * It writes nothing, so a `useMutation` would be borrowing the wrong tool
+   * for its pending flag — and TanStack Query would cache a Blob keyed by
+   * nothing useful. What it does need is its own error state: the failure
+   * cannot go through the grid's, which belongs to the list query.
+   */
+  const download = async () => {
+    setDownloading(true);
+    setDownloadError(null);
+    try {
+      await downloadItemSheet(screen.listParams.search);
+    } catch (error) {
+      setDownloadError(error instanceof ApiError ? error.message : "The download failed.");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const columns = useMemo<ColumnDef<ItemRow, unknown>[]>(
     () => [
@@ -116,6 +141,28 @@ export function ItemsPage() {
                 Units
               </Button>
             )}
+            {/*
+              "Download File" and "Upload File" on the legacy screen. Download
+              is guarded by `item.view` and Upload by `item.add`, matching the
+              list and the create form they stand in for — the legacy download
+              action carries no permission attribute at all, so anyone who can
+              reach the site can pull the entire price list.
+            */}
+            {canView && (
+              <Button
+                variant="secondary"
+                icon={Download}
+                loading={downloading}
+                onClick={download}
+              >
+                Download File
+              </Button>
+            )}
+            {canAdd && (
+              <Button variant="secondary" icon={Upload} onClick={() => setImportOpen(true)}>
+                Upload File
+              </Button>
+            )}
             {canAdd && (
               <Button icon={Plus} onClick={screen.openCreate}>
                 Add item
@@ -124,6 +171,12 @@ export function ItemsPage() {
           </>
         }
       />
+
+      {downloadError && (
+        <Alert icon={AlertTriangle} className="mb-4">
+          {downloadError}
+        </Alert>
+      )}
 
       <DataGrid<ItemRow>
         columns={columns}
@@ -136,6 +189,8 @@ export function ItemsPage() {
       <ItemFormDialog open={screen.isFormOpen} itemId={screen.editingId} onClose={screen.closeForm} />
 
       <UnitsDialog open={unitsOpen} onClose={() => setUnitsOpen(false)} />
+
+      <ItemImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
 
       <ConfirmDialog
         open={screen.deleteTarget !== null}
