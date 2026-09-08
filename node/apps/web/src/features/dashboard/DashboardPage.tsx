@@ -3,6 +3,7 @@ import {
   APPROVAL_QUEUE_SIZE,
   type InwardChallanRow,
   type ItemRow,
+  type PurchaseOrderRow,
   type PurchaseRequestRow,
   type SupplierRow,
 } from "@accountmanagement/contracts";
@@ -11,6 +12,7 @@ import { Badge, Card, CardHeader, PageHeader } from "../../components/ui";
 import { useAuth } from "../../contexts/AuthContext";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { usePurchaseRequestList } from "../purchase-requests/api";
+import { usePurchaseOrderList } from "../purchase-orders/api";
 import { useInwardChallanList } from "../inward-challans/api";
 import { useItemList } from "../items/api";
 import { useSupplierList } from "../suppliers/api";
@@ -21,11 +23,13 @@ import { formatMoney } from "../../lib/format";
  * The approval cockpit — `/Home/Index` in the source.
  *
  * Six pending-approval queues, each with a select-all in its Approve column
- * header and one bulk action. FOUR of the six are here. The two that are not —
- * Purchase Order and Purchase Invoice — read tables that have not been
- * migrated, so they say which and why rather than rendering a queue that is
- * empty because nothing feeds it. A dashboard that looks populated and is not
- * is worse than one that admits what it cannot see (convention 2).
+ * header and one bulk action. FIVE of the six are here.
+ *
+ * Purchase Orders joined on 8 Sep 2026 when that module landed. The one still
+ * missing — Purchase Invoice — reads a table that has not been migrated, so it
+ * says which and why rather than rendering a queue that is empty because nothing
+ * feeds it. A dashboard that looks populated and is not is worse than one that
+ * admits what it cannot see (convention 2).
  *
  * The queues read the SAME hooks the list screens use, deliberately. A
  * dashboard with its own idea of what "pending" means drifts from the screen it
@@ -45,6 +49,12 @@ export function DashboardPage() {
     PENDING,
   );
   const challans = useInwardChallanList(
+    { ...QUEUE_PARAMS, sortBy: "createdAt", sortDir: "desc" },
+    PENDING,
+  );
+  // Site-scoped like the two above. Pending means unapproved, whatever the
+  // active flag says — an inactive order awaiting approval is still awaiting it.
+  const orders = usePurchaseOrderList(
     { ...QUEUE_PARAMS, sortBy: "createdAt", sortDir: "desc" },
     PENDING,
   );
@@ -99,14 +109,19 @@ export function DashboardPage() {
           columns={CHALLAN_COLUMNS}
         />
 
-        <NotMigrated
+        <ApprovalQueue<PurchaseOrderRow>
           title="Purchase Orders"
-          reason="The purchase order tables are not migrated yet. Phase 4 is gated on the GST calculator question — doc 19, question 2."
+          subject="purchase-order"
+          resource="purchase-orders"
+          to="/purchase-orders"
+          query={orders}
+          ready={scope.isReady}
+          columns={PURCHASE_ORDER_COLUMNS}
         />
 
         <NotMigrated
           title="Purchase Invoices"
-          reason="Supplier invoices are not migrated yet, and they sit behind the same Phase 4 gate."
+          reason="Supplier invoices are not migrated yet. They are still behind the GST calculator question — doc 19, question 2 — which purchase orders turned out not to need."
         />
       </div>
 
@@ -173,6 +188,18 @@ const PURCHASE_REQUEST_COLUMNS: QueueColumn<PurchaseRequestRow>[] = [
   // lists, labelled by what was typed (§5f).
   { key: "itemLabel", header: "Item", cell: (row) => row.itemLabel },
   { key: "quantity", header: "Qty", numeric: true, cell: (row) => row.quantity },
+];
+
+const PURCHASE_ORDER_COLUMNS: QueueColumn<PurchaseOrderRow>[] = [
+  { key: "poNo", header: "PO No", cell: (row) => row.poNo },
+  { key: "supplierName", header: "Supplier", cell: (row) => row.supplierName ?? <Absent /> },
+  { key: "siteName", header: "Site", cell: (row) => row.siteName ?? <Absent /> },
+  {
+    key: "totalAmount",
+    header: "Total",
+    numeric: true,
+    cell: (row) => formatMoney(row.totalAmount),
+  },
 ];
 
 const ITEM_COLUMNS: QueueColumn<ItemRow>[] = [

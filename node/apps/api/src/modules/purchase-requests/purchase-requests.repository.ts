@@ -1,6 +1,5 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, count, eq, ilike, inArray, or, sql } from "drizzle-orm";
-import { financialYear } from "@accountmanagement/domain";
 import type {
   CreatePurchaseRequest,
   ListQuery,
@@ -9,10 +8,11 @@ import type {
   UpdatePurchaseRequest,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
-import { documentCounters, items, purchaseRequests, sites, units } from "../../db/schema";
+import { items, purchaseRequests, sites, units } from "../../db/schema";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
+import { nextDocumentNumber, purchaseRequestNumber } from "../../common/document-number";
 
 const SORTABLE = {
   prNo: purchaseRequests.prNo,
@@ -227,33 +227,20 @@ export class PurchaseRequestsRepository extends BaseRepository {
   /**
    * Allocates the next document number for a financial year, atomically.
    *
-   * `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` takes a row lock for the
-   * duration of the statement, so two concurrent callers serialise and get
-   * consecutive numbers. Read-then-write cannot do that without an explicit
-   * lock, which is why the source hands out duplicates.
+   * The mechanism moved to `common/document-number.ts` when purchase orders
+   * needed the same sequence with a company dimension. Two copies of an upsert
+   * that hands out document numbers is exactly the kind of duplication the source
+   * has — `CheckPRNo` and `CheckPONo` are separate implementations, wrong in
+   * DIFFERENT ways — so there is one here.
    *
-   * Runs on the transaction handle, so a failed insert rolls the number back
-   * rather than burning it.
+   * A purchase request sequence is global: no company, `PR/25-26/001`.
    */
   private async nextNumber(tx: Database, now: Date): Promise<string> {
-    const year = financialYear.format(financialYear.currentAsProduced(now));
-
-    const [counter] = await tx
-      .insert(documentCounters)
-      .values({ documentType: DOCUMENT_TYPE, financialYear: year, nextValue: 2 })
-      .onConflictDoUpdate({
-        target: [documentCounters.documentType, documentCounters.financialYear],
-        set: {
-          nextValue: sql`${documentCounters.nextValue} + 1`,
-          updatedAt: new Date(),
-        },
-      })
-      .returning({ nextValue: documentCounters.nextValue });
-
-    // On INSERT the row stores the value the NEXT document takes, so the number
-    // issued now is one less. On UPDATE the same is true after incrementing.
-    const issued = (counter?.nextValue ?? 2) - 1;
-    return `PR/${year}/${String(issued).padStart(3, "0")}`;
+    return nextDocumentNumber(tx, {
+      documentType: DOCUMENT_TYPE,
+      format: purchaseRequestNumber,
+      now,
+    });
   }
 
   /**

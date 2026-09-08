@@ -68,5 +68,40 @@ Final action, bottom right: **Add Purchase Order**.
    of one field. In the target that is a nullable date plus a boolean, or a
    nullable date where NULL means immediate. Pick one deliberately.
 5. The totals are computed in the browser today. In the port they are
-   **server-authoritative** — the single most important change in Phase 4, and
-   the reason the GST question (B-2) has to be answered first.
+   **server-authoritative** — the single most important change in Phase 4.
+   ~~and the reason the GST question (B-2) has to be answered first.~~
+
+   **THE B-2 CLAIM IS WRONG FOR THIS SCREEN — corrected 8 Sep 2026, by counting
+   rather than by reasoning from the phase it sits in.** Three checks, all
+   against `Views/PurchaseMaster/CreatePurchaseOrder.cshtml`:
+
+   - It loads **exactly one** script from `moduls/`, `purchaserequestscript.js`.
+     D-JS-1's three-way `updateTotals` collision is on `CreateInvoice.cshtml`,
+     which loads three. There is nothing here to collide.
+   - It contains **zero** occurrences of `discount`, `tds`, `roundoff` and
+     `round-off`. Those three are precisely what the calculators disagree about,
+     so the disagreement has no surface on this screen.
+   - The "each calculator sees half the table" defect needs two row classes.
+     `_GetItemDetailsPartial.cshtml` renders rows as `class="product"` and
+     `updateTotals` iterates `$(".product")` — they match, so the one calculator
+     that runs sees every row.
+
+   So a purchase order has exactly one defensible total:
+
+   ```
+   line GST   = round2(price x qty x gstPercent / 100)
+   line total = price x qty + line GST
+   subtotal   = SUM(price x qty)          -- accumulated unrounded
+   total GST  = SUM(line GST)             -- per-line ROUNDED, then summed
+   total      = subtotal + total GST
+   ```
+
+   Computing that on the server answers no business question by implication,
+   which is what "gated on B-2" was protecting against. **B-2 still blocks the
+   purchase invoice and sales invoice screens**, where TDS, round-off, discount
+   and the three-way collision all bite.
+
+   Built 8 Sep 2026 as `packages/domain/src/purchase-order-total.ts`, with the
+   legacy float calculator transcribed beside it as a test oracle so the decimal
+   version is checked against what the browser produces rather than against what
+   its author believed the browser produces.

@@ -23,6 +23,7 @@ const ringFor = (error?: string) =>
 function FieldShell({
   id,
   label,
+  labelHidden,
   error,
   hint,
   required,
@@ -31,6 +32,8 @@ function FieldShell({
 }: {
   id: string;
   label: string;
+  /** See the note on TextField: visually hidden, still announced. */
+  labelHidden?: boolean;
   error?: string;
   hint?: string;
   required?: boolean;
@@ -39,7 +42,10 @@ function FieldShell({
 }) {
   return (
     <div className={className}>
-      <label htmlFor={id} className="block text-sm font-medium text-slate-700">
+      <label
+        htmlFor={id}
+        className={labelHidden ? "sr-only" : "block text-sm font-medium text-slate-700"}
+      >
         {label}
         {required && (
           <span aria-hidden className="ml-0.5 text-rose-500">
@@ -67,6 +73,8 @@ export const SelectField = forwardRef<
   HTMLSelectElement,
   SelectHTMLAttributes<HTMLSelectElement> & {
     label: string;
+    /** See the note on TextField: visually hidden, still announced. */
+    labelHidden?: boolean;
     error?: string;
     hint?: string;
     /** Rendered as the first option, disabled — the "nothing chosen yet" state. */
@@ -74,7 +82,7 @@ export const SelectField = forwardRef<
     options: readonly { value: string | number; label: string }[];
   }
 >(function SelectField(
-  { label, error, hint, placeholder, options, id, className, required, ...rest },
+  { label, labelHidden, error, hint, placeholder, options, id, className, required, ...rest },
   ref,
 ) {
   const fieldId = id ?? idFor(label);
@@ -82,6 +90,7 @@ export const SelectField = forwardRef<
     <FieldShell
       id={fieldId}
       label={label}
+      labelHidden={labelHidden}
       error={error}
       hint={hint}
       required={required}

@@ -126,12 +126,31 @@ export const TextField = forwardRef<
     error?: string;
     hint?: string;
     icon?: LucideIcon;
+    /**
+     * Hide the label visually while keeping it for assistive technology.
+     *
+     * For a GRID of inputs, where the column header carries the meaning on
+     * screen but every cell still needs its own accessible name. The label stays
+     * required — an input with no name is unusable with a screen reader, and
+     * `placeholder` is no substitute because it vanishes on typing.
+     *
+     * Labels must still be UNIQUE: `id` is derived from the label text, so two
+     * inputs both labelled "Quantity" would share an id and the second label
+     * would point at the first input. Grid callers include the row number.
+     */
+    labelHidden?: boolean;
   }
->(function TextField({ label, error, hint, icon: Icon, id, className, ...rest }, ref) {
+>(function TextField(
+  { label, labelHidden, error, hint, icon: Icon, id, className, ...rest },
+  ref,
+) {
   const inputId = id ?? `field-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   return (
     <div className={className}>
-      <label htmlFor={inputId} className="block text-sm font-medium text-slate-700">
+      <label
+        htmlFor={inputId}
+        className={labelHidden ? "sr-only" : "block text-sm font-medium text-slate-700"}
+      >
         {label}
       </label>
       <div className="relative mt-1.5">

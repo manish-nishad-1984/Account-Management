@@ -10,3 +10,9 @@ export type {
   LineTotal,
   LegacyCalculator,
 } from "./invoice-total.js";
+export * as purchaseOrderTotal from "./purchase-order-total.js";
+export type {
+  PurchaseOrderLine,
+  PurchaseOrderLineTotal,
+  PurchaseOrderTotal,
+} from "./purchase-order-total.js";

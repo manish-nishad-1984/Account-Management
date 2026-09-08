@@ -237,20 +237,43 @@ DONE     site selector                                    (7 Sep 2026, §1.1)
          both record layouts, for comparison              (8 Sep 2026, §1.2)
          Item Master Excel import/export                  (8 Sep 2026, §1.3)
          Dashboard approval queues, 4 of 6                (8 Sep 2026, §01)
+         Purchase Orders (list, form, approval)           (8 Sep 2026, §07/§08)
 NOW      master-detail ANSWER                            <- with the business now, doc 19 Q12
-NEXT     (nothing unblocked is left that is not Phase 4)
+NEXT     PO dashboard queue                              <- the table exists now; 5 of 6
+         PO delivery addresses + T&C editor              <- see the two carve-outs below
 BLOCKED  item price history                              <- reads supplier invoices; NOT an audit log
 BLOCKED  Supplier Excel import                           <- needs the States/Cities census
-BLOCKED  the other 2 dashboard queues                    <- PO and Purchase Invoice tables
-BLOCKED  Purchase Invoice -> Purchase Order -> Sales      <- needs B-2 and D7
+BLOCKED  the 6th dashboard queue                         <- Purchase Invoice table
+BLOCKED  Purchase Invoice -> Sales                        <- needs B-2 and D7
 LAST     Reports, payments                                <- needs the payments model
 ```
 
-**The two things on the critical path are not code.** B-2 and D7 have a 2-4 week
-lead time with the business, and the census gates the geography lookups and every
-foreign key that is still a bare integer. Everything in the NOW and NEXT rows can
-proceed while they are outstanding — which is exactly why the phase order is what
-it is.
+**Purchase orders moved out of BLOCKED on 8 Sep 2026, and the reason is worth
+keeping.** They were listed behind B-2 because `08-create-purchase-order.md` said
+PO totals become server-authoritative and that this needed the GST answer first.
+Checking the screen rather than the phase showed the opposite: it loads one
+calculator, and has no discount, TDS or round-off anywhere in it — so there is
+nothing for the three calculators to disagree about. **B-2 still blocks the two
+INVOICE screens**, which is where it always actually bit. See §5 of that document
+for the counts.
+
+**Two parts of the PO screen were deliberately NOT built**, and neither is
+blocked on the business:
+
+- **Delivery addresses.** `PodeliveryAddresses` is a separate table feeding the
+  Shipping Addresses / Group Address panels. Not modelled; the form does not
+  pretend to have it.
+- **The terms and conditions editor.** The source stores rich-text HTML from a
+  full toolbar with three saved templates. The column is plain text for now, and
+  the form says so — storing HTML without a sanitiser is stored XSS on the app's
+  own origin, the same hole §5l closed on attachments. The editor and the
+  sanitiser land together or not at all.
+
+**The two things on the critical path are still not code.** B-2 and D7 have a 2-4
+week lead time with the business, and the census gates the geography lookups and
+every foreign key that is still a bare integer. Everything in the NOW and NEXT
+rows can proceed while they are outstanding — which is exactly why the phase order
+is what it is.
 
 ## Part 4 — Conventions to carry forward
 

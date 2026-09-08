@@ -22,8 +22,32 @@ Two things in that Purchase Order Id:
    numbering is per company AND per financial year, unlike purchase requests
    which are numbered `PR/` globally. `document_counters` will need a company
    dimension before purchase orders land.
-2. **A free-text suffix is appended** — ` - OMSAGAR`, ` - STUDENT ACIVITY
-   CENTER`. The number is not purely generated; part of it is typed.
+   _(Done 8 Sep 2026: `document_counters.company_id`, nullable with a real FK,
+   plus two partial unique indexes so the global PR sequence and the per-company
+   PO sequence can share the table.)_
+2. ~~**A free-text suffix is appended** — ` - OMSAGAR`, ` - STUDENT ACIVITY
+   CENTER`. The number is not purely generated; part of it is typed.~~
+
+   **WRONG — corrected 8 Sep 2026 by reading the view instead of the screenshot.**
+   `_POListPartial.cshtml:8` renders the cell as
+
+   ```razor
+   <h6 class="product-name mb-2">@item.Poid - @item.BuyersPurchaseNo</h6>
+   ```
+
+   so the ` - OMSAGAR` is **`BuyersPurchaseNo`, a separate column, concatenated
+   in the view**. `Poid` itself is clean: `DHP/PO/24-25/049`. Nothing about the
+   number is typed.
+
+   This matters more than a tidy-up. Had it been believed, the port would have
+   built a free-text component into a generated document number — and it would
+   also have implied that `CheckPONo`'s trailing-digit regex runs against
+   `"049 - OMSAGAR"`, which does not match, which would make the generator return
+   its error string as the number for every subsequent order. The number is
+   clean, so the regex does match, and that failure does not occur.
+
+   The lesson is §5p's, again: a screen capture tells you a value is displayed,
+   only the view tells you what it is made of.
 
 The Purchase Order Id renders as a **link** (purple), unlike every other list.
 

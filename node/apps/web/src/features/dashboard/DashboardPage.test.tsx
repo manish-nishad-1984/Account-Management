@@ -88,10 +88,12 @@ const routes = (over: Partial<Record<string, unknown>> = {}) =>
     [/\/items\/approvals$/, over.itemApprove ?? { updated: 1 }],
     [/\/suppliers\/approvals$/, over.supplierApprove ?? { updated: 1 }],
     [/\/inward-challans\/approvals$/, over.challanApprove ?? { updated: 1 }],
+    [/\/purchase-orders\/approvals$/, over.poApprove ?? { updated: 1 }],
     [/\/purchase-requests$/, over.pr ?? EMPTY],
     [/\/items$/, over.items ?? EMPTY],
     [/\/suppliers$/, over.suppliers ?? EMPTY],
     [/\/inward-challans$/, over.challans ?? challanList([])],
+    [/\/purchase-orders$/, over.po ?? EMPTY],
     [/\/sites\/assignable$/, { rows: [], nextCursor: null, total: 0 }],
   ]);
 
@@ -104,6 +106,8 @@ const ALL = [
   "supplier.approve",
   "inward-challan.view",
   "inward-challan.approve",
+  "purchase-order.view",
+  "purchase-order.approve",
 ];
 
 const panel = async (title: string) => {
@@ -167,19 +171,53 @@ describe("DashboardPage", () => {
   });
 
   /**
-   * Convention 2. The two Phase 4 queues have no table behind them, so they must
-   * not render as an empty queue — which would read as "nothing is pending".
+   * Convention 2. The one remaining Phase 4 queue has no table behind it, so it
+   * must not render as an empty queue — which would read as "nothing is pending".
+   *
+   * Purchase Orders was the other one until 8 Sep 2026. It now has a table, so it
+   * renders a real queue; leaving its "not migrated" notice up would have been a
+   * false statement on the landing page.
    */
-  it("says which two queues are not migrated, and why", async () => {
+  it("says which queue is not migrated, and why", async () => {
     routes();
     renderWithAuth(<DashboardPage />, { permissions: ALL });
 
-    const orders = await panel("Purchase Orders");
-    expect(within(orders).getByText("Not migrated")).toBeInTheDocument();
-    expect(within(orders).getByText(/not migrated yet.*question 2/s)).toBeInTheDocument();
-
     const invoices = await panel("Purchase Invoices");
+    expect(within(invoices).getByText("Not migrated")).toBeInTheDocument();
     expect(within(invoices).getByText(/Supplier invoices are not migrated/)).toBeInTheDocument();
+  });
+
+  it("renders purchase orders as a real queue now that the table exists", async () => {
+    routes({
+      po: list([
+        {
+          id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+          poNo: "DHP/PO/26-27/001",
+          siteId: "22222222-2222-2222-2222-222222222222",
+          siteName: "Akwada Lake Front",
+          supplierId: "44444444-4444-4444-4444-444444444444",
+          supplierName: "ASIAN GRANITO",
+          companyId: "55555555-5555-5555-5555-555555555555",
+          companyName: "DH PATEL",
+          documentDate: null,
+          buyersPurchaseNo: null,
+          subtotal: "1000.00",
+          totalGstAmount: "180.00",
+          totalAmount: "1180.00",
+          lineCount: 1,
+          isActive: true,
+          isApproved: false,
+          createdAt: "2026-09-01T10:00:00.000Z",
+          capabilities: { canEdit: true, canDelete: true, canApprove: true },
+        },
+      ]),
+    });
+    renderWithAuth(<DashboardPage />, { permissions: ALL });
+
+    const orders = await panel("Purchase Orders");
+    expect(within(orders).queryByText("Not migrated")).not.toBeInTheDocument();
+    expect(await within(orders).findByText("DHP/PO/26-27/001")).toBeInTheDocument();
+    expect(within(orders).getByText("1,180.00")).toBeInTheDocument();
   });
 
   it("asks each queue only for unapproved rows", async () => {
@@ -189,7 +227,13 @@ describe("DashboardPage", () => {
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
     const urls = vi.mocked(globalThis.fetch).mock.calls.map((call) => String(call[0]));
 
-    for (const resource of ["purchase-requests", "items", "suppliers", "inward-challans"]) {
+    for (const resource of [
+      "purchase-requests",
+      "items",
+      "suppliers",
+      "inward-challans",
+      "purchase-orders",
+    ]) {
       const call = urls.find((url) => url.includes(`/${resource}?`));
       expect(call, `${resource} was not fetched`).toBeDefined();
       expect(call).toContain("isApproved=false");

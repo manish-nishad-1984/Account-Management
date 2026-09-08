@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { financialYear } from "@accountmanagement/domain";
+import { randomUUID } from "node:crypto";
+import { financialYear, purchaseOrderTotal } from "@accountmanagement/domain";
 import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { InMemoryUserRepository, UserRepository } from "./user.repository";
 import { ENV, type Env } from "../../config/env";
@@ -9,6 +10,8 @@ import {
   documentCounters,
   forms,
   items,
+  purchaseOrderItems,
+  purchaseOrders,
   purchaseRequests,
   inventoryInward,
   inwardChallans,
@@ -103,7 +106,7 @@ export class DevSeed implements OnModuleInit {
           ifscCode: BANK_CODES[i % BANK_CODES.length] + "0" + String(1000 + i),
         })),
       )
-      .returning({ id: companies.id, name: companies.name });
+      .returning({ id: companies.id, name: companies.name, invoicePrefix: companies.invoicePrefix });
 
     const insertedSites = await db
       .insert(sites)
@@ -271,7 +274,24 @@ export class DevSeed implements OnModuleInit {
     await db.insert(userFormPermissions).values([
       { userId: admin.id, formId: 1, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
       { userId: admin.id, formId: 2, isViewAllow: true, isEditAllow: true, isApproved: true },
-      { userId: admin.id, formId: 3, isViewAllow: true },
+      /**
+       * Purchase Order, with all five rights.
+       *
+       * View-only while the screen was a placeholder. The module now has a list,
+       * a form, single approval and bulk approval, and every one of those is
+       * guarded — so without these grants the screen 403s on its first call,
+       * which is the §5f failure mode the subject note in
+       * `purchase-orders.controller.ts` warns about.
+       */
+      {
+        userId: admin.id,
+        formId: 3,
+        isViewAllow: true,
+        isAddAllow: true,
+        isEditAllow: true,
+        isDeleteAllow: true,
+        isApproved: true,
+      },
       // Company and Site each have View/Add/Edit/Delete attributes in the .NET code.
       { userId: admin.id, formId: 4, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
       { userId: admin.id, formId: 5, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
@@ -380,6 +400,107 @@ export class DevSeed implements OnModuleInit {
       financialYear: financialYearLabel,
       nextValue: requestCount + 1,
     });
+
+    /**
+     * Purchase orders — a header with lines, and the first seeded document that
+     * carries money.
+     *
+     * NUMBERED PER COMPANY, so the sequence restarts for each one and the seeded
+     * numbers look like production's: `DHP/PO/26-27/001`, `DEMO/PO/26-27/001`.
+     * The counters below are seeded to match, one row per company, which is the
+     * shape the new company dimension on `document_counters` exists for.
+     *
+     * The totals are computed with the SAME function the API uses rather than
+     * typed in. A seed with hand-written totals is a seed that disagrees with the
+     * application the moment either changes, and the disagreement looks like a
+     * bug in the arithmetic.
+     */
+    const ordersPerCompany = 4;
+    const orderRows: (typeof purchaseOrders.$inferInsert)[] = [];
+    const orderLineRows: (typeof purchaseOrderItems.$inferInsert)[] = [];
+
+    insertedCompanies.forEach((company, companyIndex) => {
+      for (let n = 0; n < ordersPerCompany; n += 1) {
+        const orderId = randomUUID();
+        const seq = n + 1;
+        const offset = companyIndex * ordersPerCompany + n;
+
+        // Two or three lines each, so the line count column is not always the
+        // same number and the footer aggregate has something to add up.
+        const lineCount = 2 + (offset % 2);
+        const lines = Array.from({ length: lineCount }, (_, l) => {
+          const item = insertedItems[(offset * 3 + l) % insertedItems.length]!;
+          // A quantity with paise in it, so the decimal path is exercised.
+          const quantity = l === 1 ? "2.50" : String((l + 1) * 10) + ".00";
+          const unitPrice = String(250 + offset * 37 + l * 13) + ".00";
+          const gstPercent = ["18.00", "12.00", "5.00"][l % 3]!;
+          return { item, quantity, unitPrice, gstPercent };
+        });
+
+        const totals = purchaseOrderTotal.compute(
+          lines.map((line) => ({
+            unitPrice: line.unitPrice,
+            quantity: line.quantity,
+            gstPercent: line.gstPercent,
+          })),
+        );
+
+        orderRows.push({
+          id: orderId,
+          poNo: `${company.invoicePrefix}/PO/${financialYearLabel}/${String(seq).padStart(3, "0")}`,
+          siteId: insertedSites[offset % insertedSites.length]!.id,
+          supplierId: insertedSuppliers[offset % insertedSuppliers.length]!.id,
+          companyId: company.id,
+          documentDate: new Date(Date.UTC(2026, 7, ((offset * 5) % 27) + 1)),
+          buyersPurchaseNo: offset % 3 === 0 ? `BPO-${1000 + offset}` : null,
+          // One in four is immediate rather than dated, so both halves of the
+          // split delivery-schedule column appear locally.
+          deliveryImmediate: offset % 4 === 0,
+          deliveryDate:
+            offset % 4 === 0 ? null : new Date(Date.UTC(2026, 8, ((offset * 2) % 27) + 1)),
+          contactName: "Site engineer",
+          contactNumber: "9825012345",
+          dispatchBy: offset % 2 === 0 ? "Road" : "Rail",
+          paymentTerms: "30 days from invoice",
+          subtotal: totals.subtotal,
+          totalGstAmount: totals.totalGst,
+          totalAmount: totals.grandTotal,
+          // One in four inactive, because the list's status filter defaults to
+          // Active and a filter with nothing to exclude proves nothing.
+          isActive: offset % 4 !== 3,
+          // A third approved, so both states and both buttons are on screen.
+          isApproved: offset % 3 === 0,
+          createdBy: admin.id,
+        });
+
+        lines.forEach((line, l) => {
+          orderLineRows.push({
+            purchaseOrderId: orderId,
+            itemId: line.item.id,
+            unitId: line.item.unitId,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            gstPercent: line.gstPercent,
+            gstAmount: totals.lines[l]!.gstAmount,
+            lineTotal: totals.lines[l]!.total,
+            lineNumber: l + 1,
+            createdBy: admin.id,
+          });
+        });
+      }
+    });
+
+    await db.insert(purchaseOrders).values(orderRows);
+    await db.insert(purchaseOrderItems).values(orderLineRows);
+
+    await db.insert(documentCounters).values(
+      insertedCompanies.map((company) => ({
+        documentType: "purchase_order",
+        financialYear: financialYearLabel,
+        companyId: company.id,
+        nextValue: ordersPerCompany + 1,
+      })),
+    );
 
     /**
      * Inventory arrivals.

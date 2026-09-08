@@ -71,6 +71,16 @@ layout of the Create Invoice page — instead of only reading it. The tool is
 `Migration-Assessment/tools/calculator-harness`; anyone can run it and see the
 same output.
 
+> **This question is about INVOICES only — purchase orders are not affected.**
+> Added 8 Sep 2026. We originally expected this answer to hold up purchase orders
+> too. Checking the Create Purchase Order page showed it does not: that page
+> loads only ONE calculator, and it has no discount, no TDS and no round-off
+> anywhere on it — which are the three things the calculators disagree about. So
+> a purchase order has one clear total, and we have built that screen without
+> pre-empting your answer here. **Nothing in this question needs to be rushed on
+> account of purchase orders.** It still holds up supplier invoices and sales
+> invoices, which is where the money risk actually sits.
+
 ### What it showed
 
 **(a) The TDS and round-off boxes are not read.** Create Invoice loads three

@@ -5,13 +5,12 @@ import {
   integer,
   numeric,
   pgTable,
-  primaryKey,
   text,
   timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { sites } from "./users";
+import { companies, sites } from "./users";
 import { items, units } from "./masters";
 
 /**
@@ -57,15 +56,42 @@ import { items, units } from "./masters";
 export const documentCounters = pgTable(
   "document_counters",
   {
-    /** "purchase_request". Widened as purchase orders and invoices land. */
+    /** "purchase_request", "purchase_order". Widened as invoices land. */
     documentType: text("document_type").notNull(),
     /** As the number renders it, e.g. "25-26". See `financialYear.format`. */
     financialYear: text("financial_year").notNull(),
-    /** The number the NEXT document of this type and year will take. */
+    /**
+     * THE COMPANY DIMENSION, added for purchase orders.
+     *
+     * A purchase request is numbered `PR/25-26/001` globally. A purchase order is
+     * numbered `DHP/PO/24-25/049` — the company's `invoice_prefix` leads it — so
+     * two companies must be able to hold 049 in the same year without colliding.
+     *
+     * NULL means the sequence is not company-scoped, which is what every existing
+     * purchase request row is. Nullable with a real foreign key rather than a
+     * nil-UUID sentinel: a sentinel would have to drop the FK, and "not scoped to
+     * a company" is genuinely absent, not a magic company.
+     *
+     * The consequence is that the old two-column primary key can no longer express
+     * the uniqueness — NULLs are not equal to each other, so one unique index over
+     * all three columns would let `(purchase_request, 25-26, NULL)` be inserted
+     * twice and hand the same PR number out repeatedly. Two PARTIAL unique indexes
+     * are used instead, one per case, and each caller infers the one matching its
+     * own shape. See `nextDocumentNumber` in `common/document-number.ts`.
+     */
+    companyId: uuid("company_id").references(() => companies.id),
+    /** The number the NEXT document of this type, year and company will take. */
     nextValue: integer("next_value").notNull().default(1),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [primaryKey({ columns: [table.documentType, table.financialYear] })],
+  (table) => [
+    uniqueIndex("document_counters_global_uq")
+      .on(table.documentType, table.financialYear)
+      .where(sql`${table.companyId} is null`),
+    uniqueIndex("document_counters_company_uq")
+      .on(table.documentType, table.financialYear, table.companyId)
+      .where(sql`${table.companyId} is not null`),
+  ],
 );
 
 /**

@@ -4,3 +4,4 @@ export * from "./masters";
 export * from "./procurement";
 export * from "./inventory";
 export * from "./inward-challans";
+export * from "./purchase-orders";
