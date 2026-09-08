@@ -125,9 +125,14 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 
 ## 4. Repository state
 
-Branch **`main`**, HEAD **`36fcc82f`**, working tree clean, pushed to
-`origin/main`. Builds, typechecks, and all **654 tests pass** — 635 Node
-(25 contracts + 41 domain + 374 API + 195 web) + 19 .NET.
+Branch **`main`**, working tree clean, pushed to `origin/main`. Builds,
+typechecks, and all **654 tests pass** — 635 Node (25 contracts + 41 domain +
+374 API + 195 web) + 19 .NET.
+
+The suites were last measured at **`36fcc82f`**, the final code commit of
+8 Sep 2026. Anything after that on `main` is documentation — a handoff always
+commits after its own measurement, so the newest hash is never the one the
+numbers were taken at, and naming it here would be a lie that looks precise.
 
 - `b8d03922` completed the broken commit `6cefc164` (see §5).
 - `f0f69f95` merged `newNode` into `main`, resolving 3 conflicts.

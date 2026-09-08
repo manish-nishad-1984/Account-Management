@@ -80,6 +80,11 @@ Read each of these and correct it against step 1. This is the work.
   directory list still matches `node/apps` and `node/packages`.
 - **§4 Repository state** — the total again (it appears twice on purpose, and
   goes stale twice), the branch, whether it is pushed, whether the tree is clean.
+  **Do not name the current HEAD here.** The handoff commit always lands after
+  the measurement, so any hash written as "HEAD" is wrong within the minute —
+  precisely the kind of confident, false detail this command exists to stop.
+  Name the last *code* commit as what the suites were measured at, and say that
+  anything after it is documentation.
 - **§8 Blocked — needs the user** — the load-bearing section. Remove what the
   user has since done; **add nothing that is merely unfinished code**. This table
   is for things no amount of work in a session can clear.
