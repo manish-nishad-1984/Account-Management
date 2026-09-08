@@ -1024,14 +1024,56 @@ Against the local API, not inferred:
 | an ETL row with no bytes | 404 saying the old system kept the file on its own web server |
 | delete, then delete again | 204, then 404; the file is gone from disk |
 
-### The deploy needs one thing that is not in this repo
+### DEPLOYED — 8 Sep 2026, release `20260908-132107`
 
-**`client_max_body_size` must be at least `12m` on the `/api/` location in
-nginx.** The default is 1m and nginx rejects a larger body itself, with its own
-413 HTML, before the request reaches the API. The symptom is an attachment well
-under the app's 10 MB limit failing with an error the application never wrote and
-nothing in its log. Recorded in the deploy skill; `write-env.mjs` now emits
-`STORAGE_DIR`.
+Live at **https://avfast.in/**. Three server-side prerequisites had to go in
+first, and all three are now done — **do not repeat them**:
+
+1. **`/opt/accountbook-next/write-env.mjs` replaced** with the repo copy. Without
+   it the release has no `STORAGE_DIR` and the API refuses to boot in
+   production. That guard did its job in the sense that mattered: the deploy
+   would have failed loudly rather than writing uploads into a pruned release.
+2. **`/opt/accountbook-next/uploads` created, mode 700.** Verified in both
+   directions: `www-data` can read the app, and `www-data` CANNOT list the
+   uploads. If that second one ever starts passing, the attachments are back
+   where the legacy ones were.
+3. **`client_max_body_size 12m`** added to the `/api/` location in BOTH
+   `avfast.conf` and `accountbook-next.conf` (port 8090) — the only two blocks
+   that proxy to 3101; the 8080 and 7251 blocks that serve the live ASP.NET app
+   were not touched. Backups at `/root/*.conf.bak.20260908`, `nginx -t` passed
+   before the reload.
+
+nginx defaults to **1m** and rejects a larger body itself, with its own 413 HTML,
+before the request reaches the API. The symptom would be an attachment well under
+the app's 10 MB limit failing with an error the application never wrote and
+nothing in its log.
+
+Migration output was `3 applied, 0 adopted, 5 skipped` — 0005, 0006 and 0007, so
+`inventory_inward`, `inward_challans` and `inward_challan_documents` are on the
+live database for the first time. `0 applied` after shipping a migration is the
+thing to be suspicious of.
+
+Verified against the public HTTPS front door, not just localhost:
+
+| | |
+|---|---|
+| `https://avfast.in/` | 200 |
+| `/api/v1/health` | ok, FY 26-27 |
+| a real login (`ckalathiya`) | 200 — health alone never touches the signing key |
+| `GET /inward-challans` | `{"rows":[],"total":0,"totalQuantity":"0"}` — the footer aggregate is **present** on an empty set, which is exactly where the source loses it |
+| upload with no token | 401 |
+| **2 MB** multipart body | reached the API and got the app's own 404. Under the old 1m default nginx would have answered 413 itself |
+| **11 MB** | 413 carrying the APPLICATION's sentence — "is larger than the 10.0 MB limit" — not nginx's HTML |
+| `www.avfast.in` | 302 (the pre-existing MVC fault, unchanged) |
+| 8080 / 7251 / 1433 | all still listening |
+| 3101 from outside | unreachable, as intended |
+
+No test record was written to the live database: the probes used a non-existent
+challan id, so the routes were exercised without leaving junk behind.
+
+The log does contain `asn1 encoding routines::too long` errors — they are from
+**3 Sep, release `20260903-195518`**, the historic PEM-in-EnvironmentFile
+problem, and nothing from this release.
 
 Tests: **617 Node** (25 contracts + 41 domain + 374 API + 177 web) + 19 .NET,
 up 137.
