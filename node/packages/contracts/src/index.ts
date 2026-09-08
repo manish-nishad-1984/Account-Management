@@ -9,6 +9,7 @@ export * from "./companies";
 export * from "./sites";
 export * from "./site-groups";
 export * from "./suppliers";
+export * from "./approvals";
 export * from "./items";
 export * from "./purchase-requests";
 export * from "./inventory-inward";

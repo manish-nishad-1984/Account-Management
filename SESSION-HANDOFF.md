@@ -1,15 +1,15 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
 **Written:** 2 September 2026, after the unblocking session. **Last extended
-8 September 2026** (§5o). Supersedes all earlier handoffs of the same name.
+8 September 2026** (§5p). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `2c7e5c79`.** If `git log` shows commits after
+> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
 
 **Sections §3, §4, §8, §10 and §11 describe _now_ and are re-measured on every
-handoff. Sections §5, §5b … §5o are a log of days that already happened and are
+handoff. Sections §5, §5b … §5p are a log of days that already happened and are
 never edited.** If the two disagree, the numbered sections win — run
 `/handoff check` and it will say which have drifted.
 
@@ -34,10 +34,12 @@ committed and tested but not shipped:
 - the two record layouts of §5m — they exist so the business can answer doc 19
   Question 12, and shipping a temporary switch to production before the answer
   would put a control there that is meant to be deleted;
-- **the Item Master Excel import/export of §5o.** Deployable whenever wanted —
-  it needs no migration, no new environment variable and no nginx change, since
-  the upload is parsed in memory and never written to disk. It rides along with
-  whatever ships next, or on its own.
+- **the Item Master Excel import/export of §5o and the dashboard approval queues
+  of §5p.** Both are deployable whenever wanted — no migration, no new
+  environment variable, no nginx change. But note that §5p changes the dev seed
+  to grant `item.approve` and `supplier.approve`; on the LIVE database those are
+  real permission rows an administrator has to tick, and until then the Items and
+  Suppliers queues are read-only there. See doc 19 Question 11.
 
 ---
 
@@ -89,14 +91,13 @@ AC/
     ├── packages/domain/           shared business rules (41 tests)
     ├── packages/contracts/        Zod schemas shared by API and web (34 tests)
     └── apps/
-        ├── api/                   NestJS + Fastify + Drizzle (431 tests)
-        └── web/                   React 19 + Vite + Tailwind (215 tests)
+        ├── api/                   NestJS + Fastify + Drizzle (453 tests)
+        └── web/                   React 19 + Vite + Tailwind (229 tests)
 ```
 
-**740 tests pass** — 721 Node (34 contracts + 41 domain + 431 API + 215 web)
-plus 19 .NET. Measured at `65c7dcbd` on 8 Sep 2026, not carried forward from the
-previous section. The .NET figure was proved rather than re-run: no `.cs`,
-`.csproj` or `.sln` file has changed since it was last measured.
+**776 tests pass** — 757 Node (34 contracts + 41 domain + 453 API + 229 web)
+plus 19 .NET. Measured at `<COMMIT>` on 8 Sep 2026, not carried forward from the
+previous section. The .NET suite was RUN this time, not proved.
 
 > These two figures — here and in §4 — said **310** for five consecutive sessions
 > while the true count more than doubled. Nobody was careless: each session
@@ -144,10 +145,10 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 ## 4. Repository state
 
 Branch **`main`**, working tree clean, pushed to `origin/main`. Builds,
-typechecks, and all **740 tests pass** — 721 Node (34 contracts + 41 domain +
-431 API + 215 web) + 19 .NET.
+typechecks, and all **776 tests pass** — 757 Node (34 contracts + 41 domain +
+453 API + 229 web) + 19 .NET.
 
-The suites were last measured at **`65c7dcbd`**, the final code commit of
+The suites were last measured at **`<COMMIT>`**, the final code commit of
 8 Sep 2026. Anything after that on `main` is documentation — a handoff always
 commits after its own measurement, so the newest hash is never the one the
 numbers were taken at, and naming it here would be a lie that looks precise.
@@ -162,7 +163,8 @@ numbers were taken at, and naming it here would be a lie that looks precise.
   purchase requests, `a821d564` the legacy-screen documentation, `7a068bde` the
   site scope, `bd97a238` inventory inward, `dbd72d25` inward challans,
   `abf027a2` the money calculators, `53c8a620` attachments, `028a42a9` both
-  record layouts, `65c7dcbd` the Item Master Excel import/export.
+  record layouts, `65c7dcbd` the Item Master Excel import/export, `<COMMIT>` the
+  dashboard approval queues.
 - **`main` is pushed to `origin/main`** and the working tree is clean.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
   credential is in the HISTORY, not the working tree. Rotation is the fix.
@@ -1518,6 +1520,31 @@ the screens whose UI is gated on `usePermission`.
   `SupplierController.cs:108` and `:130`, plus `ActiveDeactiveSupplier` at `:150`.
   Anyone who can reach the site can edit or delete any supplier. C-6 again, and
   the port closes it (§5b decision 1).
+- **The dashboard gates all six approval queues on ONE `Dashboard` permission**,
+  not on each module's own rights. `Home/Index.cshtml` and its seven partials
+  hold **41** permission checks and every one reads `FormName == "Dashboard"`.
+  So `Dashboard-Approve` is a single right that approves purchase requests,
+  purchase orders, items, purchase invoices AND suppliers — while someone holding
+  `Purchase Request-Approve` cannot approve one from the dashboard at all. C-6
+  again, in its worst form: view-only checks over unguarded endpoints. **Not
+  reproduced** (§5p); it is now part of doc 19 Question 11.
+- **Supplier has no approve right of its own anywhere in the source.** Every
+  other approvable form has a view reading its own flag —
+  `FormName == "Item" && a.IsApproved` at `ItemMasterController.cs:97`, and the
+  same for Purchase Request, Inward Challan, Purchase Order and Purchase
+  Invoice. The Supplier views read only Add/Edit/Delete. So `supplier.approve`
+  is a right the port needs that **no production user currently holds**, and an
+  administrator has to grant it at cutover or the queue is read-only for
+  everyone.
+- **"Item price history" is NOT a price audit log**, and PLAN.md said it was
+  until 8 Sep 2026. `GetItemHistory` (`ItemMasterRepo.cs:581`) returns a
+  `SupplierInvoiceList` — every supplier invoice LINE for that item, rendered
+  `InvoiceNo | Supplier | Site | Date | Price | GST | PriceWithGST`, empty state
+  "No invoices found." It is a PURCHASE-price history over two Phase 4 tables,
+  not a history of `items.price_per_unit`. There is no audit-table-versus-
+  temporal-rows decision to make and nothing to build until supplier invoices
+  are migrated. The wrong description was inferred from a screenshot of a clock
+  icon.
 - **Site group to document links are by name string** (section 6).
 - `AccountManegments.Web/Models/Common.cs:28` and `:61` use obsolete
   `RijndaelManaged` for encryption.
@@ -1555,20 +1582,31 @@ its rows currently read:
 
 ```
 NOW      master-detail ANSWER             <- with the business, doc 19 Q12
-NEXT     item price history                  (needs a modelling decision — ours)
+NEXT     (nothing unblocked is left that is not Phase 4)
+BLOCKED  item price history               <- reads supplier invoices, NOT an audit log
 BLOCKED  Supplier Excel import            <- needs the States/Cities census
+BLOCKED  the other 2 dashboard queues     <- PO and Purchase Invoice tables
 BLOCKED  Purchase Invoice -> PO -> Sales  <- needs B-2 and D7
 ```
+
+**Read that NEXT row carefully: the unblocked build queue is now empty.** §5o and
+§5p took the last two items in it, and §5p's investigation moved price history
+out of NEXT into BLOCKED — it is not a modelling decision, it is a read of two
+Phase 4 tables (§9). Everything remaining is behind a business answer or behind
+the census.
+
+**That makes the §8 blockers the whole critical path, for the first time.** Until
+now there was always parallel work to get on with. There is not any more, beyond
+the .NET Phase 0 performance items below and whatever the business sends back.
 
 **The NOW row is not code.** Both layouts are built (§5m); what is missing is a
 decision, and the answer deletes the loser and the switch.
 
-**The NEXT row is one modelling decision, and it is ours to make.**
-`items.price_per_unit` is a single mutable column with no history behind it, so
-audit-table versus temporal-rows has to be settled before a screen can be drawn.
-Note that whichever wins, the screen is **empty on day one for all 758 items** —
-no history exists to backfill, and inventing one would breach convention 2. Say
-that on the screen rather than shipping a clock icon that opens a blank pane.
+**One thing needs a person before the dashboard is fully usable.**
+`supplier.approve` is a right no production user holds, because supplier approval
+only ever happened through the source's single `Dashboard` permission (§5p, §9).
+Until an administrator grants it, the Suppliers queue ships read-only. It is in
+doc 19 Question 11.
 
 **Supplier's Excel pair is blocked on the census, not on effort**, and it is the
 first piece of ordinary feature work that blocker has actually stopped.
@@ -1818,3 +1856,183 @@ and PLAN.md now says so.
 Tests: **721 Node** (34 contracts + 41 domain + 431 API + 215 web) + 19 .NET =
 **740**, up 86. The .NET figure was not re-run: `git status` shows no `.cs`,
 `.csproj` or `.sln` file touched this session.
+
+---
+
+## 5p. The dashboard approval queues, and the permission they are NOT gated on (8 Sep 2026)
+
+Committed as `<COMMIT>`. Four of the six panels of `/Home/Index` — the approval
+cockpit, and the reason `approve` is a first-class right rather than a flavour
+of edit.
+
+### It started by finding that the NEXT row was not buildable
+
+PLAN.md's NEXT row was "item price history", described there — and in §5o's own
+handoff entry — as needing a modelling decision between an audit table and
+temporal rows, because `items.price_per_unit` is a single mutable column.
+
+**That description was wrong, and reading `GetItemHistory` is what showed it.**
+
+`ItemMasterRepo.cs:581` returns a `SupplierInvoiceList`. It joins
+`SupplierInvoices` to `SupplierInvoiceDetails` on the item and lists **every
+supplier invoice line for it**, ordered by date;
+`_ItemHistoryPartial.cshtml` renders
+`InvoiceNo | Supplier | Site | Date | Price | GST | PriceWithGST` and its empty
+state says **"No invoices found."**
+
+So the clock icon is a PURCHASE-price history — what was actually paid, per
+invoice — not an audit of the master price. There is no modelling decision to
+make, and it reads two tables that do not exist in our schema. It moved from
+NEXT to BLOCKED behind supplier invoices.
+
+**The trap worth keeping:** that entry was written from a screenshot of a clock
+icon in an Action column, and the icon's obvious meaning was the wrong one. A
+screen capture tells you a feature exists; only the query tells you what it is.
+
+### So the dashboard, where four of six queues ARE buildable
+
+| Panel | State |
+|---|---|
+| Purchase Requests | built — already had `setApprovalMany` and `POST /approvals` |
+| Item | built — added the `isApproved` filter, `PATCH :id/approval`, `POST /approvals` |
+| Supplier | built — same three |
+| Inward Challan | built — single approval existed, added `POST /approvals` |
+| Purchase Order | **not migrated** — no table |
+| Purchase Invoice | **not migrated** — no table |
+
+The two absent ones say which and why on the screen rather than rendering an
+empty queue, which would read as "nothing is pending" (convention 2).
+
+Every queue reads the **same hook its list screen uses**, with
+`{ isApproved: false }`. A dashboard with its own idea of what pending means
+drifts from the screen it links to, and the two then disagree about a number
+somebody is acting on.
+
+### THE FINDING: all six panels are gated on one `Dashboard` permission
+
+`Home/Index.cshtml` and its seven partials contain **41**
+`UserSession.FormPermisionData.Any(...)` checks. **Every single one reads
+`FormName == "Dashboard"`** — `Dashboard.View` for the panels,
+`Dashboard.IsApproved` for the Approve checkboxes, `Dashboard.Edit` and
+`Dashboard.Delete` for the row icons. Counted, not sampled:
+
+```
+$ grep -o 'FormName == "[^"]*"' Views/Home/Index.cshtml | sort | uniq -c
+     17 FormName == "Dashboard"
+$ grep -ho 'FormName == "[^"]*"' Views/Home/_Dashboard*.cshtml | sort | uniq -c
+     24 FormName == "Dashboard"
+```
+
+Two consequences, pointing opposite ways:
+
+1. **`Dashboard-Approve` is ONE right that approves five different document
+   types** — purchase requests, purchase orders, items, purchase invoices and
+   suppliers — whether or not the holder has any of those modules' own approve
+   rights.
+2. **Someone holding `Purchase Request-Approve` cannot approve one from the
+   dashboard** without also holding `Dashboard-Approve`.
+
+C-6 again and in its worst form, because the check is in the view only and the
+endpoints behind it are unguarded either way.
+
+**Not reproduced.** Each queue is guarded by its own module's `approve` right —
+the same departure §5b made for supplier edit and delete, for the reason stated
+there: the convention that ported rules keep their defects covers BUSINESS
+rules, not missing or wrong authorization checks. One right that silently grants
+approval across five document types is not a rule anyone designed.
+
+### And a second one that fell out of it: Supplier has no approve right at all
+
+The first bulk-approve call over HTTP came back
+`403 Missing permission: item.approve` — which was the guard doing its job, and
+worth chasing rather than working around.
+
+Every other approvable form has a view reading its own flag:
+`FormName == "Item" && a.IsApproved` at `ItemMasterController.cs:97`, and the
+same shape for Purchase Request, Inward Challan, Purchase Order and Purchase
+Invoice. **The Supplier views read only Add, Edit and Delete.** Supplier
+approval only ever happened through `Dashboard-Approve`.
+
+So:
+
+- `item.approve` is real and in use in production — the dev seed simply never
+  granted it, because nothing in the port could reach an item approval until
+  this screen existed. Granted now.
+- `supplier.approve` is a right the port needs that **no production user holds**.
+  An administrator must grant it at cutover or the Suppliers queue is read-only
+  for everybody. That is now in doc 19 Question 11, which already covered
+  supplier edit and delete.
+
+### The bulk endpoint, and the defect it replaces
+
+One statement — `UPDATE ... WHERE id = ANY(...) AND is_deleted = false AND
+is_approved = NOT :isApproved` — replacing the finding-P2 methods that loaded
+the whole table and called `Update()` on every row.
+
+**The third clause is the interesting one.** Excluding rows already in the
+target state is what makes a select-all safe across a queue that contains
+approved rows: they are skipped rather than flipped off. And it makes the
+returned `updated` count *what actually changed* rather than how many boxes were
+ticked — verified over HTTP: approving the same two ids twice gives
+`{"updated":2}` then `{"updated":0}`, with the pending total going 10 → 8 → 8.
+
+The web side reports that count rather than the selection size, for the same
+reason. Select-all also skips rows whose `capabilities.canApprove` is false, so
+the tick marks and the count cannot disagree.
+
+### `renderWithAuth` had no Router, and the error did not say so
+
+Every dashboard test failed with
+
+```
+Cannot destructure property 'basename' of 'React10.useContext(...)' as it is null
+```
+
+thrown from inside `react-router`'s `LinkWithRef`. It names neither the
+component nor the missing provider. The cause is that `test/render.tsx` wraps
+auth, site scope and record layout but no router, so **no screen containing a
+`<Link>` could be tested through it at all** — which had simply never come up,
+because the screens that use it have none. A `MemoryRouter` now sits in the
+helper; it is inert for screens without links.
+
+### Verified by running it
+
+Against the API on 3000 over HTTP:
+
+| | |
+|---|---|
+| `?isApproved=false` on all four resources | items 10, suppliers 10, purchase requests 12, challans 3 |
+| the arithmetic | items 10 pending + 40 approved = 50 unfiltered; suppliers 10 + 20 = 30 |
+| the unfiltered list | unchanged — the list screens do not move |
+| bulk approve 2 items | `{"updated":2}`, pending 10 → 8 |
+| the same two again | `{"updated":0}`, pending still 8 |
+| one pending + one already approved | `{"updated":1}` — not 2 |
+| suppliers / challans / purchase requests | `{"updated":2}`, `{"updated":1}`, `{"updated":1}` |
+| empty `ids` | 400 "Select at least one row" |
+| a non-uuid id | 400 at `ids.0`, "Not a valid identifier" |
+| missing `isApproved` | 400 "Required" |
+| 201 ids | 400 "at most 200 element(s)" |
+| a valid uuid that does not exist | `{"updated":0}` |
+| no token | 401 |
+| before the seed fix | 403 `Missing permission: item.approve` — the guard working |
+
+And in a real headless browser at 1440x900: all six panels render, select-all
+gives "Approve 5", clicking it reports **"5 rows approved."**, no horizontal
+overflow, **0 console errors**. The `ERR_ABORTED` entries are the StrictMode
+double-mount aborts of §5d trap 2.
+
+### The honest cost
+
+The two site-scoped queues fetch on every dashboard load alongside the two
+master queues, so the landing page now makes four list requests plus the site
+scope where it previously made one. They are `limit=5` keyset reads against
+indexed columns and they run in parallel, but it is four round trips on the
+screen a user opens most often, and nothing caches across them yet.
+
+The bigger cost is the one above: `supplier.approve` is a right nobody holds, so
+the Suppliers queue ships read-only for every real user until somebody answers
+Question 11 and an administrator ticks a box.
+
+Tests: **776 Node + .NET** — 757 Node (34 contracts + 41 domain + 453 API + 229
+web) + 19 .NET, up 36. The .NET suite was RUN this time, not proved: `Passed! -
+Failed: 0, Passed: 19`.

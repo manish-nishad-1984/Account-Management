@@ -295,9 +295,38 @@ export class DevSeed implements OnModuleInit {
        * not a business rule. The port guards both, which means the rights have to
        * be grantable, and the dev administrator holds them.
        */
-      { userId: admin.id, formId: 7, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
-      // Item has View/Add/Edit/Delete attributes in ItemMasterController.
-      { userId: admin.id, formId: 8, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
+      {
+        userId: admin.id,
+        formId: 7,
+        isViewAllow: true,
+        isAddAllow: true,
+        isEditAllow: true,
+        isDeleteAllow: true,
+        /**
+         * APPROVE, which nothing in the source reads for Supplier.
+         *
+         * Every other approvable form has a view that checks its own right —
+         * `FormName == "Item" && a.IsApproved` at `ItemMasterController.cs:97`,
+         * and the same shape for Purchase Request, Inward Challan, Purchase
+         * Order and Purchase Invoice. The Supplier views check only Add, Edit
+         * and Delete. Supplier approval happens on the DASHBOARD, and the
+         * dashboard gates all six of its panels on a single `Dashboard` form
+         * right instead of on each module's own — 41 checks in `Home/Index` and
+         * its partials, every one of them `FormName == "Dashboard"`.
+         *
+         * So `supplier.approve` is a right an administrator has to grant
+         * deliberately at cutover. It belongs with doc 19 Question 11.
+         */
+        isApproved: true,
+      },
+      /**
+       * Item, WITH approve. `ItemMasterController.cs:97` reads
+       * `FormName == "Item" && a.IsApproved` to decide whether to render the
+       * approve control, so the right is real and already in use — it was simply
+       * never granted here, because nothing in the port could reach it until the
+       * dashboard queues existed.
+       */
+      { userId: admin.id, formId: 8, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true, isApproved: true },
       /**
        * Purchase Request, including APPROVE. The approval flow is the point of
        * the screen, and without this right its buttons never render — which

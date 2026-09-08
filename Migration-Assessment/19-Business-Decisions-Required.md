@@ -355,7 +355,45 @@ will lose the ability to do their job on day one.
 **What we need to know.** Who maintains suppliers? We will check their permissions
 are set correctly before go-live.
 
-> **Decision:** ☐ Names: ______________________  ☐ Leave it unrestricted as now
+### The same question now applies to APPROVING, on the dashboard
+
+_Added 8 September 2026, after building the dashboard's approval queues._
+
+The dashboard has six "waiting for approval" panels, each with a tick-all box
+and an Approve button. In the current system **all six are controlled by one
+single permission** called Dashboard — not by the permission for the thing being
+approved.
+
+That has two effects today, and both are surprising:
+
+- Anyone with that one Dashboard permission can approve **purchase requests,
+  purchase orders, items, purchase invoices and suppliers** — even if they have
+  no approval rights at all on any of those screens.
+- Conversely, someone you have deliberately given "approve purchase requests" to
+  **cannot** approve one from the dashboard unless they also hold the Dashboard
+  permission.
+
+We have treated this as a mistake rather than a rule, for the same reason as
+above: one permission that silently grants approval over five different kinds of
+document is not something anyone designed. **In the new system, approving an
+item needs the item approval right, approving a supplier needs the supplier
+approval right, and so on.**
+
+**Why it matters.** There is a specific gap for **suppliers**: in the current
+system there is no such thing as a "supplier approval" permission — supplier
+approval only ever happened through that one Dashboard permission. So the right
+exists in the new system and **nobody currently holds it**. Somebody has to be
+given it before go-live, or nobody will be able to approve a supplier.
+
+**What we need to know.** Who should be able to approve suppliers, and who
+should be able to approve items? If the answer is "the same people who approve
+purchase requests today", that is a fine answer and we will set it up.
+
+> **Decision — editing/deleting suppliers:** ☐ Names: ______________________
+> ☐ Leave it unrestricted as now
+>
+> **Decision — approving suppliers and items:** ☐ Names: ______________________
+> ☐ Same people who approve purchase requests  ☐ Discuss
 
 ---
 
@@ -446,7 +484,7 @@ separate approval like hand-entered ones do?
 | 8 | Duplicate PO line counted once | No | |
 | 9 | Over-invoicing allowed | No | |
 | 10 | Deleted items resurrected on re-create | No | |
-| 11 | Who can edit suppliers | Before cutover | |
+| 11 | Who can edit suppliers, and who can APPROVE suppliers and items | Before cutover | |
 | 12 | Record over the list, or beside it | **Gets dearer weekly** | |
 | 13 | Does uploading a spreadsheet approve the items? | No | |
 
@@ -474,5 +512,5 @@ now.
 | 9 | D10, no clamping |
 | 10 | D19 |
 | 12 | `legacy-screens/PLAN.md` §1.2; `contexts/RecordLayoutContext.tsx` |
-| 11 | `SESSION-HANDOFF.md` §5b decision 1; finding C-6 |
+| 11 | `SESSION-HANDOFF.md` §5b decision 1 and §5p; finding C-6; `legacy-screens/01-dashboard.md` |
 | 13 | `SESSION-HANDOFF.md` §5o; `modules/items/item-sheet.service.ts` `toCreateItem` |

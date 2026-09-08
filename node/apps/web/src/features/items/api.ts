@@ -16,15 +16,18 @@ import {
   type UpdateItem,
   type UpdateUnit,
 } from "@accountmanagement/contracts";
-import { useListResource, type ListParams } from "../../lib/list-query";
+import { useListResource, type ListFilters, type ListParams } from "../../lib/list-query";
 import { useCreateResource, useDeleteResource, useUpdateResource } from "../../lib/crud";
 import { ApiError, apiRequest, downloadRequest, uploadRequest } from "../../lib/api-client";
 
 const RESOURCE = "items";
 const UNITS = "units";
 
-export const useItemList = (params: ListParams) =>
-  useListResource<ItemRow>(RESOURCE, itemRowSchema, params);
+/** `isApproved: false` is the dashboard's pending queue; the list screen passes nothing. */
+export type ItemFilters = ListFilters & { isApproved?: boolean };
+
+export const useItemList = (params: ListParams, filters: ItemFilters = {}) =>
+  useListResource<ItemRow>(RESOURCE, itemRowSchema, params, filters);
 
 export const useItem = (id: string | null) =>
   useQuery({

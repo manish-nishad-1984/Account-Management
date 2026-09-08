@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
 import { vi } from "vitest";
 import type { AuthenticatedUser } from "@accountmanagement/contracts";
@@ -56,7 +57,17 @@ export function renderWithAuth(
         }}
       >
         <StaticSiteScope {...scope}>
-          <StaticRecordLayout layout={layout}>{node}</StaticRecordLayout>
+          <StaticRecordLayout layout={layout}>
+            {/*
+              A router, because a screen containing a `<Link>` cannot render
+              without one. react-router's failure is "Cannot destructure
+              property 'basename' of useContext(...) as it is null", thrown from
+              its own internals — it names neither the component nor the missing
+              provider, so it costs real time to place. Inert for screens with no
+              links, so it belongs here rather than in each test that needs it.
+            */}
+            <MemoryRouter>{node}</MemoryRouter>
+          </StaticRecordLayout>
         </StaticSiteScope>
       </AuthContext.Provider>
     </QueryClientProvider>,

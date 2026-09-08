@@ -111,9 +111,25 @@ the Action column opens an item's price over time.
   `state_id` are bare integers with no lookup behind them — §1.4 below. There is
   nothing to resolve a name against, so the import cannot be written honestly.
   **This one needs the census, not a session.**
-- **Price history** has no schema behind it at all: `items.price_per_unit` is a
-  single mutable column. Needs a modelling decision (audit table vs temporal
-  rows) before a screen. Now the NEXT row on its own.
+- **Price history — the description above was WRONG, and it is now BLOCKED.**
+  Corrected 8 Sep 2026 by reading `GetItemHistory` instead of inferring from the
+  clock icon.
+
+  It is **not** an audit log of `items.price_per_unit`, so there is no
+  audit-table-vs-temporal-rows decision to make. `ItemMasterRepo.GetItemHistory`
+  (line 581) returns a `SupplierInvoiceList`: it joins `SupplierInvoices` to
+  `SupplierInvoiceDetails` for that `ItemId` and lists **every supplier invoice
+  line for the item**, ordered by date. `_ItemHistoryPartial.cshtml` renders
+  `InvoiceNo | Supplier | Site | Date | Price | GST | PriceWithGST`, and its
+  empty state is literally **"No invoices found."**
+
+  So it is a PURCHASE-price history — what we actually paid, per invoice — and
+  it reads two Phase 4 tables that are not migrated. There is nothing to read
+  and nothing to model. It moves out of NEXT and into BLOCKED behind supplier
+  invoices, alongside everything else in Phase 4.
+
+  The lesson is worth keeping: this entry was written from a screenshot of a
+  clock icon, and the icon's obvious meaning was the wrong one.
 
 ### 1.4 Company is missing `landmark`, and geography shows ids not names
 
@@ -220,11 +236,14 @@ DONE     site selector                                    (7 Sep 2026, §1.1)
          file upload for challans                         (7 Sep 2026, §09)
          both record layouts, for comparison              (8 Sep 2026, §1.2)
          Item Master Excel import/export                  (8 Sep 2026, §1.3)
+         Dashboard approval queues, 4 of 6                (8 Sep 2026, §01)
 NOW      master-detail ANSWER                            <- with the business now, doc 19 Q12
-NEXT     item price history                               (needs a modelling decision — ours)
+NEXT     (nothing unblocked is left that is not Phase 4)
+BLOCKED  item price history                              <- reads supplier invoices; NOT an audit log
 BLOCKED  Supplier Excel import                           <- needs the States/Cities census
+BLOCKED  the other 2 dashboard queues                    <- PO and Purchase Invoice tables
 BLOCKED  Purchase Invoice -> Purchase Order -> Sales      <- needs B-2 and D7
-LAST     Reports, payments, dashboard queues              <- needs the payments model
+LAST     Reports, payments                                <- needs the payments model
 ```
 
 **The two things on the critical path are not code.** B-2 and D7 have a 2-4 week

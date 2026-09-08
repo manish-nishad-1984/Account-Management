@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { and, count, eq, ilike, or, sql } from "drizzle-orm";
+import { and, count, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import type {
   CreateSupplier,
   ListQuery,
@@ -19,6 +19,11 @@ const SORTABLE = {
 } as const;
 
 export type SupplierSortKey = keyof typeof SORTABLE;
+
+/** The dashboard's pending queue is `isApproved: false`; the list screen passes nothing. */
+export interface SupplierFilters {
+  isApproved?: boolean;
+}
 
 export interface SupplierListRow {
   id: string;
@@ -84,7 +89,10 @@ export class SuppliersRepository extends BaseRepository {
     );
   }
 
-  async list(query: ListQuery): Promise<{ rows: SupplierListRow[]; nextCursor: string | null }> {
+  async list(
+    query: ListQuery,
+    options: SupplierFilters = {},
+  ): Promise<{ rows: SupplierListRow[]; nextCursor: string | null }> {
     const sortKey: SupplierSortKey =
       query.sortBy && query.sortBy in SORTABLE ? (query.sortBy as SupplierSortKey) : "name";
     const sortColumn = SORTABLE[sortKey];
@@ -94,6 +102,9 @@ export class SuppliersRepository extends BaseRepository {
     const match = this.searchFilter(query.search);
     if (match) {
       filters.push(match);
+    }
+    if (options.isApproved !== undefined) {
+      filters.push(eq(suppliers.isApproved, options.isApproved));
     }
 
     const seek = keysetWhere(
@@ -120,11 +131,14 @@ export class SuppliersRepository extends BaseRepository {
     };
   }
 
-  async total(search?: string): Promise<number> {
+  async total(search?: string, options: SupplierFilters = {}): Promise<number> {
     const filters = [eq(suppliers.isDeleted, false)];
     const match = this.searchFilter(search);
     if (match) {
       filters.push(match);
+    }
+    if (options.isApproved !== undefined) {
+      filters.push(eq(suppliers.isApproved, options.isApproved));
     }
     const [row] = await this.db.select({ value: count() }).from(suppliers).where(and(...filters));
     return row?.value ?? 0;
@@ -166,6 +180,53 @@ export class SuppliersRepository extends BaseRepository {
       throw new NotFoundException("Supplier not found");
     }
     return toDetail(row);
+  }
+
+  /**
+   * Approve or unapprove one supplier, STATING the value.
+   *
+   * `ActiveDeactiveSupplier` in the source toggles, and — finding C-6 — carries
+   * no `[FormPermissionAttribute]` at all, so anyone who can reach the site can
+   * approve a supplier. The controller guards this with `supplier.approve`.
+   */
+  async setApproval(id: string, isApproved: boolean, actorId: string): Promise<SupplierDetail> {
+    const [row] = await this.db
+      .update(suppliers)
+      .set({ isApproved, ...updatedBy(actorId) })
+      .where(and(eq(suppliers.id, id), eq(suppliers.isDeleted, false)))
+      .returning(DETAIL_COLUMNS);
+
+    if (!row) {
+      throw new NotFoundException("Supplier not found");
+    }
+    return toDetail(row);
+  }
+
+  /**
+   * Bulk approval from the dashboard queue — one statement.
+   *
+   * `eq(isApproved, !isApproved)` excludes rows already in the target state, so
+   * a select-all across a queue does not flip approved rows back off, and the
+   * count returned is what actually changed.
+   */
+  async setApprovalMany(ids: string[], isApproved: boolean, actorId: string): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+
+    const rows = await this.db
+      .update(suppliers)
+      .set({ isApproved, ...updatedBy(actorId) })
+      .where(
+        and(
+          inArray(suppliers.id, ids),
+          eq(suppliers.isDeleted, false),
+          eq(suppliers.isApproved, !isApproved),
+        ),
+      )
+      .returning({ id: suppliers.id });
+
+    return rows.length;
   }
 
   /**

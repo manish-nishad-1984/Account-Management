@@ -20,6 +20,11 @@ const SORTABLE = {
 
 export type ItemSortKey = keyof typeof SORTABLE;
 
+/** The dashboard's pending queue is `isApproved: false`; the list screen passes nothing. */
+export interface ItemFilters {
+  isApproved?: boolean;
+}
+
 export interface ItemListRow {
   id: string;
   name: string;
@@ -68,7 +73,10 @@ export class ItemsRepository extends BaseRepository {
    * in this codebase use subqueries because they are one-to-many; this is
    * many-to-one, where a join is both correct and cheaper.
    */
-  async list(query: ListQuery): Promise<{ rows: ItemListRow[]; nextCursor: string | null }> {
+  async list(
+    query: ListQuery,
+    options: ItemFilters = {},
+  ): Promise<{ rows: ItemListRow[]; nextCursor: string | null }> {
     const sortKey: ItemSortKey =
       query.sortBy && query.sortBy in SORTABLE ? (query.sortBy as ItemSortKey) : "name";
     const sortColumn = SORTABLE[sortKey];
@@ -78,6 +86,9 @@ export class ItemsRepository extends BaseRepository {
     const match = this.searchFilter(query.search);
     if (match) {
       filters.push(match);
+    }
+    if (options.isApproved !== undefined) {
+      filters.push(eq(items.isApproved, options.isApproved));
     }
 
     const seek = keysetWhere(
@@ -109,14 +120,70 @@ export class ItemsRepository extends BaseRepository {
     };
   }
 
-  async total(search?: string): Promise<number> {
+  async total(search?: string, options: ItemFilters = {}): Promise<number> {
     const filters = [eq(items.isDeleted, false)];
     const match = this.searchFilter(search);
     if (match) {
       filters.push(match);
     }
+    if (options.isApproved !== undefined) {
+      filters.push(eq(items.isApproved, options.isApproved));
+    }
     const [row] = await this.db.select({ value: count() }).from(items).where(and(...filters));
     return row?.value ?? 0;
+  }
+
+  /**
+   * Approve or unapprove one item, STATING the value.
+   *
+   * `ApproveUnapproveItem` in the source reads the row and writes the opposite,
+   * so two approvers racing land wherever ordering puts them and the API cannot
+   * express "approve this" at all. Same fix as purchase requests and inventory
+   * inward, same reason.
+   */
+  async setApproval(id: string, isApproved: boolean, actorId: string): Promise<ItemDetail> {
+    const [row] = await this.db
+      .update(items)
+      .set({ isApproved, ...updatedBy(actorId) })
+      .where(and(eq(items.id, id), eq(items.isDeleted, false)))
+      .returning(DETAIL_COLUMNS);
+
+    if (!row) {
+      throw new NotFoundException("Item not found");
+    }
+    return row;
+  }
+
+  /**
+   * Bulk approval from the dashboard queue — ONE statement, not one per row.
+   *
+   * `eq(isApproved, !isApproved)` in the WHERE is what makes a select-all safe
+   * across a queue that already contains approved rows: they are excluded
+   * rather than flipped off, and the returned count is what actually changed
+   * rather than how many boxes were ticked.
+   *
+   * The source's six bulk-approve methods loaded the WHOLE table and called
+   * `Update()` on every row — finding P2, fixed on the .NET side in §5c. This
+   * is the shape that defect should have had.
+   */
+  async setApprovalMany(ids: string[], isApproved: boolean, actorId: string): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+
+    const rows = await this.db
+      .update(items)
+      .set({ isApproved, ...updatedBy(actorId) })
+      .where(
+        and(
+          inArray(items.id, ids),
+          eq(items.isDeleted, false),
+          eq(items.isApproved, !isApproved),
+        ),
+      )
+      .returning({ id: items.id });
+
+    return rows.length;
   }
 
   async findById(id: string): Promise<ItemDetail> {

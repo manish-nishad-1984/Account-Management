@@ -18,11 +18,14 @@ import {
   createInwardChallanSchema,
   hasPermission,
   listQuerySchema,
+  bulkApprovalSchema,
   setApprovalSchema,
   updateInwardChallanSchema,
   type CreateInwardChallan,
   type InwardChallanDetail,
   type InwardChallanListResponse,
+  type BulkApproval,
+  type BulkApprovalResult,
   type SetApproval,
   type UpdateInwardChallan,
 } from "@accountmanagement/contracts";
@@ -139,6 +142,27 @@ export class InwardChallansController {
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<InwardChallanDetail> {
     return this.challans.setApproval(id, body.isApproved, actorId(caller));
+  }
+
+  /**
+   * Bulk approve from the dashboard queue. One UPDATE, not one per row.
+   *
+   * The repository method behind this replaces `MultipleItemInWordIsApproved`,
+   * one of the seven finding-P2 methods that rewrote the ENTIRE table to approve
+   * a handful of rows.
+   */
+  @Post("approvals")
+  @Permissions("inward-challan.approve")
+  async setApprovalMany(
+    @Body(new ZodValidationPipe(bulkApprovalSchema)) body: BulkApproval,
+    @CurrentUser() caller: AccessTokenClaims | undefined,
+  ): Promise<BulkApprovalResult> {
+    const updated = await this.challans.setApprovalMany(
+      body.ids,
+      body.isApproved,
+      actorId(caller),
+    );
+    return { updated };
   }
 
   @Delete(":id")

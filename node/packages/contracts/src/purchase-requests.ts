@@ -108,29 +108,9 @@ export type CreatePurchaseRequest = z.infer<typeof createPurchaseRequestSchema>;
 export const updatePurchaseRequestSchema = createPurchaseRequestSchema.innerType().partial();
 export type UpdatePurchaseRequest = z.infer<typeof updatePurchaseRequestSchema>;
 
-/**
- * Approve or unapprove, stated explicitly.
- *
- * `PurchaseRequestIsApproved` in the source TOGGLES: it reads the current value
- * and writes the opposite. Two approvers clicking at once leave it approved or
- * not depending on ordering, and the API cannot express "approve this" at all —
- * only "flip it". The caller says what it wants here.
- */
-export const setApprovalSchema = z.object({ isApproved: z.boolean() });
-export type SetApproval = z.infer<typeof setApprovalSchema>;
-
-/** Bulk approval from the dashboard queue. */
-export const bulkApprovalSchema = z.object({
-  ids: z.array(uuidId).min(1, "Select at least one request").max(200),
-  isApproved: z.boolean(),
-});
-export type BulkApproval = z.infer<typeof bulkApprovalSchema>;
-
-export const bulkApprovalResultSchema = z.object({
-  /** How many rows actually changed. Ids already in the target state count as 0. */
-  updated: z.number().int().nonnegative(),
-});
-export type BulkApprovalResult = z.infer<typeof bulkApprovalResultSchema>;
+// The approval schemas moved to `approvals.ts` when the dashboard gave five
+// other tables an Approve column. They are still exported from the package
+// barrel, so every import of them is unchanged.
 
 /**
  * `prNo` sorts as text, which is correct for this format: the year is fixed

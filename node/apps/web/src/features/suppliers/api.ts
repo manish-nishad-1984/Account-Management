@@ -7,14 +7,17 @@ import {
   type SupplierRow,
   type UpdateSupplier,
 } from "@accountmanagement/contracts";
-import { useListResource, type ListParams } from "../../lib/list-query";
+import { useListResource, type ListFilters, type ListParams } from "../../lib/list-query";
 import { useCreateResource, useDeleteResource, useUpdateResource } from "../../lib/crud";
 import { apiRequest } from "../../lib/api-client";
 
 const RESOURCE = "suppliers";
 
-export const useSupplierList = (params: ListParams) =>
-  useListResource<SupplierRow>(RESOURCE, supplierRowSchema, params);
+/** `isApproved: false` is the dashboard's pending queue; the list screen passes nothing. */
+export type SupplierFilters = ListFilters & { isApproved?: boolean };
+
+export const useSupplierList = (params: ListParams, filters: SupplierFilters = {}) =>
+  useListResource<SupplierRow>(RESOURCE, supplierRowSchema, params, filters);
 
 /** Bank details are not on the list row, so editing needs the full record. */
 export const useSupplier = (id: string | null) =>

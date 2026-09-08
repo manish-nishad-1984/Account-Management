@@ -318,6 +318,52 @@ describe("InwardChallansRepository (real PostgreSQL)", () => {
       await repo.remove(created.id, ACTOR);
       await expect(repo.remove(created.id, ACTOR)).rejects.toBeInstanceOf(NotFoundException);
     });
+
+    /**
+     * The dashboard queue's select-all.
+     *
+     * `MultipleItemInWordIsApproved` is one of the seven finding-P2 methods: it
+     * loaded every row in the table and called `Update()` on all of them, so
+     * approving two challans issued an UPDATE against every challan.
+     */
+    describe("bulk approval", () => {
+      it("approves the named rows and reports how many changed", async () => {
+        const a = await repo.create(input(), ACTOR);
+        const b = await repo.create(input(), ACTOR);
+
+        expect(await repo.setApprovalMany([a.id, b.id], true, ACTOR)).toBe(2);
+        expect((await repo.findById(a.id)).isApproved).toBe(true);
+        expect((await repo.findById(b.id)).isApproved).toBe(true);
+      });
+
+      it("skips rows already approved, so a select-all cannot flip them off", async () => {
+        const pending = await repo.create(input(), ACTOR);
+        const approved = await repo.create(input(), ACTOR);
+        await repo.setApproval(approved.id, true, ACTOR);
+
+        expect(await repo.setApprovalMany([pending.id, approved.id], true, ACTOR)).toBe(1);
+        expect((await repo.findById(approved.id)).isApproved).toBe(true);
+      });
+
+      it("leaves rows that were not named alone", async () => {
+        const named = await repo.create(input(), ACTOR);
+        const untouched = await repo.create(input(), ACTOR);
+
+        await repo.setApprovalMany([named.id], true, ACTOR);
+        expect((await repo.findById(untouched.id)).isApproved).toBe(false);
+      });
+
+      it("ignores a soft-deleted challan", async () => {
+        const gone = await repo.create(input(), ACTOR);
+        await repo.remove(gone.id, ACTOR);
+
+        expect(await repo.setApprovalMany([gone.id], true, ACTOR)).toBe(0);
+      });
+
+      it("is a no-op on an empty list", async () => {
+        expect(await repo.setApprovalMany([], true, ACTOR)).toBe(0);
+      });
+    });
   });
 
   describe("the detail", () => {

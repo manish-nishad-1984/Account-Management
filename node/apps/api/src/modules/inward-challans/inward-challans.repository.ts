@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { and, count, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
+import { and, count, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
 import type {
   CreateInwardChallan,
   InwardChallanDetail,
@@ -390,6 +390,37 @@ export class InwardChallansRepository extends BaseRepository {
       throw new NotFoundException("Inward challan not found");
     }
     return toDetail(row, await this.documentsFor(id));
+  }
+
+  /**
+   * Bulk approval from the dashboard queue — one statement, not one per row.
+   *
+   * `MultipleItemInWordIsApproved` is one of the seven methods carrying finding
+   * P2: it loaded every row in the table and called `Update()` on all of them,
+   * so approving one challan issued an UPDATE against every challan, clobbering
+   * any concurrent edit. This is the shape it should have had.
+   *
+   * `eq(isApproved, !isApproved)` excludes rows already in the target state, so
+   * a select-all across the queue cannot flip approved rows back off.
+   */
+  async setApprovalMany(ids: string[], isApproved: boolean, actorId: string): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+
+    const rows = await this.db
+      .update(inwardChallans)
+      .set({ isApproved, ...updatedBy(actorId) })
+      .where(
+        and(
+          inArray(inwardChallans.id, ids),
+          eq(inwardChallans.isDeleted, false),
+          eq(inwardChallans.isApproved, !isApproved),
+        ),
+      )
+      .returning({ id: inwardChallans.id });
+
+    return rows.length;
   }
 
   /**

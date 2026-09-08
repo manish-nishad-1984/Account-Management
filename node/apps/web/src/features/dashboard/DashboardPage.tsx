@@ -1,185 +1,198 @@
 import { Link } from "react-router-dom";
-import type { LucideIcon } from "lucide-react";
 import {
-  ArrowRight,
-  CircleCheck,
-  KeyRound,
-  LayoutGrid,
-  ShieldCheck,
-  Users as UsersIcon,
-} from "lucide-react";
-import { DEFAULT_PAGE_SIZE } from "@accountmanagement/contracts";
-import { useAuth } from "../../contexts/AuthContext";
-import { useUserList } from "../users/api";
+  APPROVAL_QUEUE_SIZE,
+  type InwardChallanRow,
+  type ItemRow,
+  type PurchaseRequestRow,
+  type SupplierRow,
+} from "@accountmanagement/contracts";
+import { ArrowRight, CircleCheck } from "lucide-react";
 import { Badge, Card, CardHeader, PageHeader } from "../../components/ui";
-import { NAV } from "../../navigation/nav";
+import { useAuth } from "../../contexts/AuthContext";
+import { useSiteScope } from "../../contexts/SiteScopeContext";
+import { usePurchaseRequestList } from "../purchase-requests/api";
+import { useInwardChallanList } from "../inward-challans/api";
+import { useItemList } from "../items/api";
+import { useSupplierList } from "../suppliers/api";
+import { ApprovalQueue, type QueueColumn } from "./ApprovalQueue";
+import { formatMoney } from "../../lib/format";
 
 /**
- * The .NET dashboard (`/Home/Index`) is six pending-approval queues with bulk
- * approve. Those endpoints do not exist on the new API yet, so this shows what is
- * genuinely known and states the rest plainly — never invented figures. A
- * financial dashboard that looks populated but is not would be worse than one
- * that admits it.
+ * The approval cockpit — `/Home/Index` in the source.
+ *
+ * Six pending-approval queues, each with a select-all in its Approve column
+ * header and one bulk action. FOUR of the six are here. The two that are not —
+ * Purchase Order and Purchase Invoice — read tables that have not been
+ * migrated, so they say which and why rather than rendering a queue that is
+ * empty because nothing feeds it. A dashboard that looks populated and is not
+ * is worse than one that admits what it cannot see (convention 2).
+ *
+ * The queues read the SAME hooks the list screens use, deliberately. A
+ * dashboard with its own idea of what "pending" means drifts from the screen it
+ * links to, and then the two disagree about a number somebody is acting on.
  */
+const QUEUE_PARAMS = { limit: APPROVAL_QUEUE_SIZE } as const;
+const PENDING = { isApproved: false };
+
 export function DashboardPage() {
   const { user } = useAuth();
-  const users = useUserList({ limit: DEFAULT_PAGE_SIZE, sortBy: "userName", sortDir: "asc" });
+  const scope = useSiteScope();
 
-  const legacyPasswords = users.data?.rows.filter((row) => row.passwordIsLegacy).length ?? 0;
-  const screens = NAV.flatMap((section) => section.items);
-  const migrated = screens.filter((item) => item.status === "ready").length;
+  // The two site-scoped queues follow the header's selector, as the legacy
+  // panels do — which is why their empty state talks about criteria.
+  const requests = usePurchaseRequestList(
+    { ...QUEUE_PARAMS, sortBy: "createdAt", sortDir: "desc" },
+    PENDING,
+  );
+  const challans = useInwardChallanList(
+    { ...QUEUE_PARAMS, sortBy: "createdAt", sortDir: "desc" },
+    PENDING,
+  );
+
+  // Masters are not site-scoped: there is no site on an item or a supplier.
+  const items = useItemList({ ...QUEUE_PARAMS, sortBy: "name", sortDir: "asc" }, PENDING);
+  const suppliers = useSupplierList({ ...QUEUE_PARAMS, sortBy: "name", sortDir: "asc" }, PENDING);
 
   return (
     <>
       <PageHeader
         title={`Welcome back, ${user?.userName ?? ""}`}
-        description="Procurement and accounting overview"
+        description="Everything waiting on an approval"
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          icon={UsersIcon}
-          label="Users"
-          value={users.data?.total ?? null}
-          hint="In the system directory"
-          loading={users.isLoading}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ApprovalQueue<PurchaseRequestRow>
+          title="Purchase Requests"
+          subject="purchase-request"
+          resource="purchase-requests"
+          to="/purchase-requests"
+          query={requests}
+          ready={scope.isReady}
+          columns={PURCHASE_REQUEST_COLUMNS}
         />
-        <StatCard
-          icon={KeyRound}
-          label="Legacy passwords"
-          value={legacyPasswords}
-          hint={legacyPasswords > 0 ? "Hashed on next sign-in" : "None on this page"}
-          tone={legacyPasswords > 0 ? "warning" : "success"}
-          loading={users.isLoading}
+
+        <ApprovalQueue<ItemRow>
+          title="Items"
+          subject="item"
+          resource="items"
+          to="/items"
+          query={items}
+          columns={ITEM_COLUMNS}
         />
-        <StatCard
-          icon={ShieldCheck}
-          label="Your permissions"
-          value={user?.permissions.length ?? 0}
-          hint="Enforced server-side"
-          tone="info"
+
+        <ApprovalQueue<SupplierRow>
+          title="Suppliers"
+          subject="supplier"
+          resource="suppliers"
+          to="/suppliers"
+          query={suppliers}
+          columns={SUPPLIER_COLUMNS}
         />
-        <StatCard
-          icon={LayoutGrid}
-          label="Screens migrated"
-          value={migrated}
-          hint={`of ${screens.length} in the module tree`}
+
+        <ApprovalQueue<InwardChallanRow>
+          title="Inward Challans"
+          subject="inward-challan"
+          resource="inward-challans"
+          to="/inward-challans"
+          query={challans}
+          ready={scope.isReady}
+          columns={CHALLAN_COLUMNS}
+        />
+
+        <NotMigrated
+          title="Purchase Orders"
+          reason="The purchase order tables are not migrated yet. Phase 4 is gated on the GST calculator question — doc 19, question 2."
+        />
+
+        <NotMigrated
+          title="Purchase Invoices"
+          reason="Supplier invoices are not migrated yet, and they sit behind the same Phase 4 gate."
         />
       </div>
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader
-            title="Approval queues"
-            description="The six queues on the current dashboard"
-            action={<Badge tone="neutral">Not migrated</Badge>}
-          />
+      <Card className="mt-6">
+        <CardHeader title="Your access" description="Granted rights on this account" />
 
-          <ul className="divide-y divide-slate-100">
-            {[
-              "Purchase requests",
-              "Purchase orders",
-              "Inward challans",
-              "Purchase invoices",
-              "Sales invoices",
-              "Payments",
-            ].map((queue) => (
-              <li key={queue} className="flex items-center justify-between py-2.5">
-                <span className="text-sm text-slate-600">{queue} awaiting approval</span>
-                <span className="rounded-md bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-400 ring-1 ring-inset ring-slate-200">
-                  endpoint pending
-                </span>
-              </li>
+        {user && user.permissions.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {user.permissions.map((permission) => (
+              <Badge key={permission} tone="info">
+                {permission}
+              </Badge>
             ))}
-          </ul>
-
-          <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2.5 text-xs leading-relaxed text-slate-500">
-            Each queue needs a paginated JSON endpoint before it can be shown. The
-            current implementation loads and rewrites entire tables to bulk approve,
-            which is one of the six full-table scans identified in the assessment.
-          </p>
-        </Card>
-
-        <Card>
-          <CardHeader title="Your access" description="Granted rights on this account" />
-
-          {user && user.permissions.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {user.permissions.map((permission) => (
-                <Badge key={permission} tone="info">
-                  {permission}
-                </Badge>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-slate-500">No permissions granted.</p>
-          )}
-
-          <div className="mt-5 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2.5 ring-1 ring-inset ring-emerald-100">
-            <CircleCheck aria-hidden className="size-4 shrink-0 text-emerald-600" />
-            <p className="text-xs leading-relaxed text-emerald-800">
-              Every one of these is re-checked on the server. Hiding a button is a
-              convenience, never the control.
-            </p>
           </div>
+        ) : (
+          <p className="text-sm text-slate-500">No permissions granted.</p>
+        )}
 
-          <Link
-            to="/users"
-            className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 transition-colors hover:text-brand-700"
-          >
-            Manage users
-            <ArrowRight aria-hidden className="size-4" />
-          </Link>
-        </Card>
-      </div>
+        <div className="mt-5 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2.5 ring-1 ring-inset ring-emerald-100">
+          <CircleCheck aria-hidden className="size-4 shrink-0 text-emerald-600" />
+          <p className="text-xs leading-relaxed text-emerald-800">
+            Every one of these is re-checked on the server. Hiding a button is a
+            convenience, never the control — the Approve boxes above are no exception.
+          </p>
+        </div>
+
+        <Link
+          to="/users"
+          className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 transition-colors hover:text-brand-700"
+        >
+          Manage users
+          <ArrowRight aria-hidden className="size-4" />
+        </Link>
+      </Card>
     </>
   );
 }
 
-const TONE_STYLES = {
-  neutral: { icon: "bg-slate-100 text-slate-500", value: "text-slate-900" },
-  success: { icon: "bg-emerald-50 text-emerald-600", value: "text-slate-900" },
-  warning: { icon: "bg-amber-50 text-amber-600", value: "text-amber-600" },
-  info: { icon: "bg-brand-50 text-brand-600", value: "text-slate-900" },
-} as const;
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  hint,
-  tone = "neutral",
-  loading = false,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: number | null;
-  hint?: string;
-  tone?: keyof typeof TONE_STYLES;
-  loading?: boolean;
-}) {
-  const styles = TONE_STYLES[tone];
-
+/** A queue whose table does not exist yet. It names which, and why. */
+function NotMigrated({ title, reason }: { title: string; reason: string }) {
   return (
-    <Card className="transition-shadow duration-200 hover:shadow-raised">
-      <div className="flex items-start justify-between">
-        <div className="min-w-0">
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            {label}
-          </div>
-          {loading ? (
-            <div className="mt-2 h-9 w-16 animate-pulse rounded-md bg-slate-100" />
-          ) : (
-            <div className={`tabular mt-1 text-3xl font-semibold tracking-tight ${styles.value}`}>
-              {value ?? "—"}
-            </div>
-          )}
-          {hint && <div className="mt-1 truncate text-xs text-slate-500">{hint}</div>}
+    <Card>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="heading text-sm">{title}</h2>
+          <p className="mt-0.5 text-xs text-slate-500">Not migrated</p>
         </div>
-        <div className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${styles.icon}`}>
-          <Icon aria-hidden className="size-5" />
-        </div>
+        <Badge tone="neutral">Pending</Badge>
       </div>
+      <p className="rounded-lg bg-slate-50 px-3 py-2.5 text-xs leading-relaxed text-slate-500">
+        {reason}
+      </p>
     </Card>
   );
 }
+
+const Absent = () => <span className="text-slate-300">—</span>;
+
+const PURCHASE_REQUEST_COLUMNS: QueueColumn<PurchaseRequestRow>[] = [
+  { key: "prNo", header: "PR No", cell: (row) => row.prNo },
+  { key: "siteName", header: "Site", cell: (row) => row.siteName ?? <Absent /> },
+  // `itemLabel`, not the item's name: a request raised with free text and no
+  // `itemId` is invisible in the source, which INNER JOINs `ItemMaster`. Here it
+  // lists, labelled by what was typed (§5f).
+  { key: "itemLabel", header: "Item", cell: (row) => row.itemLabel },
+  { key: "quantity", header: "Qty", numeric: true, cell: (row) => row.quantity },
+];
+
+const ITEM_COLUMNS: QueueColumn<ItemRow>[] = [
+  { key: "name", header: "Item", cell: (row) => row.name },
+  { key: "unitName", header: "Unit", cell: (row) => row.unitName },
+  {
+    key: "pricePerUnit",
+    header: "Price",
+    numeric: true,
+    cell: (row) => formatMoney(row.pricePerUnit),
+  },
+];
+
+const SUPPLIER_COLUMNS: QueueColumn<SupplierRow>[] = [
+  { key: "name", header: "Supplier", cell: (row) => row.name },
+  { key: "gstNo", header: "GST", cell: (row) => row.gstNo ?? <Absent /> },
+];
+
+const CHALLAN_COLUMNS: QueueColumn<InwardChallanRow>[] = [
+  { key: "itemName", header: "Item", cell: (row) => row.itemName ?? <Absent /> },
+  { key: "supplierName", header: "Supplier", cell: (row) => row.supplierName ?? "Not recorded" },
+  { key: "quantity", header: "Qty", numeric: true, cell: (row) => row.quantity },
+];

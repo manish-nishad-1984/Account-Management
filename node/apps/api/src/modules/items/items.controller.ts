@@ -18,19 +18,24 @@ import { z } from "zod";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   ATTACHMENT_TYPES,
+  bulkApprovalSchema,
   createItemSchema,
   createUnitSchema,
   hasPermission,
   itemSheetFileName,
   listQuerySchema,
+  setApprovalSchema,
   updateItemSchema,
   updateUnitSchema,
+  type BulkApproval,
+  type BulkApprovalResult,
   type CreateItem,
   type CreateUnit,
   type ItemDetail,
   type ItemRow,
   type ItemSheetImportResult,
   type ListResponse,
+  type SetApproval,
   type UnitRow,
   type UpdateItem,
   type UpdateUnit,
@@ -62,6 +67,21 @@ const exportQuerySchema = z.object({
   search: z.string().trim().max(200).optional(),
 });
 
+/**
+ * The list's filters. `isApproved=false` is the dashboard's pending queue.
+ *
+ * Booleans are coerced from the string explicitly rather than left to
+ * truthiness, where the string "false" is true.
+ */
+const filterSchema = z.object({
+  isApproved: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === "true")),
+});
+
+const listRequestSchema = listQuerySchema.and(filterSchema);
+
 @Controller("items")
 export class ItemsController {
   constructor(
@@ -72,7 +92,8 @@ export class ItemsController {
   @Get()
   @Permissions("item.view")
   async list(
-    @Query(new ZodValidationPipe(listQuerySchema)) query: ReturnType<typeof listQuerySchema.parse>,
+    @Query(new ZodValidationPipe(listRequestSchema))
+    query: ReturnType<typeof listRequestSchema.parse>,
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<ListResponse<ItemRow>> {
     const granted = caller?.permissions ?? [];
@@ -82,9 +103,11 @@ export class ItemsController {
       canApprove: hasPermission(granted, SUBJECT, "approve"),
     };
 
+    const filters = { isApproved: query.isApproved };
+
     const [page, total] = await Promise.all([
-      this.items.list(query),
-      this.items.total(query.search),
+      this.items.list(query, filters),
+      this.items.total(query.search, filters),
     ]);
 
     return {
@@ -188,6 +211,35 @@ export class ItemsController {
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<ItemDetail> {
     return this.items.update(id, body, actorId(caller));
+  }
+
+  /**
+   * Approval is its own endpoint with its own right.
+   *
+   * `ApproveUnapproveItem` in the source is a plain update reachable by anyone
+   * who can reach the controller — the `approve` right existed in the matrix and
+   * was checked only in the Razor view, so a view-only clerk could approve by
+   * calling the API directly (finding C-6). `@Permissions` closes that.
+   */
+  @Patch(":id/approval")
+  @Permissions("item.approve")
+  setApproval(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(setApprovalSchema)) body: SetApproval,
+    @CurrentUser() caller: AccessTokenClaims | undefined,
+  ): Promise<ItemDetail> {
+    return this.items.setApproval(id, body.isApproved, actorId(caller));
+  }
+
+  /** Bulk approve from the dashboard queue. One UPDATE, not one per row. */
+  @Post("approvals")
+  @Permissions("item.approve")
+  async setApprovalMany(
+    @Body(new ZodValidationPipe(bulkApprovalSchema)) body: BulkApproval,
+    @CurrentUser() caller: AccessTokenClaims | undefined,
+  ): Promise<BulkApprovalResult> {
+    const updated = await this.items.setApprovalMany(body.ids, body.isApproved, actorId(caller));
+    return { updated };
   }
 
   @Delete(":id")

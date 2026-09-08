@@ -10,13 +10,19 @@ import {
   Post,
   Query,
 } from "@nestjs/common";
+import { z } from "zod";
 import {
+  bulkApprovalSchema,
   createSupplierSchema,
   hasPermission,
   listQuerySchema,
+  setApprovalSchema,
   updateSupplierSchema,
+  type BulkApproval,
+  type BulkApprovalResult,
   type CreateSupplier,
   type ListResponse,
+  type SetApproval,
   type SupplierDetail,
   type SupplierRow,
   type UpdateSupplier,
@@ -53,6 +59,21 @@ import type { AccessTokenClaims } from "../auth/token.service";
  */
 const SUBJECT = "supplier";
 
+/**
+ * The list's filters. `isApproved=false` is the dashboard's pending queue.
+ *
+ * Coerced from the string explicitly rather than left to truthiness, where the
+ * string "false" is true.
+ */
+const filterSchema = z.object({
+  isApproved: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === "true")),
+});
+
+const listRequestSchema = listQuerySchema.and(filterSchema);
+
 @Controller("suppliers")
 export class SuppliersController {
   constructor(private readonly suppliers: SuppliersRepository) {}
@@ -60,7 +81,8 @@ export class SuppliersController {
   @Get()
   @Permissions("supplier.view")
   async list(
-    @Query(new ZodValidationPipe(listQuerySchema)) query: ReturnType<typeof listQuerySchema.parse>,
+    @Query(new ZodValidationPipe(listRequestSchema))
+    query: ReturnType<typeof listRequestSchema.parse>,
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<ListResponse<SupplierRow>> {
     const granted = caller?.permissions ?? [];
@@ -70,9 +92,11 @@ export class SuppliersController {
       canApprove: hasPermission(granted, SUBJECT, "approve"),
     };
 
+    const filters = { isApproved: query.isApproved };
+
     const [page, total] = await Promise.all([
-      this.suppliers.list(query),
-      this.suppliers.total(query.search),
+      this.suppliers.list(query, filters),
+      this.suppliers.total(query.search, filters),
     ]);
 
     return {
@@ -105,6 +129,38 @@ export class SuppliersController {
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<SupplierDetail> {
     return this.suppliers.update(id, body, actorId(caller));
+  }
+
+  /**
+   * Approval, stated rather than toggled, and guarded.
+   *
+   * `ActiveDeactiveSupplier` (`SupplierController.cs:150`) is the third of the
+   * three methods on that controller carrying no `[FormPermissionAttribute]` at
+   * all — see the note on `SUBJECT` above. Same departure, same reason.
+   */
+  @Patch(":id/approval")
+  @Permissions("supplier.approve")
+  setApproval(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(setApprovalSchema)) body: SetApproval,
+    @CurrentUser() caller: AccessTokenClaims | undefined,
+  ): Promise<SupplierDetail> {
+    return this.suppliers.setApproval(id, body.isApproved, actorId(caller));
+  }
+
+  /** Bulk approve from the dashboard queue. One UPDATE, not one per row. */
+  @Post("approvals")
+  @Permissions("supplier.approve")
+  async setApprovalMany(
+    @Body(new ZodValidationPipe(bulkApprovalSchema)) body: BulkApproval,
+    @CurrentUser() caller: AccessTokenClaims | undefined,
+  ): Promise<BulkApprovalResult> {
+    const updated = await this.suppliers.setApprovalMany(
+      body.ids,
+      body.isApproved,
+      actorId(caller),
+    );
+    return { updated };
   }
 
   @Delete(":id")
