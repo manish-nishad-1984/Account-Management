@@ -3,6 +3,11 @@
 **Written:** 2 September 2026, after the unblocking session. **Last extended
 8 September 2026** (§5n). Supersedes all earlier handoffs of the same name.
 
+> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
+> that hash, they happened later than this document and they win. `/handoff`
+> checks exactly this on the way in, so a stale file announces itself instead of
+> being believed.
+
 **Sections §3, §4, §8, §10 and §11 describe _now_ and are re-measured on every
 handoff. Sections §5, §5b … §5n are a log of days that already happened and are
 never edited.** If the two disagree, the numbered sections win — run
@@ -1185,8 +1190,10 @@ up 18.
 
 ## 5n. The handoff is now a command, and the drift it found (8 Sep 2026)
 
-Committed as `4c0811d2`. Adds `.claude/skills/handoff/SKILL.md` — the `/handoff`
-slash command — and applies it to this file for the first time.
+Committed as `4c0811d2`, then `709b2646` and `b08d9f4a`, each fixing something
+the command got wrong the moment it was used. Adds
+`.claude/skills/handoff/SKILL.md` — the `/handoff` slash command — and applies it
+to this file for the first time.
 
 ### Why a command, when a handoff is just writing
 
@@ -1273,6 +1280,36 @@ offering `/run-local`. A previous session usually leaves them up, and the
 reflex to boot them again either fails on `--strictPort` or restarts a working
 stack for nothing.
 
+### Three things it got wrong, found by using it
+
+Each was in the command within minutes of it being written, which is worth
+knowing: a procedure that has never been run is a draft.
+
+**It named a HEAD that its own commit invalidated.** §4 was written as "HEAD
+`36fcc82f`", true when measured and false a minute later when the handoff commit
+landed. A hash labelled "HEAD" in a document that is committed *after* it is
+measured is always wrong, and wrong in the most misleading way — it looks
+precise. §4 now names the last **code** commit as what the suites were measured
+at, and says anything after it is documentation.
+
+**It only ran at one end of the session.** See above. The user's first instinct
+was to type it on the way *in*, which is the better interface.
+
+**It demanded a re-measurement that could not change.** The first instruction is
+"never carry a number forward", which is right — but taken literally it means
+re-running five minutes of suites after a session that edited nothing but
+Markdown. The rule is now sharper: **re-run when code changed; when it did not,
+prove it** with `git diff --name-only <measured-at>..HEAD` and say so. That is a
+measurement too, and a cheaper one. What is forbidden is a number that was
+neither run nor proved — and "I assume it still passes" is neither.
+
+### The honest cost
+
+This session produced no application code. Four commits, all documentation and
+one skill. The next session inherits a handoff that is accurate and a command
+that keeps it that way — but the NOW row has not moved, and the layout question
+is exactly as unanswered as it was this morning.
+
 ### Also corrected in this pass
 
 - **`PostgreSQL 17` in §1 is the assessment's target, not what runs.** The VPS
@@ -1291,8 +1328,8 @@ stack for nothing.
   of real users.
 
 Tests: **654** — 635 Node (25 contracts + 41 domain + 374 API + 195 web) + 19
-.NET. Unchanged; this session wrote documentation and one skill, no application
-code.
+.NET. Measured at `36fcc82f`; `git diff --name-only 36fcc82f..HEAD` is two
+`.md` files, so the figure still holds without a re-run.
 
 ---
 

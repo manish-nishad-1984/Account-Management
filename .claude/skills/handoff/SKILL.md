@@ -122,6 +122,28 @@ git rev-parse HEAD origin/main     # equal? then it is pushed
 api, web. Add them for the Node total and keep the per-workspace breakdown; that
 breakdown is what makes the next session's own count comparable.
 
+**Pipe it to a file and grep the file.** `npm test | tail -40` keeps only the
+last workspace's summary and silently discards the other three, which looks like
+a complete answer and is not. Strip the ANSI codes before grepping:
+
+```bash
+cd node && npm test > <scratchpad>/npmtest.txt 2>&1
+sed 's/\x1b\[[0-9;]*m//g' <scratchpad>/npmtest.txt | grep -E "Tests +[0-9]+ passed"
+```
+
+**If the session changed no code, do not re-run the suites — prove it instead.**
+The rule is "never state a number you have not established", not "always spend
+five minutes". When the diff since the last measurement is documentation only,
+that is establishable and faster:
+
+```bash
+git diff --name-only <the commit the numbers were measured at>..HEAD | grep -vE '\.md$'
+```
+
+Nothing back means the figure still holds, and the section says so — *measured at
+`<hash>`, and nothing since it touches code*. What is forbidden is a number
+neither run nor proved; "it probably still passes" is neither.
+
 **If something fails, the handoff says so.** A handoff that claims a green suite
 over a red one is the single most expensive thing that can be written in this
 file: the next session builds on it, and loses a day to a defect it was told
@@ -151,9 +173,17 @@ Read each of these and correct it against step 1. This is the work.
   moved, say what the NOW item is and where it is tracked
   (`Migration-Assessment/legacy-screens/PLAN.md` holds the sequencing).
 
-Also check the **header block** at the top of the file: the "Written / extended"
-dates and the pointer to what is live. If the app was deployed this session, the
-release stamp there is wrong.
+Also check the **header block** at the top of the file:
+
+- the "Written / extended" dates;
+- the pointer to what is live — **if the app was deployed this session, the
+  release stamp there is wrong**, and if it was *not*, say which committed work
+  is deliberately not shipped and why;
+- **the `current as of <hash>` line.** Write `<CURRENT>` there and stamp it in
+  step 5 along with the section's own `<COMMIT>`. This line is the contract that
+  `start` mode relies on: it is how the next session discovers the file is behind
+  instead of trusting it. A handoff that leaves it stale has disabled its own
+  safety check.
 
 ### 3. Cross-check the documents that must agree
 
