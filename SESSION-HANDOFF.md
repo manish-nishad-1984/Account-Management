@@ -1174,7 +1174,7 @@ up 18.
 
 ## 5n. The handoff is now a command, and the drift it found (8 Sep 2026)
 
-Committed as `<COMMIT>`. Adds `.claude/skills/handoff/SKILL.md` — the `/handoff`
+Committed as `4c0811d2`. Adds `.claude/skills/handoff/SKILL.md` — the `/handoff`
 slash command — and applies it to this file for the first time.
 
 ### Why a command, when a handoff is just writing
