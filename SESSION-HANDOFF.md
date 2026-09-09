@@ -40,7 +40,7 @@ layouts of §5m, the Item Master Excel pair of §5o and the dashboard queues of
 and both invoice modules), `98fe1b46` (§5s: the purchase order delivery
 addresses, the terms editor with its sanitiser, and a compact pass over every
 form), `f28737d2` (§5t: item price history, two pre-existing typecheck failures,
-and the dev seed) and `<COMMIT>` (§5u: payments, the ledger and the sales report).
+and the dev seed) and `5003319d` (§5u: payments, the ledger and the sales report).
 `c77268a3` is also unshipped and touches only skills and this file.
 
 **The deploy was AUTHORISED on 9 Sep 2026 and still did not happen.** The user
@@ -127,7 +127,7 @@ AC/
 
 **1158 tests pass** — 1139 Node (63 contracts + 65 domain + 665 API + 346 web)
 plus 19 .NET. **Both figures were RUN on 9 Sep 2026**, against the tree that
-became `<COMMIT>`: Node exit 0, 36 of 36 API files and 32 of 32 web files, zero
+became `5003319d`: Node exit 0, 36 of 36 API files and 32 of 32 web files, zero
 failures; .NET `Passed! - Failed: 0, Passed: 19`.
 
 **EVERY LEGACY SCREEN IS NOW PORTED.** `nav.ts` carries no `"planned"` item —
@@ -191,7 +191,7 @@ Branch **`main`**, working tree clean, pushed to `origin/main`. Builds,
 typechecks, and all **1158 tests pass** — 1139 Node (63 contracts + 65 domain +
 665 API + 346 web) + 19 .NET.
 
-Both suites were last measured at **`<COMMIT>`**, the final code commit of
+Both suites were last measured at **`5003319d`**, the final code commit of
 9 Sep 2026, and both were RUN rather than proved. Anything after that on `main`
 is documentation — a handoff always commits after its own measurement, so the
 newest hash is never the one the numbers were taken at, and naming it here would
@@ -220,7 +220,7 @@ be a lie that looks precise.
   broken on a clean tree — the web and domain typechecks, the dev seed's line
   arithmetic, and a stale sentence in the item delete dialog (§5t). **It carries
   NO migration**; it is a query, a panel and a seed change.
-- `<COMMIT>` ported the last three screens — Payments, the Ledger and the Sales
+- `5003319d` ported the last three screens — Payments, the Ledger and the Sales
   Report — and decided the payments model (§5u). **It carries migration
   `0012_payments`**, the first new table since `0011`.
 - **`main` is pushed to `origin/main`** and the working tree is clean.
@@ -3129,7 +3129,7 @@ and 31 of 31 web files; .NET `Passed! - Failed: 0, Passed: 19`.
 
 ## 5u. Payments, the ledger and the sales report — every legacy screen is now ported (9 Sep 2026)
 
-Committed as `<COMMIT>`.
+Committed as `5003319d`.
 
 The last three screens: `/Report/ReportDetails` (two report panels and a payment
 repeater) and `/Sales/SalesReport`. They were the PLAN.md BLOCKED row "Reports,
