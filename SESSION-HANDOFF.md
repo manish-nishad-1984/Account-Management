@@ -2216,7 +2216,7 @@ the chat window.
 ## 5r. Purchase orders and both invoice screens — Phase 4 is built (8–9 Sep 2026)
 
 Committed as `76fb301c`, `6b1164ae`, `c77268a3`, `1212f12a`, `3f863c72`,
-`b296085c` and `17304ea7`. Stamped at `<COMMIT>`.
+`b296085c` and `17304ea7`. Stamped at `789b09b3`.
 
 **This section covers two sessions, not one.** The purchase order work of
 `76fb301c` and `6b1164ae` was built, deployed and never written up — that session
