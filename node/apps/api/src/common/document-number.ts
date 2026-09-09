@@ -122,3 +122,27 @@ export const purchaseOrderNumber =
     const lead = prefix ? `${prefix}/` : "";
     return `${lead}PO/${year}/${String(issued).padStart(3, "0")}`;
   };
+
+/**
+ * `DHP/26-27/001` — the company's invoice prefix, then year and sequence.
+ *
+ * NO DOCUMENT-TYPE SEGMENT, unlike the purchase order's `DHP/PO/26-27/001`.
+ * That asymmetry is the source's, not a slip here: `CheckSalesInvoiceNo` builds
+ * `$"{trimmedInvoicePef}/{lastYear:D2}-{currentYear:D2}/{n:D3}"` with nothing
+ * between the prefix and the year. A sales invoice number and a purchase order
+ * number for the same company are therefore told apart only by that segment,
+ * which is worth knowing before anyone tries to parse one.
+ *
+ * That numberer carries a defect the purchase order one does not: it NEVER
+ * RESTARTS IN A NEW FINANCIAL YEAR. Its "last invoice" lookup filters on company
+ * alone while the label it formats uses the current year, so 26-27 inherits
+ * 25-26's count and has no 001. This starts each year at 001, as the format
+ * implies — flagged for sign-off alongside the same change to purchase orders.
+ */
+export const salesInvoiceNumber =
+  (invoicePrefix: string | null | undefined) =>
+  (year: string, issued: number): string => {
+    const prefix = invoicePrefix?.trim();
+    const lead = prefix ? `${prefix}/` : "";
+    return `${lead}${year}/${String(issued).padStart(3, "0")}`;
+  };

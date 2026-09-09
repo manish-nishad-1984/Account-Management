@@ -12,6 +12,8 @@ import {
   items,
   purchaseInvoiceItems,
   purchaseInvoices,
+  salesInvoiceItems,
+  salesInvoices,
   purchaseOrderItems,
   purchaseOrders,
   purchaseRequests,
@@ -86,12 +88,30 @@ export class DevSeed implements OnModuleInit {
       return;
     }
 
+    /**
+     * Invoice prefixes, made UNIQUE across the seeded companies.
+     *
+     * Three-letter initials collide: of 30 companies, "Ambica Buildcon" and
+     * "Anand Buildcon" both give AB, and three separate firms give SC. The
+     * prefix leads every purchase order and sales invoice NUMBER, so a collision
+     * puts `AB/26-27/001` on screen twice for two different companies — the
+     * sequence is per company and perfectly correct, and it reads as though
+     * numbering were broken. That is the failure mode this project keeps
+     * meeting: right behaviour, misleading data.
+     *
+     * Production prefixes are real and typed by the business, so this is a
+     * property of the SEED and not of the system. Fixed here rather than
+     * explained away, because a local screen that looks wrong costs somebody an
+     * afternoon.
+     */
+    const companyPrefixes = uniquePrefixes(COMPANY_NAMES);
+
     const insertedCompanies = await db
       .insert(companies)
       .values(
         COMPANY_NAMES.map((name, i) => ({
           name,
-          invoicePrefix: initialsOf(name),
+          invoicePrefix: companyPrefixes[i]!,
           // Format-shaped, not real: 2-digit state code, 10-character PAN,
           // entity digit, "Z", check character.
           gstNo: "24" + panFor(i) + "1Z" + GST_CHECK[i % GST_CHECK.length],
@@ -214,6 +234,18 @@ export class DevSeed implements OnModuleInit {
       { id: 10, formName: "Inventory Inward", controller: "Sales", formGroup: "Purchase", isActive: true },
       /** "Inward Challan". The controller is spelled `ItemInWord` in the source. */
       { id: 11, formName: "Inward Challan", controller: "ItemInWord", formGroup: "Purchase", isActive: true },
+      /**
+       * "Sales Invoice" — production id 27, active, controller `Sales`.
+       *
+       * The controller is the reason the subject cannot come from it: `Sales`
+       * ALSO serves Inventory Inward (id 10 here, id 29 in production), so a
+       * controller-derived subject would collapse two unrelated screens into one
+       * permission — the same collision that put Group and Site together.
+       *
+       * Singular, like the purchase invoice row and unlike purchase orders.
+       * Each matches its own active production row.
+       */
+      { id: 12, formName: "Sales Invoice", controller: "Sales", formGroup: "Invoicing", isActive: true },
     ]);
 
     // Units first: items reference them, and the foreign key is real.
@@ -403,6 +435,8 @@ export class DevSeed implements OnModuleInit {
       // Inventory Inward, including APPROVE, for the same reason.
       { userId: admin.id, formId: 10, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true, isApproved: true },
       { userId: admin.id, formId: 11, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true, isApproved: true },
+      /** Sales Invoice, all five rights. */
+      { userId: admin.id, formId: 12, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true, isApproved: true },
     ]);
 
     /**
@@ -723,6 +757,123 @@ export class DevSeed implements OnModuleInit {
     await db.insert(purchaseInvoiceItems).values(invoiceLineRows);
 
     /**
+     * Sales invoices — the same document, the other direction.
+     *
+     * The number is OURS here, so unlike the purchase invoices these carry a
+     * generated `DHP/26-27/001` and the counter row is seeded to match. Leaving
+     * the counter at 1 would make the next invoice created in the UI collide
+     * with one of these, which is the same trap the purchase requests document.
+     *
+     * NOTE THE FORMAT has no document-type segment, where a purchase order has
+     * `/PO/`. That asymmetry is the source's.
+     *
+     * The customer is a row from `suppliers` — one party table holds both sides
+     * of the trade. Picked from the FAR END of the list so the sales screens do
+     * not show the same names as the purchase ones, which makes it obvious at a
+     * glance which direction a document belongs to.
+     */
+    const salesPerCompany = 2;
+    const salesRows: (typeof salesInvoices.$inferInsert)[] = [];
+    const salesLineRows: (typeof salesInvoiceItems.$inferInsert)[] = [];
+    const salesAtSite = new Map<number, number>();
+
+    insertedCompanies.forEach((company, companyIndex) => {
+      for (let n = 0; n < salesPerCompany; n += 1) {
+        const invoiceId = randomUUID();
+        const seq = n + 1;
+        const offset = companyIndex * salesPerCompany + n;
+
+        const siteIndex = offset % insertedSites.length;
+        const seqAtSite = salesAtSite.get(siteIndex) ?? 0;
+        salesAtSite.set(siteIndex, seqAtSite + 1);
+
+        const lineCount = 1 + (offset % 3);
+        const lines = Array.from({ length: lineCount }, (_, l) => {
+          const item = insertedItems[(offset * 7 + l) % insertedItems.length]!;
+          const quantity = l === 0 ? "6.00" : "1.25";
+          const unitPrice = String(320 + offset * 53 + l * 29) + ".00";
+          const discountPerUnit = l % 2 === 0 ? String(10 + l * 5) + ".00" : "0";
+          const gstPercent = ["18.00", "5.00", "12.00"][l % 3]!;
+          return { item, quantity, unitPrice, discountPerUnit, gstPercent };
+        });
+
+        const tds = offset % 3 === 0 ? String(100 + offset * 20) + ".00" : "0";
+        const roundOff = offset % 3 === 1 ? "-8.25" : offset % 3 === 2 ? "6.75" : "0";
+
+        const totals = invoiceTotal.corrected(
+          lines.map((line) => ({
+            unitPrice: line.unitPrice,
+            quantity: line.quantity,
+            discountPerUnit: line.discountPerUnit,
+            gstPercent: line.gstPercent,
+          })),
+          { tds, roundOff },
+        );
+
+        salesRows.push({
+          id: invoiceId,
+          salesInvoiceNo: `${company.invoicePrefix}/${financialYearLabel}/${String(seq).padStart(3, "0")}`,
+          customerInvoiceNo: offset % 4 === 0 ? `PO-${7000 + offset}` : null,
+          invoiceType:
+            offset % 8 === 3 ? "Sales Return" : offset % 8 === 6 ? "Credit Note" : "Sales",
+          siteId: insertedSites[siteIndex]!.id,
+          // From the far end of the party list — see the note above.
+          customerId:
+            insertedSuppliers[insertedSuppliers.length - 1 - (offset % insertedSuppliers.length)]!
+              .id,
+          companyId: company.id,
+          documentDate: new Date(Date.UTC(2026, 7, ((offset * 11) % 27) + 1)),
+          challanNo: `SC-${4000 + offset}`,
+          vehicleNo: offset % 2 === 0 ? `GJ 05 CD ${2000 + offset}` : null,
+          dispatchBy: offset % 2 === 0 ? "Road" : "Rail",
+          paymentTerms: "15 days from invoice",
+          contactName: "Accounts",
+          contactNumber: "9825098765",
+          shippingAddress: `Plot ${20 + offset}, ${company.name} yard`,
+          subtotal: totals.subtotal,
+          totalGstAmount: totals.totalGst,
+          totalDiscount: totals.totalDiscount,
+          tds: totals.tds,
+          roundOff: totals.roundOff,
+          totalAmount: totals.grandTotal,
+          paymentStatus: offset % 3 === 0 ? "Paid" : "Unpaid",
+          isPaidIn: offset % 3 === 0,
+          isApproved: seqAtSite > 0,
+          createdBy: admin.id,
+        });
+
+        lines.forEach((line, l) => {
+          salesLineRows.push({
+            salesInvoiceId: invoiceId,
+            itemId: line.item.id,
+            unitId: line.item.unitId,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            discountPerUnit: line.discountPerUnit,
+            gstPercent: line.gstPercent,
+            gstAmount: totals.lines[l]!.gstAmount,
+            netAmount: totals.lines[l]!.netAmount,
+            lineTotal: totals.lines[l]!.total,
+            lineNumber: l + 1,
+            createdBy: admin.id,
+          });
+        });
+      }
+    });
+
+    await db.insert(salesInvoices).values(salesRows);
+    await db.insert(salesInvoiceItems).values(salesLineRows);
+
+    await db.insert(documentCounters).values(
+      insertedCompanies.map((company) => ({
+        documentType: "sales_invoice",
+        financialYear: financialYearLabel,
+        companyId: company.id,
+        nextValue: salesPerCompany + 1,
+      })),
+    );
+
+    /**
      * Inventory arrivals.
      *
      * TWO IN FIVE CARRY NO SITE, on purpose. Every row imported from production
@@ -985,6 +1136,22 @@ const initialsOf = (name: string): string =>
     .join("")
     .toUpperCase()
     .slice(0, 3);
+
+/**
+ * Initials for each name, with a digit appended to any that would repeat.
+ *
+ * `AB`, `AB` becomes `AB`, `AB2`. Order-stable, so re-seeding gives the same
+ * prefixes and the document numbers in a screenshot stay meaningful.
+ */
+const uniquePrefixes = (names: readonly string[]): string[] => {
+  const used = new Map<string, number>();
+  return names.map((name) => {
+    const base = initialsOf(name);
+    const seen = used.get(base) ?? 0;
+    used.set(base, seen + 1);
+    return seen === 0 ? base : `${base}${seen + 1}`;
+  });
+};
 
 /** A format-shaped PAN: 5 letters, 4 digits, 1 letter. Not a real number. */
 const panFor = (i: number): string =>

@@ -248,13 +248,60 @@ DONE     site selector                                    (7 Sep 2026, §1.1)
          PO dashboard queue, 5 of 6                       (8 Sep 2026, §01)
          Purchase Invoices (list, form, approval)         (8 Sep 2026, §10/§11)
          Dashboard approval queues, ALL 6                 (8 Sep 2026, §01)
+         Sales Invoices (list, form, approval)            (9 Sep 2026, §12/§13)
 NOW      master-detail ANSWER                            <- with the business now, doc 19 Q12
-NEXT     Sales Invoices                                  <- same calculator, now written
+NEXT     item price history                              <- UNBLOCKED: reads purchase invoices
          PO delivery addresses + T&C editor              <- see the two carve-outs below
-         item price history                              <- UNBLOCKED: reads purchase invoices
 BLOCKED  Supplier Excel import                           <- needs the States/Cities census
 BLOCKED  Reports, payments, supplier balances            <- needs D7 and the payments model
 ```
+
+**Sales invoices landed on 9 Sep 2026, and the editor was built ONCE.** Doc 13's
+conclusion — "build it once, against the purchase invoice, and configure it for
+sales" — is followed literally: the line-item grid is
+`apps/web/src/features/invoices/InvoiceLineGrid.tsx`, used by both forms, and the
+purchase form was refactored onto it rather than the sales form being copied from
+it. Its 12 tests are what made that refactor safe, and they all still pass.
+
+**The sales calculator is the HEALTHIEST of the three, which the assessment does
+not say anywhere.** Counted in the source before the table was written:
+
+- `CreateSalesInvoice.cshtml` loads exactly ONE script, so there is no same-name
+  overwrite. **B-2(a) does not apply to this screen.**
+- That page renders ZERO product rows; every row comes from
+  `_DisplaySalesItemDetailsPartial.cshtml`, which carries `class="product"` —
+  exactly what `updateSalesTotals` iterates. **B-2(b) does not apply either.**
+  The purchase invoice page has 3 rows its winning calculator cannot see; this
+  one has none.
+
+**Two defects it does have, neither recorded before**, both found by reading
+`updateSalesProductTotalAmount` against `updateSalesTotals`:
+
+1. **Editing a price splits the line in two.** The visible price box is editable
+   and the catalogue price is kept in a hidden twin. The LINE's GST comes from
+   the hidden one (`AmtWithDisc = hidden − discount`); the ROLL-UP sums the
+   visible one. So a typed price is charged GST at the catalogue rate and the
+   invoice total mixes the two numbers.
+2. **Typing a discount then silently discards that price.** Both discount
+   handlers end with `txtSalesproductamount = hidden − discount`, overwriting
+   what the user typed with no indication.
+
+Neither is reproduced — there is one price, and everything derives from it.
+
+**And a third, smaller one:** `updateSalesTotals` reads the TDS box with a bare
+`.val()` and no `parseFloat`, then does `subtotal + gst - Tds` on a string. It
+survives ordinary digits by coercion; anything non-numeric makes the whole total
+`NaN`. It is the only unparsed value in that function — the round-off beside it
+is parsed properly.
+
+**`CheckSalesInvoiceNo` carries a defect the purchase order numberer does not:
+it never restarts at 001.** Its lookup filters on company alone while the label
+it formats uses the current financial year, so `DHP/25-26/157` is followed by
+`DHP/26-27/158` and 26-27 has no 001. `document_counters` starts each year at
+001, as the format implies — flagged for sign-off alongside the same change to
+purchase orders. Note also that the sales format has NO document-type segment
+(`DHP/26-27/001` against a purchase order's `DHP/PO/26-27/001`); that asymmetry
+is the source's and is kept.
 
 **Purchase orders moved out of BLOCKED on 8 Sep 2026, and the reason is worth
 keeping.** They were listed behind B-2 because `08-create-purchase-order.md` said

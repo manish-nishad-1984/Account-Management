@@ -3,9 +3,9 @@ import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
 import {
-  INVOICE_TYPES,
-  createPurchaseInvoiceSchema,
-  type PurchaseInvoiceDetail,
+  SALES_INVOICE_TYPES,
+  createSalesInvoiceSchema,
+  type SalesInvoiceDetail,
 } from "@accountmanagement/contracts";
 import { invoiceTotal } from "@accountmanagement/domain";
 import {
@@ -22,36 +22,39 @@ import { formatMoney } from "../../lib/format";
 import { InvoiceLineGrid, previewNumber } from "../invoices/InvoiceLineGrid";
 import { useAllUnits } from "../items/api";
 import { useItemOptions } from "../purchase-requests/api";
-import { useCompanyOptions, useSupplierOptions } from "../purchase-orders/api";
 import {
-  useCreatePurchaseInvoice,
-  usePurchaseInvoice,
-  usePurchaseOrderOptions,
-  useUpdatePurchaseInvoice,
+  useCompanyOptions,
+  useCreateSalesInvoice,
+  useCustomerOptions,
+  useSalesInvoice,
+  useUpdateSalesInvoice,
 } from "./api";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 
 /**
- * The purchase invoice form — the screen `11-create-purchase-invoice.md` calls
- * the one that decides the money model.
+ * The sales invoice form — the purchase invoice with the direction reversed.
  *
- * THE TOTALS PANEL HAS SIX LINES, and every one of them is computed by
- * `invoiceTotal.corrected()` — the same function the server stores from. The
- * legacy screen's six-line panel is computed by a calculator that has been
- * overwritten by the purchase ORDER one, which has no discount, no TDS and no
- * round-off term at all, and which reads a different set of table rows than the
- * page renders. So on the live screen:
+ * `13-create-sales-invoice.md`: "One editor component, two directions. The
+ * difference is: which side is the counterparty, whether the invoice number is
+ * generated or typed, and whether the Active PO link exists." All three are
+ * here and nothing else is, which is why the grid itself comes from
+ * `InvoiceLineGrid` rather than being written twice.
  *
- *   - the TDS box moves nothing;
- *   - the Adjustment box moves nothing;
- *   - the grand total is not rounded to a rupee, though every stored one is;
- *   - and lines the page opened with are not counted.
+ * THE SALES CALCULATOR IS THE HEALTHIEST OF THE THREE in the source — one
+ * script, and its row class matches the partial that renders rows — so B-2's
+ * two defects do not apply to this screen. The two it DOES have are about the
+ * price, and both are made unrepresentable here rather than reproduced:
  *
- * Here the browser and the server cannot disagree, because there is one
- * implementation and the server's answer is the one stored.
+ *  1. The source keeps an editable visible price AND a hidden catalogue twin,
+ *     computes the line's GST from the hidden one and the roll-up from the
+ *     visible one. Type a price and GST is charged on a different number.
+ *  2. Typing a discount afterwards overwrites the typed price with
+ *     `catalogue − discount`, silently.
+ *
+ * There is one price here. It is the price.
  */
-type FormValues = z.input<typeof createPurchaseInvoiceSchema>;
-type Submitted = z.output<typeof createPurchaseInvoiceSchema>;
+type FormValues = z.input<typeof createSalesInvoiceSchema>;
+type Submitted = z.output<typeof createSalesInvoiceSchema>;
 
 const EMPTY_LINE = {
   itemId: "",
@@ -65,13 +68,11 @@ const EMPTY_LINE = {
 };
 
 const EMPTY: FormValues = {
-  supplierInvoiceNo: "",
-  invoiceType: "Purchase",
-  siteId: "",
-  supplierId: "",
+  invoiceType: "Sales",
+  customerId: "",
   companyId: "",
-  siteGroupId: "",
-  purchaseOrderId: "",
+  siteId: "",
+  customerInvoiceNo: "",
   documentDate: "",
   challanNo: "",
   lrNo: "",
@@ -82,7 +83,6 @@ const EMPTY: FormValues = {
   contactName: "",
   contactNumber: "",
   shippingAddress: "",
-  groupAddress: "",
   tds: "",
   roundOff: "",
   items: [EMPTY_LINE],
@@ -90,16 +90,14 @@ const EMPTY: FormValues = {
 
 const dateInput = (value: string | null): string => (value ? value.slice(0, 10) : "");
 
-const toFormValues = (detail: PurchaseInvoiceDetail): FormValues => ({
-  supplierInvoiceNo: text(detail.supplierInvoiceNo) ?? "",
-  invoiceType: (INVOICE_TYPES as readonly string[]).includes(detail.invoiceType)
+const toFormValues = (detail: SalesInvoiceDetail): FormValues => ({
+  invoiceType: (SALES_INVOICE_TYPES as readonly string[]).includes(detail.invoiceType)
     ? (detail.invoiceType as FormValues["invoiceType"])
-    : "Purchase",
-  siteId: text(detail.siteId),
-  supplierId: detail.supplierId,
+    : "Sales",
+  customerId: detail.customerId,
   companyId: detail.companyId,
-  siteGroupId: text(detail.siteGroupId),
-  purchaseOrderId: text(detail.purchaseOrderId),
+  siteId: text(detail.siteId),
+  customerInvoiceNo: text(detail.customerInvoiceNo),
   documentDate: dateInput(detail.documentDate),
   challanNo: text(detail.challanNo),
   lrNo: text(detail.lrNo),
@@ -110,7 +108,6 @@ const toFormValues = (detail: PurchaseInvoiceDetail): FormValues => ({
   contactName: text(detail.contactName),
   contactNumber: text(detail.contactNumber),
   shippingAddress: text(detail.shippingAddress),
-  groupAddress: text(detail.groupAddress),
   tds: detail.tds,
   roundOff: detail.roundOff,
   items: detail.items.map((line) => ({
@@ -125,7 +122,7 @@ const toFormValues = (detail: PurchaseInvoiceDetail): FormValues => ({
   })),
 });
 
-export function PurchaseInvoiceFormDialog({
+export function SalesInvoiceFormDialog({
   open,
   invoiceId,
   onClose,
@@ -135,15 +132,15 @@ export function PurchaseInvoiceFormDialog({
   onClose: () => void;
 }) {
   const isEdit = invoiceId !== null;
-  const detail = usePurchaseInvoice(open && isEdit ? invoiceId : null);
+  const detail = useSalesInvoice(open && isEdit ? invoiceId : null);
 
   const scope = useSiteScope();
   const units = useAllUnits();
   const itemOptions = useItemOptions("");
-  const suppliers = useSupplierOptions();
+  const customers = useCustomerOptions();
   const companies = useCompanyOptions();
-  const create = useCreatePurchaseInvoice();
-  const update = useUpdatePurchaseInvoice();
+  const create = useCreateSalesInvoice();
+  const update = useUpdateSalesInvoice();
   const [formError, setFormError] = useState<string | null>(null);
 
   const {
@@ -155,7 +152,7 @@ export function PurchaseInvoiceFormDialog({
     control,
     formState: { errors },
   } = useForm<FormValues, unknown, Submitted>({
-    resolver: zodResolver(createPurchaseInvoiceSchema),
+    resolver: zodResolver(createSalesInvoiceSchema),
     defaultValues: EMPTY,
   });
 
@@ -173,14 +170,7 @@ export function PurchaseInvoiceFormDialog({
 
   const pending = create.isPending || update.isPending;
 
-  /**
-   * Live totals, from the domain calculator rather than a copy of it.
-   *
-   * `useWatch`, NOT `watch("items")` — with a `useFieldArray` the latter does not
-   * re-render per keystroke, so every computed cell falls through to its
-   * fallback and the grid shows 0.00 while the arithmetic is never called. That
-   * shipped once on the purchase order form and only a real browser caught it.
-   */
+  /** `useWatch`, not `watch` — see the purchase form for what that cost once. */
   const lines = useWatch({ control, name: "items" });
   const tds = useWatch({ control, name: "tds" });
   const roundOff = useWatch({ control, name: "roundOff" });
@@ -218,45 +208,35 @@ export function PurchaseInvoiceFormDialog({
 
   const siteOptions = scope.sites.map((site) => ({ value: site.id, label: site.name }));
   const unitOptions = (units.data?.rows ?? []).map((unit) => ({ value: unit.id, label: unit.name }));
-  const supplierOptions = (suppliers.data?.rows ?? []).map((row) => ({
+  const customerOptions = (customers.data?.rows ?? []).map((row) => ({
     value: row.id,
     label: row.name,
   }));
-  const companyOptions = (companies.data?.rows ?? []).map((row) => ({
-    value: row.id,
-    label: row.name,
-  }));
+  const companyRows = companies.data?.rows ?? [];
+  const companyOptions = companyRows.map((row) => ({ value: row.id, label: row.name }));
 
   const items = itemOptions.data?.rows ?? [];
   const itemTotal = itemOptions.data?.total ?? 0;
   const itemsTruncated = itemTotal > items.length;
   const itemChoices = items.map((item) => ({ value: item.id, label: item.name }));
 
-  // The order dropdown is scoped to the chosen supplier — an invoice bills an
-  // order the SAME supplier raised, and offering all of them invites exactly the
-  // mismatch the legacy text match makes silently.
-  const chosenSupplierId = watch("supplierId");
-  const orders = usePurchaseOrderOptions(chosenSupplierId || null);
-  const orderChoices = (orders.data?.rows ?? []).map((row) => ({
-    value: row.id,
-    label: `${row.poNo} · ${formatMoney(row.totalAmount)}`,
-  }));
+  const chosenCompanyId = watch("companyId");
+  const chosenCompany = companyRows.find((row) => row.id === chosenCompanyId);
 
   return (
     <FormDialog
       open={open}
       onClose={onClose}
       onSubmit={onSubmit}
-      title={isEdit ? "Edit purchase invoice" : "New purchase invoice"}
+      title={isEdit ? "Edit sales invoice" : "New sales invoice"}
       description={
         isEdit
-          ? `Invoice ${detail.data?.displayNo ?? ""}`
-          : "The number is the supplier's, not ours"
+          ? `Invoice ${detail.data?.salesInvoiceNo ?? ""}`
+          : "The invoice number is issued when this is saved"
       }
       formError={formError}
       pending={pending}
-      submitLabel={isEdit ? "Save changes" : "Add purchase invoice"}
-      // Wider than the master dialogs, because the body is a data-entry grid.
+      submitLabel={isEdit ? "Save changes" : "Add sales invoice"}
       size="xl"
     >
       {isEdit && detail.isLoading ? (
@@ -264,41 +244,32 @@ export function PurchaseInvoiceFormDialog({
       ) : (
         <>
           <FormSection title="Invoice" columns={2}>
-            {/*
-              REQUIRED, and it is the SUPPLIER'S number — free text in whatever
-              format they use. Deliberately not checked for uniqueness: two
-              suppliers both numbering an invoice "016" is ordinary, and refusing
-              the second would be refusing a real document.
-            */}
-            <TextField
-              label="Supplier's invoice number"
+            <SelectField
+              label="Customer"
               required
               autoFocus
-              hint="As printed on their invoice — BB/154, 016, AE/26-27/00872"
-              error={errors.supplierInvoiceNo?.message}
-              {...register("supplierInvoiceNo")}
-            />
-            <TextField
-              label="Invoice date"
-              type="date"
-              error={errors.documentDate?.message}
-              {...register("documentDate")}
-            />
-            <SelectField
-              label="Supplier"
-              required
-              placeholder={suppliers.isLoading ? "Loading suppliers…" : "Choose a supplier"}
-              options={supplierOptions}
-              error={errors.supplierId?.message}
-              {...register("supplierId")}
+              placeholder={customers.isLoading ? "Loading customers…" : "Choose a customer"}
+              options={customerOptions}
+              // The dropdown is the supplier master. Said once, here, rather
+              // than leaving the next reader to wonder.
+              hint="Customers and suppliers share one list in this system"
+              error={errors.customerId?.message}
+              {...register("customerId")}
             />
             <SelectField
               label="Company"
               required
               placeholder={companies.isLoading ? "Loading companies…" : "Choose a company"}
               options={companyOptions}
+              hint="Decides the invoice number's prefix"
               error={errors.companyId?.message}
               {...register("companyId")}
+            />
+            <TextField
+              label="Invoice date"
+              type="date"
+              error={errors.documentDate?.message}
+              {...register("documentDate")}
             />
             <SelectField
               label="Site"
@@ -308,45 +279,35 @@ export function PurchaseInvoiceFormDialog({
               error={errors.siteId?.message}
               {...register("siteId")}
             />
+            <TextField
+              label="Their reference"
+              hint="The customer's own order or invoice number, if they gave one"
+              error={errors.customerInvoiceNo?.message}
+              {...register("customerInvoiceNo")}
+            />
             <SelectField
               label="Type"
-              options={INVOICE_TYPES.map((value) => ({ value, label: value }))}
+              options={SALES_INVOICE_TYPES.map((value) => ({ value, label: value }))}
               hint="Returns and credit notes are money going the other way"
               error={errors.invoiceType?.message}
               {...register("invoiceType")}
             />
-          </FormSection>
 
-          <FormSection title="Against a purchase order" columns={1}>
             {/*
-              `SupplierInvoice.Poid` is an nvarchar holding the order's NUMBER as
-              text, matched by string equality — assessment 09 §7.5. Renaming or
-              reissuing an order silently detaches its invoices today. Here it is
-              a real foreign key, chosen from a list.
+              The number cannot be issued without the company's invoice prefix,
+              and `invoice_prefix` is nullable. `CheckSalesInvoiceNo` dereferences
+              it with no null check inside a catch that returns the error text as
+              the number. Said here, before the save, rather than refused after.
             */}
-            <SelectField
-              label="Purchase order"
-              placeholder={
-                !chosenSupplierId
-                  ? "Choose a supplier first"
-                  : orders.isLoading
-                    ? "Loading orders…"
-                    : orderChoices.length === 0
-                      ? "This supplier has no orders"
-                      : "Not against an order"
-              }
-              options={orderChoices}
-              hint="Optional. Only orders raised on the chosen supplier are listed."
-              error={errors.purchaseOrderId?.message}
-              {...register("purchaseOrderId")}
-            />
+            {chosenCompany && !chosenCompany.invoicePrefix?.trim() && (
+              <Alert tone="warning" className="sm:col-span-2">
+                {chosenCompany.name} has no invoice prefix, so its sales invoices cannot be
+                numbered. Set one on the company before raising an invoice for it.
+              </Alert>
+            )}
           </FormSection>
 
-          {/*
-            `columns={1}` IS LOAD-BEARING — FormSection defaults to two, and
-            without it the grid is squeezed into half the dialog and the
-            Add-product button sits beside it instead of below.
-          */}
+          {/* `columns={1}` IS LOAD-BEARING — FormSection defaults to two. */}
           <FormSection title="Products" columns={1}>
             <InvoiceLineGrid
               fields={fields}
@@ -395,10 +356,6 @@ export function PurchaseInvoiceFormDialog({
             <Summary label="Adjustment" value={formatMoney(totals.roundOff)} />
             <Summary label="Total amount" value={formatMoney(totals.grandTotal)} strong />
 
-            {/*
-              Said on the screen, because it is a real rule that surprises people
-              and because the alternative is someone reporting the paise as a bug.
-            */}
             <Alert tone="info" className="sm:col-span-2">
               The total is rounded to a whole rupee, with exactly 50 paise rounding down — the rule
               every invoice this business has issued was calculated with. The subtotal, GST and

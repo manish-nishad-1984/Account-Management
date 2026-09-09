@@ -77,7 +77,7 @@ export const NAV: NavSection[] = [
     title: "Invoicing",
     items: [
       { label: "Purchase Invoices", to: "/purchase-invoices", icon: Receipt, permission: "purchase-invoice", status: "ready", legacy: "/InvoiceMaster/SupplierInvoiceListView" },
-      { label: "Sales Invoices", to: "/sales-invoices", icon: FileText, permission: "sales-invoice", status: "planned", legacy: "/Sales/SalesList" },
+      { label: "Sales Invoices", to: "/sales-invoices", icon: FileText, permission: "sales-invoice", status: "ready", legacy: "/Sales/SalesList" },
       { label: "Payments", to: "/payments", icon: Wallet, permission: "reports-payments", status: "planned", legacy: "/InvoiceMaster/PayOutInvoice" },
     ],
   },
