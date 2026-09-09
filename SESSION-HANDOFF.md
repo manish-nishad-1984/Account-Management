@@ -1,15 +1,15 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
 **Written:** 2 September 2026, after the unblocking session. **Last extended
-8 September 2026** (§5q). Supersedes all earlier handoffs of the same name.
+9 September 2026** (§5r). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `16337d50`.** If `git log` shows commits after
+> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
 
 **Sections §3, §4, §8, §10 and §11 describe _now_ and are re-measured on every
-handoff. Sections §5, §5b … §5q are a log of days that already happened and are
+handoff. Sections §5, §5b … §5r are a log of days that already happened and are
 never edited.** If the two disagree, the numbered sections win — run
 `/handoff check` and it will say which have drifted.
 
@@ -27,19 +27,31 @@ before touching nginx or the server. The live ASP.NET app now answers on
 **https://www.avfast.in**, and it is **broken for reasons that predate this
 work** (§5e, "The live MVC app is down").
 
-**Live release is `20260908-132107`, which is commit `723cd97b`** — file upload
-(§5l) and everything before it. **This session did NOT deploy.** Two things are
-committed and tested but not shipped:
+**Live release is `20260908-184331`, which is commit `6b1164ae`** — purchase
+orders and the permission-subject fix, and nothing after them. Verified on the
+server, not carried forward: `current` points at that release, its
+`api/drizzle/` stops at `0008_purchase_orders.sql`, and its web bundle carries
+only the "planned" nav placeholders for the two invoice screens. The record
+layouts of §5m, the Item Master Excel pair of §5o and the dashboard queues of
+§5p all shipped with it.
 
-- the two record layouts of §5m — they exist so the business can answer doc 19
-  Question 12, and shipping a temporary switch to production before the answer
-  would put a control there that is meant to be deleted;
-- **the Item Master Excel import/export of §5o and the dashboard approval queues
-  of §5p.** Both are deployable whenever wanted — no migration, no new
-  environment variable, no nginx change. But note that §5p changes the dev seed
-  to grant `item.approve` and `supplier.approve`; on the LIVE database those are
-  real permission rows an administrator has to tick, and until then the Items and
-  Suppliers queues are read-only there. See doc 19 Question 11.
+**Four commits are built, tested and NOT deployed** — `1212f12a`, `3f863c72`,
+`b296085c`, `17304ea7` (plus `c77268a3`, which touches only skills and this
+file). They are §5r: the purchase order grid fixes, the dialog layout fix, and
+both invoice modules.
+
+**Two of them carry migrations — `0009_purchase_invoices` and
+`0010_sales_invoices`** — so this is not a static-only deploy. Read step 5 of
+`/deploy` before shipping it: the migration runner has printed *"Already
+migrated. Nothing to do."* while silently skipping every new migration, and
+`0 applied` after shipping a new one means something is wrong.
+
+**Deploying was offered and not answered**, twice, so it was not done. Nothing
+about it is blocked — no new environment variable and no nginx change — it needs
+a decision, not work. Note that §5p's dev seed grants `item.approve` and
+`supplier.approve`; on the LIVE database those are real permission rows an
+administrator has to tick, and until then the Items and Suppliers queues are
+read-only there. See doc 19 Question 11.
 
 ---
 
@@ -88,16 +100,21 @@ AC/
 ├── .github/workflows/ci.yml       build + test + gitleaks + node job
 ├── Migration-Assessment/          the 18-doc assessment + tools/ + db-extract/
 └── node/                          npm workspaces
-    ├── packages/domain/           shared business rules (41 tests)
-    ├── packages/contracts/        Zod schemas shared by API and web (34 tests)
+    ├── packages/domain/           shared business rules (55 tests)
+    ├── packages/contracts/        Zod schemas shared by API and web (37 tests)
     └── apps/
-        ├── api/                   NestJS + Fastify + Drizzle (453 tests)
-        └── web/                   React 19 + Vite + Tailwind (229 tests)
+        ├── api/                   NestJS + Fastify + Drizzle (540 tests)
+        └── web/                   React 19 + Vite + Tailwind (297 tests)
 ```
 
-**776 tests pass** — 757 Node (34 contracts + 41 domain + 453 API + 229 web)
-plus 19 .NET. Measured at `5fdd81f6` on 8 Sep 2026, not carried forward from the
-previous section. The .NET suite was RUN this time, not proved.
+**948 tests pass** — 929 Node (37 contracts + 55 domain + 540 API + 297 web)
+plus 19 .NET. The Node figure was **run** at `17304ea7` on 9 Sep 2026, exit 0,
+31 of 31 API files and 28 of 28 web files, zero failures.
+
+The 19 .NET tests were **proved rather than run**, which the rule allows and
+which is stated here so nobody mistakes it for a measurement:
+`git diff --name-only 5fdd81f6..HEAD` returns nothing outside `node/` and `.md`,
+and no `.cs`, `.csproj` or `.sln` file has been touched since that suite last ran.
 
 > These two figures — here and in §4 — said **310** for five consecutive sessions
 > while the true count more than doubled. Nobody was careless: each session
@@ -145,13 +162,15 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 ## 4. Repository state
 
 Branch **`main`**, working tree clean, pushed to `origin/main`. Builds,
-typechecks, and all **776 tests pass** — 757 Node (34 contracts + 41 domain +
-453 API + 229 web) + 19 .NET.
+typechecks, and all **948 tests pass** — 929 Node (37 contracts + 55 domain +
+540 API + 297 web) + 19 .NET.
 
-The suites were last measured at **`5fdd81f6`**, the final code commit of
-8 Sep 2026. Anything after that on `main` is documentation — a handoff always
+The Node suite was last measured at **`17304ea7`**, the final code commit of
+9 Sep 2026. Anything after that on `main` is documentation — a handoff always
 commits after its own measurement, so the newest hash is never the one the
 numbers were taken at, and naming it here would be a lie that looks precise.
+
+The .NET 19 is proved, not run — see §3 for the diff that proves it.
 
 - `b8d03922` completed the broken commit `6cefc164` (see §5).
 - `f0f69f95` merged `newNode` into `main`, resolving 3 conflicts.
@@ -164,7 +183,11 @@ numbers were taken at, and naming it here would be a lie that looks precise.
   site scope, `bd97a238` inventory inward, `dbd72d25` inward challans,
   `abf027a2` the money calculators, `53c8a620` attachments, `028a42a9` both
   record layouts, `65c7dcbd` the Item Master Excel import/export, `5fdd81f6` the
-  dashboard approval queues.
+  dashboard approval queues, `76fb301c` purchase orders, `b296085c` purchase
+  invoices, `17304ea7` sales invoices.
+- **Phase 4 is built.** `6b1164ae`, `1212f12a` and `3f863c72` are the corrections
+  that followed the purchase order port — the permission subject, the grid that
+  computed nothing, and the dialog layout. All of §5r.
 - **`main` is pushed to `origin/main`** and the working tree is clean.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
   credential is in the HISTORY, not the working tree. Rotation is the fix.
@@ -1530,7 +1553,8 @@ the screens whose UI is gated on `usePermission`.
 | **`Migration-Assessment/db-extract/` is empty** | The 3 read-only scripts have never been run. Until then the orphan volume across ~62 unconstrained FK columns is unknown, and no schema can be *finalised*. **This is the binding constraint.** No longer a day in SSMS — it is now one command, `tools/run-db-extract.ps1` (§5c). It still needs the rotated credential. **As of §5o this blocker now stops ordinary feature work, not just schema work:** Supplier's Excel import resolves State and City by NAME against tables that have never been extracted, so it cannot be written until the census runs. |
 | **13 business-rule questions unanswered** | 2-4 week lead time — the longest pole. The money calculator cannot start without them. They are now written to be sent: `Migration-Assessment/19-Business-Decisions-Required.md` (§5c). **The clock does not start until someone sends it.** |
 | **Credentials not rotated** | The `sa` account on `srv1925876.hstgr.cloud` is still live, and its password is still in git history in earlier commits of `appsettings.json`. Removing it from the file did not remove it from history. `gitleaks` in CI will fail on the first push, correctly. **Rotation is the fix, not a history rewrite.** |
-| **Which of 3 jQuery money calculators is correct** | Blocks all invoicing work (Phase 4, the risk centre). The Items screen stores the GST amount as entered rather than deriving it, precisely so this stays an open question rather than being answered by implication. |
+| **Which of 3 jQuery money calculators is correct** | **No longer blocks building — it now decides what happens to invoices ALREADY ISSUED.** Doc 19 Question 2. All three screens are built (§5r) and only the purchase invoice was ever genuinely behind B-2; the arithmetic they use is `invoice-total.ts`, derived by running the source rather than reading it. What is unanswered is historical remediation. The Items screen still stores the GST amount as entered rather than deriving it, precisely so this stays an open question rather than being answered by implication. |
+| **Is the whole-rupee rounding deliberate?** | **New — doc 19 Question 1a** (§5r). Every invoice total the system has ever produced is a whole rupee, and exactly 50 paise rounds **DOWN**, in the counterparty's favour. It was in no specification and no assessment; it was found by running the calculator. Reproduced deliberately and defaulted on, because matching history is the safer default — but it should be a choice, and it affects issued documents. |
 | **Record over the list, or beside it** | Doc 19 **Question 12**. Both layouts are built and switchable (§5m), so this is answerable on the real screens in two minutes — it needs a person, not a session. It gets dearer every week: today the answer is one shared change, and every new screen built against the wrong one is another to re-check. **When it comes back, delete the loser and the `RecordLayoutPicker`.** |
 | **Supplier edit/delete/APPROVE permission change** | The port guards `supplier.edit` and `supplier.delete`; the source guards neither (§5b decision 1). Whoever edits suppliers today needs those boxes ticked before cutover, or they lose the ability. **§5p adds a third right to the same question: `supplier.approve` exists in the port and NO production user holds it**, because supplier approval only ever happened through the source’s single `Dashboard` permission. Until an administrator grants it, the Suppliers queue is read-only on the live database. All three are doc 19 Question 11. Needs a decision, not code. |
 
@@ -1571,7 +1595,10 @@ the screens whose UI is gated on `usePermission`.
   not a history of `items.price_per_unit`. There is no audit-table-versus-
   temporal-rows decision to make and nothing to build until supplier invoices
   are migrated. The wrong description was inferred from a screenshot of a clock
-  icon.
+  icon. **Update, 9 Sep 2026 (§5r): supplier invoices ARE migrated now**, as
+  `purchase_invoices` and `purchase_invoice_items`, so this is unblocked and back
+  in the PLAN.md NEXT row. The finding above stands — it is still a purchase-price
+  history and still not an audit log.
 - **Site group to document links are by name string** (section 6).
 - `AccountManegments.Web/Models/Common.cs:28` and `:61` use obsolete
   `RijndaelManaged` for encryption.
@@ -1607,29 +1634,33 @@ the screens whose UI is gated on `usePermission`.
 ## 11. Suggested next steps
 
 Masters, purchase requests, inventory inward and inward challans are all built
-(§5f — §5l), Item Master's Excel import/export shipped in §5o, and everything up
-to and including file upload is deployed.
+(§5f — §5l), Item Master's Excel import/export shipped in §5o, and **Phase 4 —
+purchase orders, purchase invoices and sales invoices — is built too** (§5r).
+Everything up to and including purchase orders is deployed; both invoice modules
+are not (see the header).
 `Migration-Assessment/legacy-screens/PLAN.md` holds the authoritative sequencing;
 its rows currently read:
 
 ```
 NOW      master-detail ANSWER             <- with the business, doc 19 Q12
-NEXT     (nothing unblocked is left that is not Phase 4)
-BLOCKED  item price history               <- reads supplier invoices, NOT an audit log
+NEXT     item price history               <- UNBLOCKED: reads purchase invoices
+         PO delivery addresses + T&C editor
 BLOCKED  Supplier Excel import            <- needs the States/Cities census
-BLOCKED  the other 2 dashboard queues     <- PO and Purchase Invoice tables
-BLOCKED  Purchase Invoice -> PO -> Sales  <- needs B-2 and D7
+BLOCKED  Reports, payments, supplier balances  <- needs D7 and the payments model
 ```
 
-**Read that NEXT row carefully: the unblocked build queue is now empty.** §5o and
-§5p took the last two items in it, and §5p's investigation moved price history
-out of NEXT into BLOCKED — it is not a modelling decision, it is a read of two
-Phase 4 tables (§9). Everything remaining is behind a business answer or behind
-the census.
+**The build queue has re-opened.** The previous handoff said it was empty and
+that the §8 blockers were the whole critical path. That was true when written and
+is not now: §5r found that B-2 blocked one screen rather than three, built all
+three, and in doing so **unblocked item price history** — it reads
+`purchase_invoices` and `purchase_invoice_items`, which now exist. It is a query
+and a panel with no business decision behind it.
 
-**That makes the §8 blockers the whole critical path, for the first time.** Until
-now there was always parallel work to get on with. There is not any more, beyond
-the .NET Phase 0 performance items below and whatever the business sends back.
+**Two carve-outs from the purchase order port are deliberately still open**, and
+were said on screen rather than faked: the `PodeliveryAddresses` panels, and the
+terms-and-conditions rich text editor. **The T&C column stays plain text until a
+sanitiser lands with it** — storing the legacy HTML without one is stored XSS on
+the app's own origin.
 
 **The NOW row is not code.** Both layouts are built (§5m); what is missing is a
 decision, and the answer deletes the loser and the switch.
@@ -1695,15 +1726,19 @@ Then, in rough order of value:
   step 2, not before. "No orphan entries" means deciding, per relationship,
   whether an orphan is cleaned, quarantined or rejected — that decision needs the
   counts in front of you.
-- **Purchase orders** — purchase requests shipped in §5f, so orders are the next
-  header/detail module. The census is still what says whether
-  `PurchaseOrderDetails.PORefId` can carry a real FK.
-- **Phase 4, the money modules** (supplier and sales invoices) — **gated**, and
-  deliberately so. It needs B-2 / doc 19 Question 2 answered (which of the three
-  jQuery calculators is correct) and D7 resolved (purchase returns are *added*
-  where they should be subtracted). §5k ran all three calculators rather than
-  reading them, so the arithmetic exists in decimals with both versions — but
-  which version is *right* is a business answer, not a code one.
+- **Deploy §5r, or decide not to.** Four commits and two migrations are waiting
+  (header). It was offered twice and not answered, so it was not done.
+- **Item price history** — the PLAN.md NEXT row, and newly unblocked by the
+  purchase invoice tables (§5r). Everything the legacy partial renders now has a
+  column behind it: `displayNo`, the supplier and site joins, `document_date`,
+  and `unit_price` / `gst_amount` / `line_total`.
+- **The two purchase order carve-outs** — delivery addresses, and the T&C editor
+  **with a sanitiser**, never without one.
+- **Phase 4 is built, so what remains of B-2 and D7 is historical.** §5k ran all
+  three calculators rather than reading them and §5r re-derived the question per
+  screen; the arithmetic is settled and lives in `invoice-total.ts`. What doc 19
+  Questions 1, 1a and 2 now decide is what happens to invoices already issued,
+  and D7 still blocks the supplier balance reports.
 - **More .NET Phase 0 performance work.** P2 and P5 are done (§5c). The remaining
   ranked items are P4 (`AsNoTracking`), P6 (`.ToList().Count` existence tests),
   P3 (six N+1 loops) and P1 (pagination). **Do P1 after the DMV data arrives** —
@@ -2175,3 +2210,304 @@ running process. Anyone restarting the API gets the plain seed back and the
 Purchase Requests queue returns to empty — which will look like a regression to
 whoever sees it next, and is the reason this section exists rather than a note in
 the chat window.
+
+---
+
+## 5r. Purchase orders and both invoice screens — Phase 4 is built (8–9 Sep 2026)
+
+Committed as `76fb301c`, `6b1164ae`, `c77268a3`, `1212f12a`, `3f863c72`,
+`b296085c` and `17304ea7`. Stamped at `<COMMIT>`.
+
+**This section covers two sessions, not one.** The purchase order work of
+`76fb301c` and `6b1164ae` was built, deployed and never written up — that session
+ended having stamped only a trap into §5n. Its reasoning is recovered here from
+its own commit messages and the documents it corrected, and it is marked as
+reconstructed where it is. The rest is the 8–9 September session that followed.
+
+**The headline: Phase 4 is no longer gated.** The assessment called the money
+modules "the risk centre of the whole migration", §11 called the unblocked build
+queue empty, and PLAN.md listed all three screens behind B-2. All three are now
+built — purchase orders, purchase invoices, sales invoices — and only ONE of them
+turned out to be genuinely behind B-2, which is the finding that mattered most.
+
+### B-2 was blocking less than every document said
+
+The pattern repeated three times, and it is worth stating as a rule: **the phase
+a screen sits in is not evidence about the screen.** Each time, the question was
+re-derived by reading the source view rather than by trusting the summary that
+placed it there.
+
+| Screen | Calculator scripts loaded | Discount / TDS / RoundOff present? | Row classes match? | Verdict |
+|---|---|---|---|---|
+| Create **Purchase Order** | ONE | none of the three, counted not sampled | yes | **never blocked** |
+| Create **Purchase Invoice** | THREE | all three | **no — 3 rows invisible** | **genuinely blocked** |
+| Create **Sales Invoice** | ONE | all three | yes, and ZERO page-built rows | **never blocked** |
+
+B-2 has two halves and they are separable. **B-2(a)** is the three-way
+`updateTotals` name collision, which needs a page that loads more than one
+calculator. **B-2(b)** is the calculator that iterates `$(".product")` over a
+table where some rows were rendered by a partial that does not carry the class.
+Only `CreateInvoice.cshtml` has both. The sales page is the healthiest of the
+three and **no document said so** — it loads one script and builds every row from
+the partial that carries the matching class, so its calculator sees the whole
+table.
+
+**What is still open in B-2 is historical remediation, not what to build.** That
+distinction was not drawn anywhere before this session, and it is the reason
+three screens sat waiting on an answer that only affects data already issued.
+D7 does not block them either: it is a balance aggregate in the reports, and
+nothing in these six screens computes a supplier balance.
+
+### Two findings that changed the documents
+
+**The discount is one number in two boxes.** Doc 11 asked which of rupees and
+percent is authoritative when both are set, and treated it as a business
+question. It cannot arise. `updateDiscount` writes the percent from the rupees,
+`UpdateDiscountPercentage` writes the rupees from the percent, and both then
+write the effective price — they are two views of one value and cannot
+independently disagree. Stored once, in rupees per unit; the form offers one
+input and derives the other.
+
+**Every invoice total the system has ever produced is a whole rupee, and exactly
+.50 rounds DOWN.** Nothing in the assessment recorded it. It was found by running
+the calculator, then corroborated the cheap way: all six sample totals in doc 10
+end in `.00`, which is what that rule produces and what nothing else would. It is
+reproduced deliberately, defaulted on, and stated on the screen — because it is
+how every existing document was issued, and changing it quietly is the exact
+failure doc 19 exists to prevent. It is now **doc 19 Question 1a**.
+
+> That question was filed as "Question 5a" in the body while the summary sheet
+> and the cross-reference table both called it "1a" — so the page that actually
+> gets sent pointed at a number the document did not contain. Renumbered to 1a
+> and moved beside Question 1, where its subject belongs.
+
+### The permission subject rule gained a clause, and it cost a production 403
+
+`76fb301c` shipped purchase orders with the subject `purchase-order`, and
+production answered `403 Missing permission: purchase-order.view` to a user
+holding every right the screen needs.
+
+The reason is **not** that the plural won. Production's `forms` table holds three
+rows for that one screen:
+
+```
+id | form_name            | is_active
+10 | Purchase Order       | f
+12 | Create PurchaseOrder | f
+14 | Purchase Orders      | t
+```
+
+All three are granted to all three users, so counting grants distinguishes
+nothing. Only id 14 is **active**, and the permission builder filters on
+`is_active` — so only `purchase-orders.*` ever reaches a token. The seven
+`FormName == "Purchase Orders"` checks in the Razor views were right the whole
+time.
+
+**So the §5f rule is now: read the subject off `forms`, and off a row where
+`is_active` is true.** A retired row carrying the obvious name will mislead you,
+and every call 403s for everyone. The §5f enumeration that listed "Purchase
+Order" was not careless — that row is genuinely there. It read a form name
+without filtering on `is_active` and picked a retired one.
+
+Both invoice controllers were then written **after** consulting the live table,
+not before. The three results are not consistent with each other, and that is the
+point:
+
+| Screen | Active row | Subject |
+|---|---|---|
+| Purchase Orders | id 14 `Purchase Orders` | `purchase-orders` — **plural** |
+| Purchase Invoice | id 9 `Purchase  Invoice` (two spaces) | `purchase-invoice` — **singular** |
+| Sales Invoice | id 27 `Sales Invoice` | `sales-invoice` — **singular** |
+
+The purchase invoice row has a **double space**, which `slug()` collapses. The
+dev seed had said "Supplier Invoice", which slugs to `supplier-invoice` and would
+have 403'd everything; it now carries the production string byte for byte, double
+space included. Seeding a name that development agreed with and production did
+not is what let the purchase order defect travel all the way to a live deploy.
+
+### The grid was green in every test and showed 0.00 in a browser
+
+The worst defect of the session, and the one most worth remembering. Every
+computed cell on the purchase order form displayed `0.00`.
+
+The live totals subscribed with **`watch("items")`**, which does not re-render
+per keystroke alongside a `useFieldArray`. So `totals.lines` stayed empty and
+every cell fell through to its `?? "0"` fallback. The fix is `useWatch`.
+
+**Everything was green while this was true.** The domain tests call the
+calculator directly, and the page tests never open the form. It took a real
+browser to see it, and the assertion that was missing — a test that types into
+the grid — is now `PurchaseOrderFormDialog.test.tsx`.
+
+Two more came out of the same investigation:
+
+- **Typing a price would have crashed the form.** `money.decimal` throws on
+  anything that is not a plain decimal, correctly — but someone typing `1000.00`
+  passes through `1000.` on the way. The **browser check missed this**, because
+  Playwright's `fill()` sets the whole value at once and never produces the
+  intermediate state; the unit test, typing character by character, caught it on
+  its first run. Fixed in the presentation layer with `previewNumber` and **not**
+  by weakening the domain: a trailing point is dropped, a leading point gains its
+  zero, anything still unparseable previews as zero. The submitted value is
+  untouched and the server's arithmetic is unchanged.
+- **A required select that was never touched said "Not a valid identifier"**,
+  which describes the value rather than the mistake and reads as a system fault.
+  `uuidId` now checks `min(1)` first, so blank says "Choose one"; a
+  present-but-malformed id still gets the identifier message, because there the
+  value really is the problem.
+
+### Three seed defects, all of which made a working screen look broken
+
+This project keeps meeting the same failure mode from §5q — correct code behind a
+screen that reads as broken — and it arrived three more times, twice by
+arithmetic.
+
+1. **`3` divides `45`.** The seed picked a site with `offset % 45` and an
+   approval state with `offset % 3`, so **the site determined the approval
+   state**. 0 of 45 sites had a mix, and the dashboard purchase order queue was
+   empty for anyone whose site landed on the approved side.
+2. **The first fix was wrong the same way.** `companyIndex + n` steps by exactly
+   12 when the offset steps by 45, and 3 divides 12. It is now a per-site
+   counter, which cannot have that failure by construction. Measured after
+   seeding: 45 of 45 sites have a mix, 0 have an empty queue.
+3. **Three-letter company initials collide.** Seven of 30 companies shared three
+   colliding prefixes, so `AB/26-27/001` appeared twice for two different
+   companies. The numbering was correct; the screen looked broken. 30 companies
+   now have 30 distinct prefixes.
+
+**Prefer a construction that cannot fail over a value that happens to work.** The
+first two are one bug found twice, because the retry was checked by reasoning
+rather than by counting. The counting is what settled it.
+
+### The layout defect the user reported from a screenshot
+
+`FormSection` **defaults to `columns = 2`**, and the Products section did not
+override it. So the line-item table and the Add-product button below it became
+two cells of a two-column grid, side by side: the table was squeezed into half
+the dialog and cut off after the Unit column, while the button sat where the
+Price and GST boxes should have been.
+
+**The page tests never measured a width, so nothing caught it.** It was reported
+from a screenshot. Products and Terms are now `columns={1}`, and the same defect
+was found and fixed on the challan Attachments section, whose lone child left
+half a row empty.
+
+The dialog also gained an **`xl`** size, because even unsqueezed the eight
+columns need 52rem and the 48rem `lg` scrolled them sideways — which puts the
+price you are typing off screen. Measured after: 984px of grid in a 1024px
+dialog, every header visible, nothing scrolling.
+
+### A footer that did not add up its own column
+
+The Amount column's footer showed the **subtotal** — 750.00 — while the only line
+in the grid had an Amount of 885.00. A footer that does not sum the column above
+it is worse than no footer.
+
+Found by **looking at a screenshot after the tests were green**, which is the
+second time in this section that a real image caught what a green suite did not.
+Fixed, and pinned with a test.
+
+The first attempt at that fix wrote `Number(value) * 100`, reintroducing the
+float path §5k exists to keep out. It is now `money.add` / `money.decimal` /
+`money.format`. **The money rule is easy to break in a presentation helper**,
+precisely because the helper looks like formatting rather than like arithmetic.
+
+### Three sales-invoice defects, none previously recorded
+
+Found by reading `updateSalesProductTotalAmount` against `updateSalesTotals`:
+
+1. **The price exists twice, and the two halves of the total read different
+   copies.** `#txtSalesproductamount` is visible and editable;
+   `#Salesproductamount` is a hidden catalogue twin. The LINE's GST comes from
+   the hidden one; the ROLL-UP sums the visible one. A typed price is charged GST
+   at the catalogue rate and the invoice total mixes the two numbers.
+2. **Typing a discount then silently discards that price.** Both discount
+   handlers end by writing `hidden − discount` over what the user typed, with no
+   indication.
+3. **The TDS is never parsed.** `subtotal + gst - Tds` on a string from a bare
+   `.val()`. Coercion carries it for ordinary digits; anything non-numeric makes
+   the whole total `NaN`. It is the only unparsed value in the function — the
+   round-off beside it uses `parseFloat(...) || 0`.
+
+**None of the three is reproduced.** There is one price, it is the price, and the
+server computes everything from it.
+
+### Reproduced on purpose — do NOT "fix" these
+
+- **Whole-rupee invoice totals with .50 rounding DOWN.** Doc 19 Question 1a.
+  Defaulted on. Every issued document has it.
+- **The sales invoice number has no document-type segment** — `DHP/26-27/001`,
+  against a purchase order's `DHP/PO/26-27/001`. The asymmetry is the source's.
+- **`customer_id` references `suppliers`.** The source keeps both sides of the
+  trade in `SupplierMaster`, which is why its list header says Customer while the
+  filter beside it says Supplier. Splitting the party master is a real modelling
+  question with a data migration behind it; the column NAME at least stops the
+  next reader thinking a sales invoice bills a supplier.
+
+**NOT reproduced, and flagged for sign-off:** `CheckSalesInvoiceNo` never
+restarts at 001. Its lookup filters on company alone while the label it formats
+uses the current financial year, so `DHP/25-26/157` is followed by
+`DHP/26-27/158` and 26-27 has no 001. `document_counters` starts each year at
+001, as the format implies — the same change as for purchase orders.
+
+### Built once, not twice
+
+Doc 13's conclusion was followed literally: *"build it once, against the purchase
+invoice, and configure it for sales. Building two is how the source ended up with
+`SalesRepo` and `SupplierInvoiceRepo` sharing the same bugs in two places."*
+
+The grid is `apps/web/src/features/invoices/InvoiceLineGrid.tsx`, and **the
+purchase form was refactored onto it** rather than the sales form being copied
+from it. That is the direction that leaves one implementation instead of creating
+a second, and it was only safe because the purchase form's 12 tests already
+existed. They all still pass.
+
+### Two smaller traps
+
+- **A filter the API silently ignored.** `usePurchaseOrderOptions` filtered by
+  `supplierId`, which the purchase order controller did not accept. Zod strips an
+  unknown key rather than rejecting it, so the "bills against" dropdown would
+  have listed **every order in the system**, with no error anywhere. Added to the
+  controller's filter schema and to the repository. **A stripped key is a silent
+  wrong answer, not a 400.**
+- **An incomplete test fixture reads as a broken SELECT.** The sales form tests
+  failed with the company dropdown stuck on "Loading companies…". The `COMPANY`
+  fixture was missing `gstNo`, `panNo`, `area`, `pincode`, `bankName` and
+  `userCount`, so the `companyRowSchema` parse threw **inside the query** and the
+  dropdown never resolved. Nothing said "invalid fixture". Fixed, and the tests
+  now `await screen.findByRole("option", …)` before selecting.
+
+### One test-run anomaly, reported rather than hidden
+
+A single `npm test` run died with `Error: Worker exited unexpectedly` after 29 of
+30 API files and 504 of 514 tests. **It did not recur on either of the two full
+runs that followed** (30/30, then 31/31), nor on the run behind this handoff. It
+is recorded because a flake nobody writes down gets rediscovered as a regression.
+If it returns, suspect the `forks` pool under PGlite rather than whichever test
+happened to be running.
+
+### Verified in a browser, not just asserted
+
+The sales form, driven end to end: subtotal 2,000.00, GST 360.00, discount
+500.00, TDS −100.00, adjustment −0.50, **total 2,259.00**.
+
+Two things that proves. The GST is 18% of the **discounted** 2,000 rather than of
+2,500 — so the source's hidden-price defect is not reproduced. And 2,259.50
+became 2,259.00, which is the whole-rupee rule rounding a half **down**, live on
+the screen. Zero console errors, no horizontal overflow, the grid at 96% of a
+1024px dialog with nothing scrolling sideways.
+
+### The honest cost
+
+**The dev seed is now materially more complicated than the thing it seeds.** It
+carries a per-site approval counter, a unique-prefix allocator, and a forms table
+transcribed byte for byte from production including a double space that exists
+only because someone once typed it. Every one of those earns its place — each
+replaced a defect that made a working screen look broken — but it is a file that
+now needs reading carefully before it is edited, and **no test covers it: no test
+imports `DevSeed`, and `freshDatabase` never seeds.** It is verified by seeding
+and counting, by hand.
+
+**Two migrations are committed and not deployed** — `0009_purchase_invoices` and
+`0010_sales_invoices`. Production still runs release `20260908-184331`, which is
+commit `6b1164ae`: purchase orders and the subject fix, and nothing after them.

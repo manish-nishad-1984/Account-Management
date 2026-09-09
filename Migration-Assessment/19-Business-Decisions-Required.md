@@ -21,14 +21,13 @@ asking instead.
 ~~**Five of these block the work.** We cannot start on invoicing — the largest and
 most sensitive part of the rebuild — until questions 1 to 5 are answered.~~
 
-**Updated 8 Sep 2026: invoicing is no longer blocked, and the purchase invoice
-screen is built.** We were able to settle the calculation ourselves by running
-your existing scripts rather than asking you to choose between them. Two things
+**Updated 9 Sep 2026: invoicing is no longer blocked, and all three screens are
+built.** We were able to settle the calculation ourselves by running your
+existing scripts rather than asking you to choose between them. Two things
 follow, and the difference between them matters:
 
 - **Nothing is waiting on you in order for us to keep building.** Purchase
-  orders and purchase invoices are done; sales invoices use the same
-  calculation and are next.
+  orders, purchase invoices and sales invoices are all done.
 - **What IS waiting on you is what to do about documents already issued.**
   Questions 1, 2 and 3 are about existing data — totals that may not match their
   own lines, TDS that may not have been deducted, returns added instead of
@@ -51,7 +50,10 @@ listing them because the rebuild is the moment they can be fixed.
 
 *(Titled "the five that block the work" until 8 Sep 2026. They no longer block the
 building; three of them now decide what happens to documents already issued, and
-question 3 blocks the supplier balance reports. They are still the urgent five.)*
+question 3 blocks the supplier balance reports. They are still the urgent five —
+**1a is a second half of question 1**, not a sixth question: both ask what should
+happen to totals on invoices you have already issued, one about the paise and one
+about the rupee.)*
 
 ## Question 1 — Invoice totals may change by one paisa
 
@@ -79,6 +81,51 @@ has already been filed, that is a discrepancy someone could question.
 should not change because the software was rebuilt.
 
 > **Decision:** ☐ A — freeze history  ☐ B — recalculate  ☐ Discuss
+
+---
+
+## Question 1a — Every invoice total is rounded to a whole rupee, and exactly 50 paise rounds DOWN
+
+**What we found.** Your invoice and sales screens both finish by throwing away the
+paise:
+
+```
+if the paise are 50 or fewer  ->  round DOWN to the rupee
+otherwise                     ->  round UP to the rupee
+```
+
+So a total of ₹1,04,532.40 is charged as ₹1,04,532, and ₹1,04,532.60 as
+₹1,04,533. **No invoice your system has ever issued has paise on it.**
+
+**Two things to notice.**
+
+1. This was not written down anywhere — not in our first assessment, not in any
+   specification we were given. We found it by running the code. If it is
+   deliberate, it needs recording. If nobody knew, that is more important.
+2. **Exactly 50 paise rounds DOWN.** Normal commercial rounding takes a half up.
+   Yours takes it down, every time, in the counterparty's favour and never in
+   yours. On a sales invoice that is money you did not bill.
+
+**Why it matters.** The new system will do whatever you tell it to. If we say
+nothing, we will reproduce this exactly — including the half-rounds-down — because
+that is what every existing document did, and matching history is the safer
+default. But it should be a choice you made, not one you inherited.
+
+**Your options.**
+
+| Option | What it means |
+|---|---|
+| **A. Keep it exactly** (default if you do not choose) | Whole rupees, 50 paise rounds down. Nothing changes; new documents match old ones. |
+| **B. Keep whole rupees, round 50 paise UP** | Standard commercial rounding. Differs from history by ₹1 on the exact-half cases only. |
+| **C. Keep the paise** | Totals carry two decimals like every other figure in the system. Cleanest arithmetically, most different from what you issue today. |
+
+**We recommend B** if this rounding is deliberate, and **C** if it turns out
+nobody chose it. We do not recommend A, but it is the safe answer and we will
+implement it without argument.
+
+> **Decision:** ☐ A — keep exactly  ☐ B — round half up  ☐ C — keep the paise  ☐ Discuss
+>
+> **Also:** was the whole-rupee rounding a deliberate decision? ☐ Yes ☐ No ☐ Nobody knows
 
 ---
 
@@ -266,51 +313,6 @@ anyone made a decision based on one of them coming back empty?
 
 > **Decision:** ☐ Nobody uses them — low priority  ☐ In use — fix and notify users
 > ☐ In use, and a decision was made on a blank result — needs investigating
-
----
-
-## Question 5a — Every invoice total is rounded to a whole rupee, and exactly 50 paise rounds DOWN
-
-**What we found.** Your invoice and sales screens both finish by throwing away the
-paise:
-
-```
-if the paise are 50 or fewer  ->  round DOWN to the rupee
-otherwise                     ->  round UP to the rupee
-```
-
-So a total of ₹1,04,532.40 is charged as ₹1,04,532, and ₹1,04,532.60 as
-₹1,04,533. **No invoice your system has ever issued has paise on it.**
-
-**Two things to notice.**
-
-1. This was not written down anywhere — not in our first assessment, not in any
-   specification we were given. We found it by running the code. If it is
-   deliberate, it needs recording. If nobody knew, that is more important.
-2. **Exactly 50 paise rounds DOWN.** Normal commercial rounding takes a half up.
-   Yours takes it down, every time, in the counterparty's favour and never in
-   yours. On a sales invoice that is money you did not bill.
-
-**Why it matters.** The new system will do whatever you tell it to. If we say
-nothing, we will reproduce this exactly — including the half-rounds-down — because
-that is what every existing document did, and matching history is the safer
-default. But it should be a choice you made, not one you inherited.
-
-**Your options.**
-
-| Option | What it means |
-|---|---|
-| **A. Keep it exactly** (default if you do not choose) | Whole rupees, 50 paise rounds down. Nothing changes; new documents match old ones. |
-| **B. Keep whole rupees, round 50 paise UP** | Standard commercial rounding. Differs from history by ₹1 on the exact-half cases only. |
-| **C. Keep the paise** | Totals carry two decimals like every other figure in the system. Cleanest arithmetically, most different from what you issue today. |
-
-**We recommend B** if this rounding is deliberate, and **C** if it turns out
-nobody chose it. We do not recommend A, but it is the safe answer and we will
-implement it without argument.
-
-> **Decision:** ☐ A — keep exactly  ☐ B — round half up  ☐ C — keep the paise  ☐ Discuss
->
-> **Also:** was the whole-rupee rounding a deliberate decision? ☐ Yes ☐ No ☐ Nobody knows
 
 ---
 
@@ -556,10 +558,11 @@ separate approval like hand-entered ones do?
 | 12 | Record over the list, or beside it | **Gets dearer weekly** | |
 | 13 | Does uploading a spreadsheet approve the items? | No | |
 
-**Updated 8 Sep 2026.** The invoicing rebuild is no longer waiting on these — the
-purchase invoice screen is built, and it calculates correctly. What questions 1,
-1a and 2 now decide is **what happens to the invoices you have already issued**,
-and question 3 still blocks the supplier balance reports.
+**Updated 9 Sep 2026.** The invoicing rebuild is no longer waiting on these — the
+purchase invoice and sales invoice screens are both built, and both calculate
+correctly. What questions 1, 1a and 2 now decide is **what happens to the
+invoices you have already issued**, and question 3 still blocks the supplier
+balance reports.
 
 **Question 2 is still the one to act on first**, because it may affect data that
 is being created right now, and every day it goes unanswered adds documents to
