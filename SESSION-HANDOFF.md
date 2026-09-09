@@ -3,7 +3,7 @@
 **Written:** 2 September 2026, after the unblocking session. **Last extended
 9 September 2026** (§5s). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
+> **This file is current as of `98fe1b46`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
@@ -37,7 +37,7 @@ layouts of §5m, the Item Master Excel pair of §5o and the dashboard queues of
 
 **Five commits are built, tested and NOT deployed** — `1212f12a`, `3f863c72`,
 `b296085c`, `17304ea7` (§5r: the purchase order grid fixes, the dialog layout fix
-and both invoice modules) and `<COMMIT>` (§5s: the purchase order delivery
+and both invoice modules) and `98fe1b46` (§5s: the purchase order delivery
 addresses, the terms editor with its sanitiser, and a compact pass over every
 form). `c77268a3` is also unshipped and touches only skills and this file.
 
@@ -115,7 +115,7 @@ AC/
 
 **1074 tests pass** — 1055 Node (63 contracts + 65 domain + 607 API + 320 web)
 plus 19 .NET. The Node figure was **run** on 9 Sep 2026 against the tree that
-became `<COMMIT>`, exit 0, 32 of 32 API files and 29 of 29 web files, zero
+became `98fe1b46`, exit 0, 32 of 32 API files and 29 of 29 web files, zero
 failures.
 
 The 19 .NET tests were **proved rather than run**, which the rule allows and
@@ -177,7 +177,7 @@ Branch **`main`**, working tree clean, pushed to `origin/main`. Builds,
 typechecks, and all **1074 tests pass** — 1055 Node (63 contracts + 65 domain +
 607 API + 320 web) + 19 .NET.
 
-The Node suite was last measured at **`<COMMIT>`**, the final code commit of
+The Node suite was last measured at **`98fe1b46`**, the final code commit of
 9 Sep 2026. Anything after that on `main` is documentation — a handoff always
 commits after its own measurement, so the newest hash is never the one the
 numbers were taken at, and naming it here would be a lie that looks precise.
@@ -200,7 +200,7 @@ The .NET 19 is proved, not run — see §3 for the diff that proves it.
 - **Phase 4 is built.** `6b1164ae`, `1212f12a` and `3f863c72` are the corrections
   that followed the purchase order port — the permission subject, the grid that
   computed nothing, and the dialog layout. All of §5r.
-- `<COMMIT>` closed the two purchase order carve-outs and made every form denser
+- `98fe1b46` closed the two purchase order carve-outs and made every form denser
   (§5s). It carries migration `0011_purchase_order_delivery_addresses` and the
   API's first sanitiser dependency.
 - **`main` is pushed to `origin/main`** and the working tree is clean.
@@ -2548,7 +2548,7 @@ commit `6b1164ae`: purchase orders and the subject fix, and nothing after them.
 
 ## 5s. The purchase order carve-outs, and a compact pass over every form (9 Sep 2026)
 
-Committed as `<COMMIT>`.
+Committed as `98fe1b46`.
 
 The two things `08-create-purchase-order.md` left open when purchase orders
 shipped — the delivery address panels and the terms and conditions editor — plus
