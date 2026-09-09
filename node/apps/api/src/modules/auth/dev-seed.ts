@@ -11,6 +11,7 @@ import {
   documentCounters,
   forms,
   items,
+  payments,
   purchaseInvoiceItems,
   purchaseInvoices,
   salesInvoiceItems,
@@ -284,6 +285,26 @@ export class DevSeed implements OnModuleInit {
        * Each matches its own active production row.
        */
       { id: 12, formName: "Sales Invoice", controller: "Sales", formGroup: "Invoicing", isActive: true },
+
+      /**
+       * THE REPORTS AND PAYMENTS FORMS, and the reason there is a question
+       * attached to them.
+       *
+       * `/Report/ReportDetails` checks THREE different form names for one page:
+       * `"Reports & Payments"` twice in the page itself, `"Details Report &
+       * Payout"` three times in its partials, and `"Reports"` once. Each check
+       * reads only its own name, so no single grant turns the whole screen on.
+       *
+       * The port uses one subject per screen. Which of the three the production
+       * `forms` table actually carries grants against is doc 19 Question 15 —
+       * it decides who can still work on day one, and it needs a look at the
+       * live permission matrix rather than a guess. `Sales Report` is a real
+       * production row (§5f read it off the live table); the other two here are
+       * the port's names for screens whose legacy guards do not agree.
+       */
+      { id: 13, formName: "Reports & Payments", controller: "Report", formGroup: "Reports", isActive: true },
+      { id: 14, formName: "Details Report", controller: "Report", formGroup: "Reports", isActive: true },
+      { id: 15, formName: "Sales Report", controller: "Sales", formGroup: "Reports", isActive: true },
     ]);
 
     // Units first: items reference them, and the foreign key is real.
@@ -475,6 +496,27 @@ export class DevSeed implements OnModuleInit {
       { userId: admin.id, formId: 11, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true, isApproved: true },
       /** Sales Invoice, all five rights. */
       { userId: admin.id, formId: 12, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true, isApproved: true },
+
+      /**
+       * Payments — add, edit and delete, but NOT approve.
+       *
+       * There is no approval on a payment anywhere in the source: the payout
+       * screen writes the row and the reports read it. Granting a right the
+       * application has no use for would put a control on a screen that decides
+       * nothing.
+       */
+      { userId: admin.id, formId: 13, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
+
+      /**
+       * The two report screens are READ-ONLY, so view only.
+       *
+       * The legacy ledger does carry Edit and Delete icons — but on PAYMENTS,
+       * which are now their own screen with their own rights above. A report
+       * that could edit the documents it totals is how a report screen becomes
+       * 1130 lines of JavaScript.
+       */
+      { userId: admin.id, formId: 14, isViewAllow: true },
+      { userId: admin.id, formId: 15, isViewAllow: true },
     ]);
 
     /**
@@ -734,6 +776,8 @@ export class DevSeed implements OnModuleInit {
      */
     const invoicesPerCompany = 3;
     const invoiceRows: (typeof purchaseInvoices.$inferInsert)[] = [];
+    /** Supplier id -> the sites that supplier was actually invoiced at. */
+    const invoicedSites = new Map<string, string[]>();
     const invoiceLineRows: (typeof purchaseInvoiceItems.$inferInsert)[] = [];
 
     /** Per-site counter, for the reason `ordersAtSite` explains at length. */
@@ -817,6 +861,16 @@ export class DevSeed implements OnModuleInit {
         // One in nine has no supplier number, so `displayNo` falls back.
         const hasSupplierNo = offset % 9 !== 4;
         const format = SUPPLIER_NUMBER_FORMATS[offset % SUPPLIER_NUMBER_FORMATS.length]!;
+
+        // Which sites each supplier was actually invoiced at. Used below so a
+        // seeded PAYMENT lands at a site where that supplier has invoices —
+        // see the note on the payment seeding for why that matters.
+        const invoiceSupplierId = insertedSuppliers[offset % insertedSuppliers.length]!.id;
+        const seen = invoicedSites.get(invoiceSupplierId) ?? [];
+        if (!seen.includes(insertedSites[siteIndex]!.id)) {
+          seen.push(insertedSites[siteIndex]!.id);
+          invoicedSites.set(invoiceSupplierId, seen);
+        }
 
         invoiceRows.push({
           id: invoiceId,
@@ -994,6 +1048,111 @@ export class DevSeed implements OnModuleInit {
         nextValue: salesPerCompany + 1,
       })),
     );
+
+    /**
+     * PAYMENTS, both directions, plus opening balances.
+     *
+     * Seeded so the ledger actually demonstrates a running balance: without
+     * payments every entry is a credit and the balance only climbs, which is
+     * indistinguishable from a balance that is not being computed at all.
+     *
+     * THE ARITHMETIC HERE IS KEYED OFF A PER-PARTY COUNTER, not off
+     * `offset % n`. §5r, §5s and §5t each found the same defect — a modulus
+     * sharing a factor with the collection it indexes, making a value constant
+     * across a whole screen. `insertedSuppliers.length` is 30 and
+     * `insertedSites.length` is 45; anything mod 3, 5, 9 or 15 is constant per
+     * site or per supplier. The counter cannot have that property by
+     * construction.
+     */
+    const paymentRows: (typeof payments.$inferInsert)[] = [];
+    const paymentsForParty = new Map<string, number>();
+
+    const PAYMENT_METHODS = ["Cash", "Cheque", "NEFT", "RTGS", "UPI"];
+
+    insertedSuppliers.forEach((supplier, supplierIndex) => {
+      // Two in three parties have any payment history at all, so the summary
+      // shows both settled and untouched accounts.
+      if (supplierIndex % 3 === 2) return;
+
+      const seq = paymentsForParty.get(supplier.id) ?? 0;
+      paymentsForParty.set(supplier.id, seq + 1);
+
+      // One party in five opens with a brought-forward balance and NO site,
+      // which is the shape the legacy Opening Balance branch produces.
+      if (supplierIndex % 5 === 0) {
+        paymentRows.push({
+          direction: "out",
+          kind: "opening_balance",
+          partyId: supplier.id,
+          companyId: insertedCompanies[supplierIndex % insertedCompanies.length]!.id,
+          siteId: null,
+          paymentDate: new Date(Date.UTC(2026, 3, 1)),
+          amount: String(5000 + supplierIndex * 337) + ".00",
+          description: "Balance brought forward",
+          method: null,
+          createdBy: admin.id,
+        });
+      }
+
+      /**
+       * A PAYMENT LANDS AT A SITE THE SUPPLIER WAS ACTUALLY INVOICED AT.
+       *
+       * Not `insertedSites[step % length]`, which was the first attempt and
+       * which made the balance summary look broken: that report groups by
+       * (site, party) — `GroupBy(g => new { g.s.SiteId, g.s.SupplierId })` at
+       * `SupplierInvoiceRepo.cs:218` — so a payment recorded against a
+       * different site from the invoice it settles produces a positive row at
+       * one site and a negative row at another, and NEITHER nets off. Only the
+       * grand total is right.
+       *
+       * That is a genuine property of the legacy report, not a seeding mistake,
+       * and it is recorded in §5u. But it is the UNUSUAL case, and seeding only
+       * the unusual case is how a correct screen comes to look wrong — §5q,
+       * §5r, §5s and §5t all record a version of that.
+       */
+      const payableSites = invoicedSites.get(supplier.id) ?? [];
+      const runs = 1 + (supplierIndex % 3);
+      for (let n = 0; n < runs; n += 1) {
+        const step = supplierIndex * 7 + n;
+        paymentRows.push({
+          direction: "out",
+          kind: "payment",
+          partyId: supplier.id,
+          companyId: insertedCompanies[step % insertedCompanies.length]!.id,
+          siteId:
+            payableSites.length > 0
+              ? payableSites[step % payableSites.length]!
+              : insertedSites[step % insertedSites.length]!.id,
+          paymentDate: new Date(Date.UTC(2026, 7, ((step * 5) % 27) + 1)),
+          amount: String(1500 + step * 211) + ".00",
+          description: n === 0 ? "Part settlement" : "Against running account",
+          method: PAYMENT_METHODS[step % PAYMENT_METHODS.length]!,
+          referenceNo: step % 2 === 0 ? `CHQ-${4400 + step}` : null,
+          createdBy: admin.id,
+        });
+      }
+    });
+
+    // The other direction, so the sales report and the ledger's Sales toggle
+    // are not empty screens.
+    insertedSuppliers.forEach((customer, customerIndex) => {
+      if (customerIndex % 4 !== 1) return;
+      const step = customerIndex * 11;
+      paymentRows.push({
+        direction: "in",
+        kind: "payment",
+        partyId: customer.id,
+        companyId: insertedCompanies[step % insertedCompanies.length]!.id,
+        siteId: insertedSites[step % insertedSites.length]!.id,
+        paymentDate: new Date(Date.UTC(2026, 7, ((step * 3) % 27) + 1)),
+        amount: String(2500 + step * 173) + ".00",
+        description: "Receipt against invoice",
+        method: PAYMENT_METHODS[step % PAYMENT_METHODS.length]!,
+        createdBy: admin.id,
+      });
+    });
+
+    await db.insert(payments).values(paymentRows);
 
     /**
      * Inventory arrivals.

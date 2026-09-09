@@ -21,6 +21,9 @@ import { SalesInvoicesPage } from "./features/sales-invoices/SalesInvoicesPage";
 import { InventoryPage } from "./features/inventory/InventoryPage";
 import { InwardChallansPage } from "./features/inward-challans/InwardChallansPage";
 import { PermissionsPage } from "./features/users/PermissionsPage";
+import { PaymentsPage } from "./features/payments/PaymentsPage";
+import { LedgerPage } from "./features/reports/LedgerPage";
+import { SalesReportPage } from "./features/reports/SalesReportPage";
 import { createQueryClient } from "./lib/query-client";
 import { NAV } from "./navigation/nav";
 
@@ -49,6 +52,9 @@ const IMPLEMENTED: Record<string, React.ComponentType> = {
   "/sales-invoices": SalesInvoicesPage,
   "/inventory": InventoryPage,
   "/inward": InwardChallansPage,
+  "/payments": PaymentsPage,
+  "/reports/ledger": LedgerPage,
+  "/reports/sales": SalesReportPage,
 };
 
 /**

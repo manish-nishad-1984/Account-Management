@@ -78,14 +78,14 @@ export const NAV: NavSection[] = [
     items: [
       { label: "Purchase Invoices", to: "/purchase-invoices", icon: Receipt, permission: "purchase-invoice", status: "ready", legacy: "/InvoiceMaster/SupplierInvoiceListView" },
       { label: "Sales Invoices", to: "/sales-invoices", icon: FileText, permission: "sales-invoice", status: "ready", legacy: "/Sales/SalesList" },
-      { label: "Payments", to: "/payments", icon: Wallet, permission: "reports-payments", status: "planned", legacy: "/InvoiceMaster/PayOutInvoice" },
+      { label: "Payments", to: "/payments", icon: Wallet, permission: "reports-payments", status: "ready", legacy: "/Report/ReportDetails (Payment Actions)" },
     ],
   },
   {
     title: "Reports",
     items: [
-      { label: "Sales Report", to: "/reports/sales", icon: ScrollText, permission: "sales-report", status: "planned", legacy: "/Sales/SalesReport" },
-      { label: "Ledger & Payments", to: "/reports/ledger", icon: ScrollText, permission: "details-report", status: "planned", legacy: "/Report/ReportDetails" },
+      { label: "Sales Report", to: "/reports/sales", icon: ScrollText, permission: "sales-report", status: "ready", legacy: "/Sales/SalesReport" },
+      { label: "Ledger & Balances", to: "/reports/ledger", icon: ScrollText, permission: "details-report", status: "ready", legacy: "/Report/ReportDetails" },
     ],
   },
 ];

@@ -7,3 +7,4 @@ export * from "./inward-challans";
 export * from "./purchase-orders";
 export * from "./purchase-invoices";
 export * from "./sales-invoices";
+export * from "./payments";

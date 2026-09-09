@@ -241,6 +241,24 @@ need to know how many and over what period before deciding what to do.
 **What we found.** When the system calculates what you owe a supplier, a **Purchase
 Return** and a **Credit Note** are **added** to the balance rather than subtracted.
 
+**Updated 9 September 2026, and it is worse than we first wrote.** Building these
+screens meant reading both halves of the report page, and they do not agree with
+each other:
+
+- The **top panel** (the balance summary) **adds** returns to the balance.
+- The **lower panel** (the running ledger, the one with the Balance column) is
+  **correct** — it subtracts them.
+
+So the same screen shows the same supplier two different balances, and which one
+is right depends on which panel you happened to read. That also means the figure
+some people have been working from may already have been the correct one. It does
+not change what we need from you; it does mean the wrong number has a visible
+contradiction beside it, which is worth knowing if anyone has ever queried it.
+
+There is a third thing in the same panel: its **Total row is calculated before
+settled suppliers are removed from the list**, so the grid does not add up to its
+own total. That one is not a judgement call and we have simply fixed it.
+
 **Why it matters.** For any supplier you have returned goods to, the outstanding
 balance shown on the payout screen is **too high by twice the value of the return**.
 Return ₹50,000 of material and the balance is ₹1,00,000 higher than it should be.
@@ -573,6 +591,41 @@ different deliveries of the same order, say, rather than two destinations for on
 
 ---
 
+## Question 15 — Three different permission names guard one screen
+
+**What we found.** The Reports and Payments screen checks **three different
+permission names** for what is one page:
+
+| Name it checks | Where |
+|---|---|
+| `Reports & Payments` | the page itself, twice |
+| `Details Report & Payout` | its sub-sections, three times |
+| `Reports` | one sub-section |
+
+Each check only looks at its own name. So ticking one of them turns on some parts
+of the screen and not others, and there is no single box that turns on the whole
+thing.
+
+**Why it matters.** We cannot tell from the code which of the three your people
+actually have. If we guess wrong, the person who runs your payments finds the
+screen half-working on the first morning of the new system — and the half that is
+missing will look like a bug rather than a permission.
+
+**What we need to know.** Two things, and both are quick:
+
+1. Who currently uses the Reports and Payments screen? Names or roles is enough.
+2. Can somebody open the permissions screen for one of those people and tell us
+   which of the three boxes above is ticked?
+
+The new system uses **one** permission per screen, which is what everyone assumes
+is happening today. We just need to know which one to grant so nobody loses
+access at cutover.
+
+> **Decision:** ☐ We will send the list of who has what  ☐ Grant it to whoever
+> has any of the three  ☐ Discuss
+
+---
+
 # Summary sheet
 
 | # | Question | Blocks work? | Decision |
@@ -592,6 +645,7 @@ different deliveries of the same order, say, rather than two destinations for on
 | 12 | Record over the list, or beside it | **Gets dearer weekly** | |
 | 13 | Does uploading a spreadsheet approve the items? | No | |
 | 14 | **A purchase order can be sent out twice over** — should the two delivery lists be added together? | Changes what saves | |
+| 15 | **Three permission names guard one screen** — which one do your people have? | Before cutover | |
 
 **Updated 9 Sep 2026.** The invoicing rebuild is no longer waiting on these — the
 purchase invoice and sales invoice screens are both built, and both calculate
@@ -602,6 +656,15 @@ balance reports.
 **Question 14 is new on 9 Sep 2026** and is the only one here that changes what
 the new system will let you SAVE, so it wants an answer before cutover rather
 than before the reports.
+
+**Question 15 is also new on 9 Sep 2026**, from building the reports and payments
+screens. It needs no decision about the business — only a look at who currently
+holds which of three permissions — but it needs it **before cutover**, or the
+person who runs your payments may find the screen closed to them.
+
+**Question 3 has been sharpened rather than answered.** The reports are now built
+and they calculate correctly, so this no longer blocks the work; what it decides
+is whether the historical figures get restated.
 
 **Question 2 is still the one to act on first**, because it may affect data that
 is being created right now, and every day it goes unanswered adds documents to
@@ -618,7 +681,7 @@ whatever the answer turns out to cover.
 | 1 | D2 group, consequence (b) and (c) |
 | 1a | `roundToWholeRupeeAsProduced` in `packages/domain/src/money.ts` |
 | 2 | D-JS-1 |
-| 3 | D7 (and `:272`, the zero-balance filter) |
+| 3 | D7, placed precisely in §5u: `SupplierInvoiceRepo.cs:229` (summary, wrong) versus `Report.js:622` (ledger, correct); the zero-balance filter at `:283` and its footer at `:244` |
 | 4 | D1–D4, shared defect 4 |
 | 5 | D22a, variant 3 |
 | 6 | D13 |
@@ -630,3 +693,4 @@ whatever the answer turns out to cover.
 | 11 | `SESSION-HANDOFF.md` §5b decision 1 and §5p; finding C-6; `legacy-screens/01-dashboard.md` |
 | 13 | `SESSION-HANDOFF.md` §5o; `modules/items/item-sheet.service.ts` `toCreateItem` |
 | 14 | `SESSION-HANDOFF.md` §5s; `packages/domain/src/delivery-allocation.ts`; `PurchaseRequestScript.js:964-1006`; `legacy-screens/08-create-purchase-order.md` |
+| 15 | `SESSION-HANDOFF.md` §5u; finding C-6; `Views/Report/ReportDetails.cshtml` and its partials; `modules/payments/payments.controller.ts` |

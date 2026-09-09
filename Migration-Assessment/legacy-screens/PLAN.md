@@ -251,10 +251,11 @@ DONE     site selector                                    (7 Sep 2026, §1.1)
          Sales Invoices (list, form, approval)            (9 Sep 2026, §12/§13)
 DONE     PO delivery addresses + T&C editor              (9 Sep 2026, §5s)
          item price history                              (9 Sep 2026, §5t)
+         Payments, Ledger, Sales Report                  (9 Sep 2026, §5u)
 NOW      master-detail ANSWER                            <- with the business now, doc 19 Q12
 NEXT     per-site address list (site_addresses)          <- see below; needs the census for geography
 BLOCKED  Supplier Excel import                           <- needs the States/Cities census
-BLOCKED  Reports, payments, supplier balances            <- needs D7 and the payments model
+BLOCKED  report EXPORTS (6 of them, Excel and PDF)       <- see below; deliberately not built yet
 ```
 
 **The two purchase order carve-outs closed on 9 Sep 2026.** Both panels and the
@@ -293,6 +294,39 @@ are wrong**, and the worst of them is arithmetic:
   site are invisible.
 
 All four are departed from and each is pinned by a test.
+
+**Every legacy SCREEN is now ported (9 Sep 2026, §5u).** Payments, the ledger and
+the sales report were the last three, and the payments model — "the single largest
+modelling decision left in the migration", per §14 of this folder — is decided:
+**payments are a real table**, not the sentinel rows the source keeps inside
+`SupplierInvoice` and `SalesInvoice`. Four things came out of building them:
+
+- **D7 is more specific than written, and doc 19 Q3 now says so.** The two panels
+  of `/Report/ReportDetails` disagree with each other. The SUMMARY adds purchase
+  returns to the balance (`SupplierInvoiceRepo.cs:229`) while its own Debit column
+  subtracts them; the LEDGER, computed in the browser at `Report.js:622`, is
+  correct. The same supplier shows two balances on one screen.
+- **The running balance is accumulated in a DataTables cell renderer** into a
+  module-level object, guarded by a Set keyed on the invoice number. That guard is
+  there because the renderer fires more than once per row; its side effect is that
+  **a second payment of the same amount, and a second invoice sharing a number,
+  are silently left out of the balance**. Computed in SQL here, with a window
+  function over the whole filtered set before paging.
+- **Doc 11 is wrong about screen 31.** It says the running balance "is computed
+  only in the Excel exporter and shown as a grid column header that is never
+  populated". The column IS populated — `columns: dtColumns` at `Report.js:762`
+  wires it. Third document in three sessions to be wrong about a screen.
+- **The sales ledger has a Group column with nothing behind it.** `SalesInvoice`
+  carries no `SiteGroup` and `SalesInvoiceMasterModel` no `GroupName`, yet
+  `Report.js:578` binds a column to `groupName`. It has never shown anything.
+
+**What is NOT built: the six exports.** `14-reports-and-payments.md` point 3 counts
+Export To Excel and Export To Pdf across three panels, plus a supplier-specific
+Excel. None are ported. The spreadsheet machinery from §5o (`common/spreadsheet/`)
+would carry the Excel ones cheaply; PDF is a new dependency and a new decision, and
+Phase 5 wanted these as async jobs anyway. They are a row of their own above rather
+than a footnote, because a report screen without its export button is a screen
+people will ask about.
 
 **A new NEXT item: the per-site address list.** The legacy Shipping Addresses
 panel reads a `SiteAddresses` TABLE — many rows per site — which this port does

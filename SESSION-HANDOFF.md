@@ -1,9 +1,9 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
 **Written:** 2 September 2026, after the unblocking session. **Last extended
-9 September 2026** (§5t). Supersedes all earlier handoffs of the same name.
+9 September 2026** (§5u). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `8d05235d`.** If `git log` shows commits after
+> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
@@ -35,13 +35,13 @@ only the "planned" nav placeholders for the two invoice screens. The record
 layouts of §5m, the Item Master Excel pair of §5o and the dashboard queues of
 §5p all shipped with it.
 
-**Six commits are built, tested and NOT deployed** — `1212f12a`, `3f863c72`,
+**Seven commits are built, tested and NOT deployed** — `1212f12a`, `3f863c72`,
 `b296085c`, `17304ea7` (§5r: the purchase order grid fixes, the dialog layout fix
 and both invoice modules), `98fe1b46` (§5s: the purchase order delivery
 addresses, the terms editor with its sanitiser, and a compact pass over every
-form) and `f28737d2` (§5t: item price history, two pre-existing typecheck
-failures, and the dev seed). `c77268a3` is also unshipped and touches only skills
-and this file.
+form), `f28737d2` (§5t: item price history, two pre-existing typecheck failures,
+and the dev seed) and `<COMMIT>` (§5u: payments, the ledger and the sales report).
+`c77268a3` is also unshipped and touches only skills and this file.
 
 **The deploy was AUTHORISED on 9 Sep 2026 and still did not happen.** The user
 asked for the work to be shipped in the same breath as asking for it to be
@@ -52,12 +52,13 @@ step. **Nothing is wrong with the release**; it is staged-ready and the suites
 are green. The next session should be able to run `/deploy` directly, and if the
 same refusal appears, the user has to allow `Bash(ssh:*)` before it can proceed.
 
-**THREE of them carry migrations — `0009_purchase_invoices`,
-`0010_sales_invoices` and `0011_purchase_order_delivery_addresses`** — so this is
-not a static-only deploy. Read step 5 of `/deploy` before shipping it: the
-migration runner has printed *"Already migrated. Nothing to do."* while silently
-skipping every new migration, and `0 applied` after shipping a new one means
-something is wrong. Expect **`3 applied`** on the next deploy.
+**FOUR of them carry migrations — `0009_purchase_invoices`,
+`0010_sales_invoices`, `0011_purchase_order_delivery_addresses` and
+`0012_payments`** — so this is not a static-only deploy. Read step 5 of
+`/deploy` before shipping it: the migration runner has printed *"Already
+migrated. Nothing to do."* while silently skipping every new migration, and
+`0 applied` after shipping a new one means something is wrong. Expect
+**`4 applied`** on the next deploy.
 
 **`sanitize-html` is a new runtime dependency of the API** (§5s). `npm ci` on the
 server picks it up from the lockfile, so there is nothing to do by hand — but a
@@ -120,14 +121,18 @@ AC/
     ├── packages/domain/           shared business rules (65 tests)
     ├── packages/contracts/        Zod schemas shared by API and web (63 tests)
     └── apps/
-        ├── api/                   NestJS + Fastify + Drizzle (626 tests)
-        └── web/                   React 19 + Vite + Tailwind (330 tests)
+        ├── api/                   NestJS + Fastify + Drizzle (665 tests)
+        └── web/                   React 19 + Vite + Tailwind (346 tests)
 ```
 
-**1103 tests pass** — 1084 Node (63 contracts + 65 domain + 626 API + 330 web)
+**1158 tests pass** — 1139 Node (63 contracts + 65 domain + 665 API + 346 web)
 plus 19 .NET. **Both figures were RUN on 9 Sep 2026**, against the tree that
-became `f28737d2`: Node exit 0, 34 of 34 API files and 31 of 31 web files, zero
+became `<COMMIT>`: Node exit 0, 36 of 36 API files and 32 of 32 web files, zero
 failures; .NET `Passed! - Failed: 0, Passed: 19`.
+
+**EVERY LEGACY SCREEN IS NOW PORTED.** `nav.ts` carries no `"planned"` item —
+Payments, the Ledger and the Sales Report were the last three (§5u). What remains
+is not screens: the six report EXPORTS, the ETL, and the items in §8.
 
 **`npm run typecheck` is clean in all four workspaces.** It was NOT on a clean
 tree before 9 Sep 2026 (§5t), and the previous handoff said it was — see the
@@ -183,10 +188,10 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 ## 4. Repository state
 
 Branch **`main`**, working tree clean, pushed to `origin/main`. Builds,
-typechecks, and all **1103 tests pass** — 1084 Node (63 contracts + 65 domain +
-626 API + 330 web) + 19 .NET.
+typechecks, and all **1158 tests pass** — 1139 Node (63 contracts + 65 domain +
+665 API + 346 web) + 19 .NET.
 
-Both suites were last measured at **`f28737d2`**, the final code commit of
+Both suites were last measured at **`<COMMIT>`**, the final code commit of
 9 Sep 2026, and both were RUN rather than proved. Anything after that on `main`
 is documentation — a handoff always commits after its own measurement, so the
 newest hash is never the one the numbers were taken at, and naming it here would
@@ -215,6 +220,9 @@ be a lie that looks precise.
   broken on a clean tree — the web and domain typechecks, the dev seed's line
   arithmetic, and a stale sentence in the item delete dialog (§5t). **It carries
   NO migration**; it is a query, a panel and a seed change.
+- `<COMMIT>` ported the last three screens — Payments, the Ledger and the Sales
+  Report — and decided the payments model (§5u). **It carries migration
+  `0012_payments`**, the first new table since `0011`.
 - **`main` is pushed to `origin/main`** and the working tree is clean.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
   credential is in the HISTORY, not the working tree. Rotation is the fix.
@@ -1679,14 +1687,23 @@ BLOCKED  Supplier Excel import            <- needs the States/Cities census
 BLOCKED  Reports, payments, supplier balances  <- needs D7 and the payments model
 ```
 
-**The build queue is empty again, and this time say so carefully.** §5r reopened
-it by unblocking item price history; §5t built that, and it was the last row that
-needed neither the census nor an answer from the business. Everything left in
-PLAN.md is behind one of the two: the per-site address list and the Supplier
-Excel import both need the geography census, reports and payments need D7, and
-the NOW row is a decision. **So the §8 blockers are the whole critical path
-again** — but the deploy is not one of them, and it is the one thing that can
-move without the user doing anything except granting a permission.
+**Every legacy SCREEN is ported as of 9 Sep 2026 (§5u).** Payments, the ledger
+and the sales report were the last three, and neither of the things that blocked
+them survived contact: D7 turned out to be a defect in one of the two report
+panels rather than an open question, and the payments model was a decision to
+make rather than information to wait for.
+
+**What is left is not screens.** In rough order:
+
+1. **The six report exports** — Excel and PDF across three panels, plus a
+   supplier-specific Excel. Deliberately not built (§5u); the Excel ones reuse
+   §5o's `common/spreadsheet/` cheaply, PDF is a new dependency and a new
+   decision.
+2. **The ETL for `payments`** — every sentinel row across two tables, split by
+   three magic strings into `direction` and `kind`. The invoice tables have no
+   `is_deleted`, so removing them afterwards is a hard delete on production data.
+3. **The per-site address list**, still behind the census.
+4. **Everything in §8**, which is the user's.
 
 **Both purchase order carve-outs closed on 9 Sep 2026 (§5s).** The delivery
 address panels and the terms editor are built, and the terms column now holds
@@ -3107,3 +3124,285 @@ code.
 Tests: **1103** — 1084 Node (63 contracts + 65 domain + 626 API + 330 web) + 19
 .NET, up 29. **Both suites RUN**, not proved: Node exit 0 with 34 of 34 API files
 and 31 of 31 web files; .NET `Passed! - Failed: 0, Passed: 19`.
+
+---
+
+## 5u. Payments, the ledger and the sales report — every legacy screen is now ported (9 Sep 2026)
+
+Committed as `<COMMIT>`.
+
+The last three screens: `/Report/ReportDetails` (two report panels and a payment
+repeater) and `/Sales/SalesReport`. They were the PLAN.md BLOCKED row "Reports,
+payments, supplier balances — needs D7 and the payments model", and both of those
+are now settled.
+
+**The payments model is decided: payments are a real table.**
+`14-reports-and-payments.md` calls that "the single largest modelling decision
+left in the migration". The argument is written out on
+`db/schema/payments.ts`; the short version is below.
+
+### There is no payments table, and there are THREE sentinel strings
+
+A payment is a row in `SupplierInvoice` with no detail lines, told apart from a
+real invoice by a magic string in the number column:
+
+| String | Means |
+|---|---|
+| `InvoiceNo = "PayOut"` | money paid to a supplier |
+| `InvoiceNo = "Opening Balance"` | a balance brought forward |
+| `SalesInvoiceNo = "PayIn"` | money received from a customer |
+
+`PayOutScript.js:687` chooses between the first two **in the browser** and posts
+the literal string; `AddSupplierInvoice` stores whatever arrives and *also*
+hard-codes `IsPayOut = true`. **So there are two independent markers for one fact
+and they disagree**: every Opening Balance row ever written has `IsPayOut = true`
+and an `InvoiceNo` that is not `"PayOut"`. Every read in the system believes the
+string and ignores the boolean.
+
+Not reproduced, for three reasons. Every read of `purchase_invoices` would have
+to remember three magic strings forever, and the ones that forget do not fail —
+they quietly list payments as invoices. Admitting payments would mean relaxing
+`createPurchaseInvoiceSchema`, which requires a supplier invoice number and at
+least one line; a payment has neither. And it is the same decision this port has
+already made four times — `document_counters` over a substring parse, a site
+group FK over a name match, a purchase order FK over a text match, a delivery
+`kind` column over a `"Group-"` prefix.
+
+### D7 IS MORE SPECIFIC THAN IT HAS EVER BEEN WRITTEN, AND THE TWO PANELS DISAGREE
+
+This is the finding of the session.
+
+D7 is "purchase returns are added to supplier balances instead of subtracted".
+Reading BOTH implementations places it exactly:
+
+```csharp
+// SupplierInvoiceRepo.cs:227-229 — the SUMMARY panel
+PayOutTotalAmount     = ... InvoiceNo == "PayOut" || InvoiceType == "Purchase Return"
+                            || InvoiceType == "Credit Note" ... // the Debit column
+NonPayOutTotalAmount  = ... the inverse ...                     // the Credit column
+NetAmount             = group.Sum(x => x.InvoiceNo != "PayOut" ? +Total : -Total)
+```
+
+`NetAmount` negates **payouts and nothing else**, while the Debit column beside
+it counts returns and credit notes as debits. So a return is displayed as a debit
+*and added to the balance*.
+
+```javascript
+// Report.js:622 — the LEDGER panel, in the browser
+if (invoiceNo === "PayOut" || invoiceType === 'Purchase Return'
+    || invoiceType === 'Credit Note') { supplierBalances[name] -= totalAmount; }
+else                                  { supplierBalances[name] += totalAmount; }
+```
+
+The ledger is **correct**. So the same supplier shows two different balances on
+one screen, and which is right depends on which panel you read. Doc 19 Question 3
+now says this; it changes what the business is being asked, because the figure
+some people work from may already have been the right one.
+
+### The running balance is accumulated in a DataTables cell renderer
+
+`Report.js:606-631`. The Balance column's `render` function adds into a
+**module-level** `supplierBalances` object that is never reset, guarded by a
+`processedInvoices` Set. Four consequences, all departed from:
+
+1. **The guard exists because the renderer fires more than once per row** —
+   DataTables calls `render` for `display`, `sort`, `filter` and `type`, and this
+   function does not check which. Its side effect is the next three.
+2. **A second payment of the same amount is silently skipped.** The key is
+   `invoiceNo + "_" + totalAmount`, so paying a supplier ₹5,000 twice moves the
+   balance by ₹5,000.
+3. **Two invoices sharing a number are counted once.** The key for an ordinary
+   invoice is the number alone, and `purchase_invoices` deliberately has no
+   uniqueness on it — "two suppliers both numbering an invoice `016` is
+   ordinary", and so is one supplier reusing a number.
+4. **The accumulator is keyed by supplier NAME**, so two suppliers with the same
+   name share a running balance.
+
+Here it is a SQL window function over the whole filtered set, partitioned by
+`party_id`, ordered by date, taken **before** the page — which is
+`14-reports-and-payments.md` point 1, and the reason the legacy grid sets
+`paging: false`. There is a test that pages through five entries and asserts the
+balance continues rather than restarting.
+
+**This is the only OFFSET-paged endpoint in the system**, and §7's keyset rule is
+deliberately broken here: a keyset cursor names a row, but the balance depends on
+every row before it, so resuming from a cursor would have to re-scan the prefix
+the window function already scans.
+
+### Doc 11 is wrong about screen 31, and that is three documents in three sessions
+
+`11-UI-to-React-Mapping.md` says the running balance "is computed only in the
+Excel exporter and shown as a grid column header that is never populated". It is
+populated: `columns: dtColumns` at `Report.js:762` wires the array containing
+that renderer. §5t found `08-create-purchase-order.md` wrong about the terms
+templates and §5p found PLAN.md wrong about the price history. **The pattern is
+now reliable enough to plan around: read the query and the view before trusting
+any document in this repository about what a screen does, including this one.**
+
+### The sales ledger has a Group column with nothing behind it
+
+`Report.js:578` binds a Group column for the sales grid to `groupName`.
+`SalesInvoice` has no `SiteGroup` column and `SalesInvoiceMasterModel` has no
+`GroupName` — checked both, `grep` returns nothing. The purchase side genuinely
+has it (`SupplierInvoice.SiteGroup`, §6). So that column has never displayed
+anything, on any sales row, ever. The port emits `null` for it and the screen
+says "Not recorded on sales" rather than drawing an empty column.
+
+### THE DRIVER TRAP: `db.execute()` returns two different shapes
+
+Worth an afternoon to somebody, and no test in this repository would have caught
+it.
+
+A ledger is a UNION feeding a window function, which the Drizzle query builder
+cannot express, so this is the only module using raw `db.execute`. And:
+
+| Driver | Used by | `db.execute()` returns |
+|---|---|---|
+| `drizzle-orm/pglite` | every test, and `npm run dev` | `{ rows, fields, command, affectedRows, rowCount }` |
+| `drizzle-orm/postgres-js` | **production** | a plain **array** |
+
+Verified by running both, not read from documentation. So
+`(await db.execute(...)).rows.map(...)` passes every test here and throws on the
+server, and `(await db.execute(...)).map(...)` does exactly the reverse. Every
+other repository is immune because `db.select()` maps rows itself, identically on
+both.
+
+`common/raw-rows.ts` normalises it and **throws** on an unrecognised shape rather
+than returning `[]` — an empty report is a wrong answer that looks like a right
+one. Its test exercises both shapes as literal objects, so the PRODUCTION branch
+is covered without a PostgreSQL server.
+
+### Two more things the query engine refused, both silent in the type system
+
+- **`= any(${array})` does not work.** Drizzle expands a JavaScript array inside
+  an `sql` template into a ROW CONSTRUCTOR — `($1, $2, $3)` — not a PostgreSQL
+  array, so `any()` is handed a row and PostgreSQL answers `42809: op ANY/ALL
+  (array) requires array on right side`. It typechecks and reads like working
+  code. `sql.join` building an `in (...)` list instead.
+- **A backtick inside an SQL comment ends the template literal.** Writing
+  `` -- both are stamped `IsPayOut = true` `` inside `` sql`...` `` closes the
+  string, and the error is a parser cascade forty lines away
+  (`TS1005: ':' expected`) that names nothing relevant. It happened twice in one
+  session — the second time while writing a comment explaining the first. **No
+  backticks in SQL comments.**
+
+### `PermissionsGuard` requires EVERY permission, not any
+
+`required.filter(p => !granted.has(p))` must come back empty. So
+`@Permissions("details-report.view", "sales-report.view")` on one route demands
+both rights and locks out the person holding exactly the one their screen asks
+for. Found before shipping it, by reading the guard rather than assuming the
+obvious semantics. The summary and the sales report are therefore two routes over
+one repository method.
+
+### One screen, THREE permission names — now doc 19 Question 15
+
+Counted, not sampled:
+
+```
+ReportDetails.cshtml   2x  "Reports & Payments"
+its partials           3x  "Details Report & Payout"
+its partials           1x  "Reports"
+```
+
+Each check reads only its own name, so no single grant turns the whole screen on,
+and which of the three production actually carries grants against cannot be known
+from the code. That decides who can still work on day one, so it is a question
+for the business rather than a guess. `/Sales/SalesReport` carries **no**
+permission attribute at all (doc 11, screen 30) — the fourth screen in a row
+where a missing authorization check was closed rather than reproduced.
+
+### Two departures beyond the arithmetic
+
+- **The delete is SOFT.** `DeletePayoutDetails` calls `Remove()` and the row
+  leaves the table, taking a supplier balance with it and leaving nothing that
+  says why the balance moved. Same departure as §5i's inventory delete.
+- **Settled parties are not hidden.** The legacy summary ends with
+  `CountTotalData.Where(i => i.NetAmount != 0)`, so a fully settled supplier
+  vanishes — and its credits and debits stay in a footer computed **before** that
+  filter, so the grid does not add up to its own Total row. Nothing is hidden
+  here, the footer is the sum of what is shown, and `show=outstanding` offers the
+  old behaviour to anyone who wanted it.
+
+### The seed, and the fifth appearance of the same family of defect
+
+First attempt seeded a payment at `insertedSites[step % length]` — a site chosen
+independently of where that supplier was ever invoiced. The summary groups by
+**(site, party)**, so those payments produced a positive row at one site and a
+negative row at another and **neither netted off**. The screen looked broken.
+
+It is not a seeding mistake alone: it is a real property of the legacy report,
+now recorded — *a payment recorded against a different site from the invoice it
+settles never nets, and only the grand total is right*. But it is the unusual
+case, and seeding only the unusual case is how correct code comes to look wrong.
+Payments now land on a site the party was actually invoiced at. Counted before
+and after:
+
+| | before | after |
+|---|---|---|
+| rows where an invoice and a payment net off | **0** | **21** |
+| rows where net ≠ credit − debit | 0 | 0 |
+
+§5q, §5r, §5s and §5t each record a version of this. The rule from §5t held:
+never key a seeded value off a modulus that shares a factor with the collection
+it indexes — and to it, add: **a seeded relationship must connect the same two
+things the screen groups by.**
+
+### The permission the seed did not grant
+
+The first call came back `403 Missing permission: reports-payments.view` — the
+guard working, and the §5p lesson applied: chase it rather than work around it.
+Three form rows and their grants were missing because nothing in the port could
+reach these screens until they existed. Added, with the note that the three
+legacy names are Question 15.
+
+### Verified by running it
+
+Against the API over HTTP, then in a real browser at 1440×900.
+
+| | |
+|---|---|
+| `GET /payments` | 42 rows, opening balances among them with a null site |
+| `GET /reports/balances` | 94 rows, closing balance 30,40,344.00 |
+| the invariant `net = credit − debit` | **0 of 94 rows violate it** |
+| the footer versus the sum of the rows | equal — which the legacy footer is not |
+| a single party's ledger | 5,000 → 6,321 → 4,821 → 82,464 → 1,29,887, opening balance first |
+| `?limit=999` | 400, the cap is 200 |
+| `?direction=sideways` | 400 |
+| either report with no token | 401 |
+| a payment with no amount | 400 |
+| an empty batch | 400 "Add at least one payment" |
+
+In the browser: all three screens render, the sidebar has no "soon" chips left,
+the summary and ledger both carry footers, a credit note shows in the Debit
+column with a negative running balance, Indian digit grouping throughout
+(60,74,528.00), no horizontal page scroll, and **zero console errors**.
+
+### The honest cost
+
+**The six exports are NOT built**, and that is the largest gap in this session.
+`14-reports-and-payments.md` point 3 counts Export To Excel and Export To Pdf on
+each of three panels, plus a supplier-specific Excel. The Excel ones would reuse
+`common/spreadsheet/` from §5o cheaply; PDF is a new dependency and a new
+decision, and Phase 5 wanted all six as async jobs anyway. A report screen
+without its export button is a screen people will ask about, so it is a PLAN.md
+row rather than a footnote.
+
+**Paging is a visible behaviour change**, exactly as
+`14-reports-and-payments.md` point 2 warns. The legacy grids put everything on
+one screen; these page at 50. The ledger says the balance runs across pages,
+which is the part that would otherwise look wrong.
+
+**`payments` is a new table with no ETL behind it yet.** Loading history means
+finding every sentinel row across two tables, splitting it by three strings into
+`direction` and `kind`, and deleting it from the invoice table — and the invoice
+tables have no `is_deleted`, so that is a hard delete on production data. It is a
+straightforward job and it is not written.
+
+**The screens are read-only where the legacy ones are not.** The legacy ledger
+carries Edit and Delete icons on its rows — on the PAYMENT rows, which are now
+their own screen. Somebody used to editing a payment from the report will have to
+go one click further.
+
+Tests: **1158** — 1139 Node (63 contracts + 65 domain + 665 API + 346 web) + 19
+.NET, up 55. Both suites RUN.
