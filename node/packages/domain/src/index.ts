@@ -16,3 +16,9 @@ export type {
   PurchaseOrderLineTotal,
   PurchaseOrderTotal,
 } from "./purchase-order-total.js";
+export * as deliveryAllocation from "./delivery-allocation.js";
+export type {
+  DeliveryAddressKind,
+  DeliveryAllocationLine,
+  DeliveryAllocation,
+} from "./delivery-allocation.js";

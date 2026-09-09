@@ -106,7 +106,7 @@ export function Modal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 backdrop-blur-[1px] sm:p-6"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-3 backdrop-blur-[1px] sm:p-4"
       onMouseDown={(event) => {
         backdropMouseDown.current = event.target === event.currentTarget;
       }}
@@ -126,7 +126,7 @@ export function Modal({
         aria-labelledby={titleId}
         tabIndex={-1}
         className={clsx(
-          "my-auto w-full rounded-xl bg-white shadow-xl ring-1 ring-slate-900/5 outline-none",
+          "my-auto w-full rounded-lg bg-white shadow-xl ring-1 ring-slate-900/5 outline-none",
           size === "sm" && "max-w-md",
           size === "md" && "max-w-xl",
           size === "lg" && "max-w-3xl",
@@ -136,12 +136,12 @@ export function Modal({
           size === "xl" && "max-w-5xl",
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200/80 px-5 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200/80 px-4 py-3">
           <div>
-            <h2 id={titleId} className="heading text-base">
+            <h2 id={titleId} className="heading text-sm">
               {title}
             </h2>
-            {description && <p className="mt-0.5 text-sm text-slate-500">{description}</p>}
+            {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
           </div>
           <button
             type="button"
@@ -149,14 +149,22 @@ export function Modal({
             aria-label="Close"
             className="-m-1 rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
           >
-            <X aria-hidden className="size-5" />
+            <X aria-hidden className="size-4" />
           </button>
         </div>
 
-        <div className="max-h-[calc(100vh-16rem)] overflow-y-auto px-5 py-4">{children}</div>
+        {/*
+          THE BODY TAKES EVERY ROW IT CAN, which is half of "less scroll".
+
+          16rem of reserved chrome was roughly twice what the header, the footer
+          and the backdrop padding actually occupy, so a form that fitted the
+          screen scrolled anyway. Measured: 3rem of header, 3rem of footer, 3rem
+          of backdrop padding top and bottom together, and 1rem of slack.
+        */}
+        <div className="max-h-[calc(100vh-10rem)] overflow-y-auto px-4 py-3">{children}</div>
 
         {footer && (
-          <div className="flex items-center justify-end gap-2 border-t border-slate-200/80 bg-slate-50/60 px-5 py-3">
+          <div className="flex items-center justify-end gap-2 border-t border-slate-200/80 bg-slate-50/60 px-4 py-2.5">
             {footer}
           </div>
         )}

@@ -2,12 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   companyRowSchema,
   listResponseSchema,
+  purchaseOrderDeliveryOptionsSchema,
   purchaseOrderDetailSchema,
   purchaseOrderRowSchema,
   supplierRowSchema,
   type CompanyRow,
   type CreatePurchaseOrder,
   type ListResponse,
+  type PurchaseOrderDeliveryOptions,
   type PurchaseOrderDetail,
   type PurchaseOrderRow,
   type SupplierRow,
@@ -86,6 +88,29 @@ export const useSupplierOptions = () =>
         schema: listResponseSchema(supplierRowSchema) as never,
         signal,
       }),
+  });
+
+/**
+ * What the two delivery address panels offer, for the site in the header.
+ *
+ * ONE REQUEST for the site's addresses, the site's groups and each group's
+ * addresses. Three would let the screen show a group belonging to one site
+ * beside addresses belonging to another for as long as the slowest of them took,
+ * and the panels are only meaningful together.
+ *
+ * Disabled until a site is chosen rather than fetching without one: the endpoint
+ * requires a site, so an early call is a 400 that renders as a broken panel on a
+ * form nobody has begun filling in.
+ */
+export const usePurchaseOrderDeliveryOptions = (siteId: string | null) =>
+  useQuery({
+    queryKey: [RESOURCE, "delivery-options", siteId],
+    enabled: Boolean(siteId),
+    queryFn: ({ signal }) =>
+      apiRequest<PurchaseOrderDeliveryOptions>(
+        `/${RESOURCE}/delivery-options?siteId=${siteId}`,
+        { schema: purchaseOrderDeliveryOptionsSchema, signal },
+      ),
   });
 
 /**

@@ -249,12 +249,38 @@ DONE     site selector                                    (7 Sep 2026, §1.1)
          Purchase Invoices (list, form, approval)         (8 Sep 2026, §10/§11)
          Dashboard approval queues, ALL 6                 (8 Sep 2026, §01)
          Sales Invoices (list, form, approval)            (9 Sep 2026, §12/§13)
+DONE     PO delivery addresses + T&C editor              (9 Sep 2026, §5s)
 NOW      master-detail ANSWER                            <- with the business now, doc 19 Q12
 NEXT     item price history                              <- UNBLOCKED: reads purchase invoices
-         PO delivery addresses + T&C editor              <- see the two carve-outs below
+         per-site address list (site_addresses)          <- see below; needs the census for geography
 BLOCKED  Supplier Excel import                           <- needs the States/Cities census
 BLOCKED  Reports, payments, supplier balances            <- needs D7 and the payments model
 ```
+
+**The two purchase order carve-outs closed on 9 Sep 2026.** Both panels and the
+terms editor are built; see SESSION-HANDOFF §5s. Three things that came out of it
+and change what is written above:
+
+- **The three "templates" were never stored anywhere.** They are hard-coded in
+  `CreatePurchaseOrder.cshtml`, one per tab pane, and no screen edits them. So
+  they are constants in `contracts/purchase-order-terms.ts`, exactly as they are
+  constants there. A `terms_templates` table would have looked faithful and
+  invented a screen that has never existed.
+- **The terms column the legacy screen writes is `PaymentTerms`, not `Terms`.**
+  Nothing on the create screen binds to `Terms` at all. The ETL loads legacy
+  `PaymentTerms` into `purchase_orders.terms`; loading it into `payment_terms`
+  would drop a page of terms into a one-line box.
+- **The delivery panels are a quantity-per-address repeater**, not the read-only
+  display this document described. Both post into one table, and the source tells
+  them apart by prefixing group addresses with the string `"Group-"`.
+
+**A new NEXT item: the per-site address list.** The legacy Shipping Addresses
+panel reads a `SiteAddresses` TABLE — many rows per site — which this port does
+not have; `sites` carries one main address and one shipping address, so at most
+two are offered where the legacy screen may show several. The screen says so
+rather than pretending. Building it needs a `site_addresses` table, an editor on
+the Site master, and the census for the city/state/country names each address
+ends with (§1.4).
 
 **Sales invoices landed on 9 Sep 2026, and the editor was built ONCE.** Doc 13's
 conclusion — "build it once, against the purchase invoice, and configure it for

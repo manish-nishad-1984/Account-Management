@@ -24,9 +24,12 @@ import {
   useCompanyOptions,
   useCreatePurchaseOrder,
   usePurchaseOrder,
+  usePurchaseOrderDeliveryOptions,
   useSupplierOptions,
   useUpdatePurchaseOrder,
 } from "./api";
+import { DeliveryAddressPanels } from "./DeliveryAddressPanels";
+import { TermsField } from "./TermsField";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 
 /**
@@ -78,8 +81,10 @@ const EMPTY: FormValues = {
   billingAddress: "",
   groupAddress: "",
   terms: "",
+  termsTemplate: null,
   description: "",
   items: [EMPTY_LINE],
+  deliveryAddresses: [],
 };
 
 const dateInput = (value: string | null): string => (value ? value.slice(0, 10) : "");
@@ -133,6 +138,7 @@ const toFormValues = (detail: PurchaseOrderDetail): FormValues => ({
   billingAddress: text(detail.billingAddress),
   groupAddress: text(detail.groupAddress),
   terms: text(detail.terms),
+  termsTemplate: detail.termsTemplate,
   description: text(detail.description),
   items: detail.items.map((line) => ({
     itemId: text(line.itemId),
@@ -143,6 +149,13 @@ const toFormValues = (detail: PurchaseOrderDetail): FormValues => ({
     unitPrice: line.unitPrice,
     gstPercent: text(line.gstPercent),
     discount: "",
+  })),
+  // The stored rows, minus their ids: the panels address a row by kind and
+  // address text, which is what a checkbox over a fixed option list can match.
+  deliveryAddresses: detail.deliveryAddresses.map((row) => ({
+    kind: row.kind,
+    address: row.address,
+    quantity: row.quantity,
   })),
 });
 
@@ -172,6 +185,7 @@ export function PurchaseOrderFormDialog({
     handleSubmit,
     reset,
     setError,
+    setValue,
     watch,
     control,
     formState: { errors },
@@ -258,6 +272,43 @@ export function PurchaseOrderFormDialog({
   const chosenCompanyId = watch("companyId");
   const chosenCompany = companyRows.find((row) => row.id === chosenCompanyId);
   const immediate = watch("deliveryImmediate");
+
+  /**
+   * The delivery panels, the Group select and the terms editor.
+   *
+   * `useWatch`, not `watch`, for every one of them — the same lesson the totals
+   * cost a browser session to learn. `watch` does not re-render reliably for a
+   * value that is written with `setValue` rather than by a registered input, so
+   * a ticked address or a loaded template would update the form state and not
+   * the screen: the click would appear to do nothing at all.
+   */
+  const chosenSiteId = useWatch({ control, name: "siteId" });
+  const chosenGroupId = useWatch({ control, name: "siteGroupId" });
+  const deliveryAddresses = useWatch({ control, name: "deliveryAddresses" }) ?? [];
+  const terms = useWatch({ control, name: "terms" }) ?? "";
+  const termsTemplate = useWatch({ control, name: "termsTemplate" }) ?? null;
+
+  const options = usePurchaseOrderDeliveryOptions(open && chosenSiteId ? chosenSiteId : null);
+  const groups = options.data?.groups ?? [];
+  const groupOptions = groups.map((group) => ({ value: group.id, label: group.name }));
+  const chosenGroup = groups.find((group) => group.id === chosenGroupId);
+
+  /**
+   * Per-row validation messages, dug out of the array errors by hand.
+   *
+   * §7.7's trap: an error on an array ELEMENT lands at `deliveryAddresses.0.quantity`
+   * and the field component only reads `errors.deliveryAddresses.message`, which
+   * is undefined — so a ticked address with no quantity would refuse to save with
+   * no message anywhere on the screen. `unshownValidationMessage` is the backstop
+   * for the form as a whole; this puts the message on the row that caused it.
+   */
+  // `errors.deliveryAddresses` is an array of per-row errors OR a single object
+  // carrying a root-level message, depending on which rule failed. Only the
+  // first shape has rows to attribute messages to.
+  const rowErrors = errors.deliveryAddresses;
+  const deliveryErrors = Array.isArray(rowErrors)
+    ? Object.fromEntries(rowErrors.map((entry, index) => [index, entry?.quantity?.message]))
+    : {};
 
   return (
     <FormDialog
@@ -380,17 +431,40 @@ export function PurchaseOrderFormDialog({
                           placeholder="Choose an item"
                           options={itemChoices}
                           error={errors.items?.[index]?.itemId?.message}
-                          {...register(`items.${index}.itemId`)}
+                          {...register(`items.${index}.itemId`, {
+                            // Choosing a catalogue item CLEARS the free text.
+                            // React Hook Form keeps the value of an unmounted
+                            // field, so without this a name typed before an item
+                            // was picked would be submitted alongside it and sit
+                            // in `item_name` forever, contradicting the item the
+                            // line actually references.
+                            onChange: (event) => {
+                              if (event.target.value) {
+                                setValue(`items.${index}.itemName`, "");
+                              }
+                            },
+                          })}
                         />
-                        <div className="mt-1">
-                          <TextField
-                            label={`Or name the product on line ${index + 1}`}
-                            labelHidden
-                            placeholder="…or type a name"
-                            error={errors.items?.[index]?.itemName?.message}
-                            {...register(`items.${index}.itemName`)}
-                          />
-                        </div>
+                        {/*
+                          THE FREE-TEXT NAME APPEARS ONLY WHEN NO ITEM IS
+                          CHOSEN, which is the only time it does anything.
+
+                          It used to be a second box under every row, so every
+                          line was two controls tall whether it needed one or
+                          not, and three lines of an ordinary order took the
+                          height of six.
+                        */}
+                        {!lines?.[index]?.itemId && (
+                          <div className="mt-1">
+                            <TextField
+                              label={`Or name the product on line ${index + 1}`}
+                              labelHidden
+                              placeholder="…or type a name"
+                              error={errors.items?.[index]?.itemName?.message}
+                              {...register(`items.${index}.itemName`)}
+                            />
+                          </div>
+                        )}
                       </td>
                       <td className="py-2 pr-2">
                         <TextField
@@ -552,26 +626,73 @@ export function PurchaseOrderFormDialog({
             />
           </FormSection>
 
+          {/*
+            The two address panels, and the Group they depend on.
+
+            `columns={1}` for the same reason Products carries it: the panels are
+            a wide two-up layout of their own and must not become one cell of a
+            two-column grid.
+          */}
+          <FormSection title="Delivery addresses" columns={1}>
+            <div className="sm:max-w-xs">
+              <SelectField
+                label="Group"
+                placeholder={
+                  options.isLoading
+                    ? "Loading groups…"
+                    : groupOptions.length === 0
+                      ? "This site is in no groups"
+                      : "No group"
+                }
+                options={groupOptions}
+                hint="Its addresses appear in the Group panel below"
+                error={errors.siteGroupId?.message}
+                {...register("siteGroupId")}
+              />
+            </div>
+
+            <DeliveryAddressPanels
+              siteAddresses={options.data?.siteAddresses ?? []}
+              groupAddresses={chosenGroup?.addresses ?? []}
+              groupChosen={Boolean(chosenGroupId)}
+              value={deliveryAddresses}
+              onChange={(next) => setValue("deliveryAddresses", next, { shouldValidate: false })}
+              orderedQuantity={totals.totalQuantity}
+              loading={options.isLoading}
+              errors={deliveryErrors}
+            />
+
+            {/*
+              Said on screen rather than left as a silently short list. The
+              legacy panel reads its options from a `SiteAddresses` TABLE this
+              port does not have, and ends each address with city, state and
+              country names that are bare integer ids here until the census runs.
+            */}
+            <p className="text-[11px] text-slate-500">
+              The old screen lists every address recorded against a site, each ending with its city,
+              state and country. Those live in a separate table and three unmapped id columns, so
+              only the site's own two addresses are offered here, without the geography. PLAN.md
+              §1.4.
+            </p>
+          </FormSection>
+
           {/* Same reason as Products: these stack, they do not sit side by side. */}
           <FormSection title="Terms and conditions" columns={1}>
-            <TextAreaField
-              label="Terms"
-              rows={6}
-              hint="Plain text for now — see the note below"
+            <TermsField
+              value={terms}
+              template={termsTemplate}
               error={errors.terms?.message}
-              {...register("terms")}
+              onChange={(next) => {
+                setValue("terms", next.terms, { shouldValidate: false });
+                setValue("termsTemplate", next.termsTemplate, { shouldValidate: false });
+              }}
             />
             <TextAreaField
               label="Notes"
-              rows={3}
+              rows={2}
               error={errors.description?.message}
               {...register("description")}
             />
-            <Alert tone="info">
-              The old screen offered three saved templates in a rich text editor. This field is
-              plain text until that editor and an HTML sanitiser are added — storing rich text
-              without one would put scripts from a saved order onto everyone who opens it.
-            </Alert>
           </FormSection>
 
           {!isEdit && (

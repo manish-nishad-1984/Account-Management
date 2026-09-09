@@ -12,6 +12,7 @@ export * from "./suppliers";
 export * from "./approvals";
 export * from "./items";
 export * from "./purchase-requests";
+export * from "./purchase-order-terms";
 export * from "./purchase-orders";
 export * from "./purchase-invoices";
 export * from "./sales-invoices";

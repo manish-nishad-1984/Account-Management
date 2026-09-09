@@ -12,12 +12,37 @@ import { Check } from "lucide-react";
  * message rather than only a red ring.
  */
 
-const CONTROL_BASE =
-  "block w-full rounded-lg border-0 py-2.5 text-sm text-slate-900 shadow-sm " +
+/**
+ * THE DENSITY SCALE, shared from here rather than repeated per control.
+ *
+ * Every control on every form is 32px tall — `py-1.5` over a 20px line box —
+ * where it was 40px, and its label is 12px rather than 14px. These are data
+ * entry screens for people who key documents all day: the purchase order form
+ * alone carries 22 fields, a line grid and two address panels, and at the old
+ * spacing it did not fit on a laptop screen at any dialog size, so most of the
+ * work of filling it in was scrolling.
+ *
+ * Shared because three controls that are each "about the same height" is
+ * precisely how a form comes to look hand-assembled. `TextField` lives in
+ * `index.tsx` for historical reasons and imports these, so the input beside a
+ * select is the same input.
+ *
+ * The 32px figure is not arbitrary either: it keeps a 24px touch target inside
+ * a 44px row once the label and gap are counted, and it is what every dense
+ * business grid this application is replacing already uses.
+ */
+export const CONTROL_BASE =
+  "block w-full rounded-md border-0 py-1.5 text-sm text-slate-900 shadow-sm " +
   "ring-1 ring-inset transition-shadow placeholder:text-slate-400 " +
   "focus:ring-2 focus:ring-inset focus:ring-brand-500";
 
-const ringFor = (error?: string) =>
+/** Above a control. 12px, so the label does not compete with the value. */
+export const LABEL_BASE = "block text-xs font-medium text-slate-600";
+
+/** Below one, and only ever one of error or hint is rendered. */
+export const MESSAGE_BASE = "mt-1 text-[11px] leading-4";
+
+export const ringFor = (error?: string) =>
   error ? "ring-rose-400 focus:ring-rose-500" : "ring-slate-300";
 
 function FieldShell({
@@ -42,10 +67,7 @@ function FieldShell({
 }) {
   return (
     <div className={className}>
-      <label
-        htmlFor={id}
-        className={labelHidden ? "sr-only" : "block text-sm font-medium text-slate-700"}
-      >
+      <label htmlFor={id} className={labelHidden ? "sr-only" : LABEL_BASE}>
         {label}
         {required && (
           <span aria-hidden className="ml-0.5 text-rose-500">
@@ -53,13 +75,13 @@ function FieldShell({
           </span>
         )}
       </label>
-      <div className="mt-1.5">{children}</div>
+      <div className={labelHidden ? undefined : "mt-1"}>{children}</div>
       {error ? (
-        <p id={`${id}-error`} className="mt-1.5 text-xs font-medium text-rose-600">
+        <p id={`${id}-error`} className={clsx(MESSAGE_BASE, "font-medium text-rose-600")}>
           {error}
         </p>
       ) : hint ? (
-        <p id={`${id}-hint`} className="mt-1.5 text-xs text-slate-500">
+        <p id={`${id}-hint`} className={clsx(MESSAGE_BASE, "text-slate-500")}>
           {hint}
         </p>
       ) : null}
@@ -101,7 +123,7 @@ export const SelectField = forwardRef<
         id={fieldId}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? `${fieldId}-error` : hint ? `${fieldId}-hint` : undefined}
-        className={clsx(CONTROL_BASE, ringFor(error), "px-3 pr-8")}
+        className={clsx(CONTROL_BASE, ringFor(error), "px-2.5 pr-8")}
         {...rest}
       >
         {placeholder && (
@@ -143,7 +165,7 @@ export const TextAreaField = forwardRef<
         rows={3}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? `${fieldId}-error` : hint ? `${fieldId}-hint` : undefined}
-        className={clsx(CONTROL_BASE, ringFor(error), "px-3")}
+        className={clsx(CONTROL_BASE, ringFor(error), "px-2.5")}
         {...rest}
       />
     </FieldShell>
@@ -176,17 +198,17 @@ export const CheckboxField = forwardRef<
           className="mt-0.5 size-4 rounded border-slate-300 text-brand-600 shadow-sm focus:ring-2 focus:ring-brand-500 focus:ring-offset-0"
           {...rest}
         />
-        <label htmlFor={fieldId} className="text-sm font-medium text-slate-700">
+        <label htmlFor={fieldId} className="text-xs font-medium text-slate-700">
           {label}
           {hint && (
-            <span id={`${fieldId}-hint`} className="mt-0.5 block font-normal text-xs text-slate-500">
+            <span id={`${fieldId}-hint`} className="mt-0.5 block text-[11px] font-normal text-slate-500">
               {hint}
             </span>
           )}
         </label>
       </div>
       {error && (
-        <p id={`${fieldId}-error`} className="mt-1.5 text-xs font-medium text-rose-600">
+        <p id={`${fieldId}-error`} className={clsx(MESSAGE_BASE, "font-medium text-rose-600")}>
           {error}
         </p>
       )}
@@ -236,28 +258,28 @@ export function MultiSelectField({
 
   return (
     <fieldset aria-describedby={error ? `${groupId}-error` : undefined}>
-      <legend className="block text-sm font-medium text-slate-700">
+      <legend className={LABEL_BASE}>
         {label}
-        <span className="ml-1.5 font-normal text-xs text-slate-500">
+        <span className="ml-1.5 text-[11px] font-normal text-slate-500">
           {selected.size} selected
         </span>
       </legend>
 
       <div
         className={clsx(
-          "mt-1.5 max-h-44 overflow-y-auto rounded-lg ring-1 ring-inset",
+          "mt-1 max-h-40 overflow-y-auto rounded-md ring-1 ring-inset",
           error ? "ring-rose-400" : "ring-slate-300",
         )}
       >
         {options.length === 0 ? (
-          <p className="px-3 py-3 text-sm text-slate-500">{emptyMessage}</p>
+          <p className="px-2.5 py-2 text-sm text-slate-500">{emptyMessage}</p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {options.map((option) => {
               const isSelected = selected.has(option.value);
               return (
                 <li key={option.value}>
-                  <label className="flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-slate-50">
+                  <label className="flex cursor-pointer items-center gap-2.5 px-2.5 py-1.5 text-sm transition-colors hover:bg-slate-50">
                     <input
                       type="checkbox"
                       checked={isSelected}
@@ -277,17 +299,30 @@ export function MultiSelectField({
       </div>
 
       {error ? (
-        <p id={`${groupId}-error`} className="mt-1.5 text-xs font-medium text-rose-600">
+        <p id={`${groupId}-error`} className={clsx(MESSAGE_BASE, "font-medium text-rose-600")}>
           {error}
         </p>
       ) : hint ? (
-        <p className="mt-1.5 text-xs text-slate-500">{hint}</p>
+        <p className={clsx(MESSAGE_BASE, "text-slate-500")}>{hint}</p>
       ) : null}
     </fieldset>
   );
 }
 
-/** Groups related fields inside a long form, so it reads as sections. */
+/**
+ * Groups related fields inside a long form, so it reads as sections.
+ *
+ * `columns` DEFAULTS TO 2 AND THAT DEFAULT IS A TRAP worth knowing about: a
+ * section holding a wide table and a button under it becomes two cells side by
+ * side, the table squeezed into half the dialog and the button sitting where the
+ * next field should be. It shipped that way on the purchase order form and was
+ * reported from a screenshot, because no page test measures a width. Anything
+ * that is not a row of fields wants `columns={1}`.
+ *
+ * `3` was added with the compact pass. Short fields — a pincode, a percentage, a
+ * date — waste two thirds of a row at two columns, and the point of the exercise
+ * was to stop the forms scrolling.
+ */
 export function FormSection({
   title,
   description,
@@ -297,16 +332,23 @@ export function FormSection({
   title: string;
   description?: string;
   children: ReactNode;
-  columns?: 1 | 2;
+  columns?: 1 | 2 | 3;
 }) {
   return (
-    <section className="border-t border-slate-200/70 pt-4 first:border-t-0 first:pt-0">
-      <h3 className="text-xs font-semibold uppercase tracking-[0.05em] text-slate-500">{title}</h3>
-      {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
+    <section className="border-t border-slate-200/70 pt-3 first:border-t-0 first:pt-0">
+      <h3 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-500">
+        {title}
+      </h3>
+      {description && <p className="mt-0.5 text-[11px] text-slate-500">{description}</p>}
       <div
         className={clsx(
-          "mt-3 grid gap-4",
-          columns === 2 ? "sm:grid-cols-2" : "grid-cols-1",
+          // Row gap tighter than column gap: fields read down a column, and the
+          // horizontal space is what keeps two adjacent labels from running
+          // together.
+          "mt-2 grid gap-x-4 gap-y-3",
+          columns === 1 && "grid-cols-1",
+          columns === 2 && "sm:grid-cols-2",
+          columns === 3 && "sm:grid-cols-2 lg:grid-cols-3",
         )}
       >
         {children}

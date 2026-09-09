@@ -78,6 +78,13 @@
       "when": 1788880956373,
       "tag": "0010_sales_invoices",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788942765676,
+      "tag": "0011_purchase_order_delivery_addresses",
+      "breakpoints": true
     }
   ]
 }

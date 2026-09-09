@@ -4,12 +4,15 @@ import { eq } from "drizzle-orm";
 import {
   createPurchaseInvoiceSchema,
   listQuerySchema,
+  updatePurchaseInvoiceSchema,
   type CreatePurchaseInvoice,
 } from "@accountmanagement/contracts";
 import { PurchaseInvoicesRepository } from "./purchase-invoices.repository";
 import * as schema from "../../db/schema";
 import { freshDatabase } from "../../test/fresh-database";
 import type { Database } from "../../db/database";
+
+const patch = (body: Record<string, unknown>) => updatePurchaseInvoiceSchema.parse(body);
 
 const ACTOR = "11111111-1111-1111-1111-111111111111";
 
@@ -289,11 +292,7 @@ describe("PurchaseInvoicesRepository (real PostgreSQL)", () => {
 
     it("keeps the charges when only the lines change", async () => {
       const created = await repo.create(input({ tds: "40.00", roundOff: "10.00" }), ACTOR);
-      const updated = await repo.update(
-        created.id,
-        { items: [{ itemId, unitId, quantity: "1", unitPrice: "1000.00", gstPercent: "18" }] },
-        ACTOR,
-      );
+      const updated = await repo.update(created.id, patch({ items: [{ itemId, unitId, quantity: "1", unitPrice: "1000.00", gstPercent: "18" }] }), ACTOR);
 
       expect(updated.tds).toBe("40.00");
       expect(updated.roundOff).toBe("10.00");
@@ -313,11 +312,7 @@ describe("PurchaseInvoicesRepository (real PostgreSQL)", () => {
       );
       expect(created.items).toHaveLength(2);
 
-      const updated = await repo.update(
-        created.id,
-        { items: [{ itemId, unitId, quantity: "1", unitPrice: "50.00" }] },
-        ACTOR,
-      );
+      const updated = await repo.update(created.id, patch({ items: [{ itemId, unitId, quantity: "1", unitPrice: "50.00" }] }), ACTOR);
 
       expect(updated.items).toHaveLength(1);
       expect(updated.totalAmount).toBe("50.00");

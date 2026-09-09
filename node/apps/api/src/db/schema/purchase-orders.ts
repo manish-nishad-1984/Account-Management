@@ -99,23 +99,63 @@ export const purchaseOrders = pgTable(
     deliveryImmediate: boolean("delivery_immediate").notNull().default(false),
 
     /**
-     * Terms and conditions.
+     * Terms and conditions — SANITISED HTML.
      *
-     * PLAIN TEXT IN THIS PASS, deliberately. The source stores HTML from a rich
-     * text editor with a full toolbar, and three stored templates behind tabs.
-     * Rendering stored HTML back to users needs a sanitiser, and the editor
-     * itself is a dependency `05-legacy-screens` calls unbudgeted. Storing HTML
-     * now without a sanitiser would put stored XSS on the application's own
-     * origin — the same class of hole §5l closed on attachments.
+     * This column held plain text until the sanitiser landed, and the reason is
+     * the same class of hole §5l closed on attachments: the source renders
+     * stored terms with `@Html.Raw(firstItem.PaymentTerms)` straight into the
+     * printed order (`POPrintDetails.cshtml:406`), so whatever HTML is stored
+     * runs for everyone who opens that order. Storing rich text before markup
+     * could be refused at the boundary would have been stored XSS on the
+     * application's own origin.
      *
-     * So: text is accepted and rendered as text. Importing the legacy HTML needs
-     * the sanitiser first, and the ETL must not load this column until then.
+     * What may be in it is `TERMS_ALLOWED_TAGS` in
+     * `contracts/purchase-order-terms.ts`, and `TermsSanitiser` is the only
+     * thing that writes it. Everything outside the allowlist is removed before
+     * the insert, so a reader of this column can render it.
+     *
+     * THE ETL TRAP, and it is the expensive one. The legacy column holding these
+     * terms is `PurchaseOrder.PaymentTerms`, NOT `PurchaseOrder.Terms` — no
+     * control on the create screen binds to `Terms` at all. So legacy
+     * `PaymentTerms` loads HERE, through the sanitiser, and must NOT be loaded
+     * into `payment_terms` below, which is a different and much shorter field.
+     * Getting it the obvious way round drops a page of terms into a one-line box
+     * and leaves every imported order with no terms at all.
      */
     terms: text("terms"),
+
+    /**
+     * Which of the three boilerplate templates the terms started from —
+     * `PaymentTermsId` in the source, an `nvarchar(100)` holding the literal
+     * strings "Term-1", "Term-2" and "Term-3".
+     *
+     * Stored because the legacy screen reopens an order on the tab it was saved
+     * from, and because it is the only record of which boilerplate a given
+     * supplier was actually sent. `LEGACY_TERMS_TEMPLATE_IDS` maps the old
+     * strings; an unrecognised value becomes null rather than failing the row.
+     */
+    termsTemplate: text("terms_template"),
+
     description: text("description"),
 
     /** Snapshots, as the source holds them. */
     billingAddress: text("billing_address"),
+
+    /**
+     * The source's `SiteGroup`-side snapshot, and it is LOSSY BY CONSTRUCTION.
+     *
+     * `PurchaseRequestScript.js:1046` fills it with
+     * `$('input[name="selectedPOGroupAddress"]:checked').val()`, and jQuery's
+     * `.val()` on a set returns only the FIRST element's value. So an order
+     * delivered to four group addresses records one of them here while the list
+     * beside it carries all four — a header column that silently disagrees with
+     * its own detail rows.
+     *
+     * `purchase_order_delivery_addresses` is the real answer and is what the
+     * screen reads. This is kept so the ETL is lossless and so an imported order
+     * whose detail rows are missing still shows the one address the header
+     * happened to catch.
+     */
     groupAddress: text("group_address"),
 
     buyersPurchaseNo: text("buyers_purchase_no"),
@@ -236,5 +276,80 @@ export const purchaseOrderItems = pgTable(
   (table) => [
     index("purchase_order_items_purchase_order_id_idx").on(table.purchaseOrderId),
     index("purchase_order_items_item_id_idx").on(table.itemId),
+  ],
+);
+
+/**
+ * Where an order is delivered, and how much goes to each place —
+ * `PodeliveryAddress` in SQL Server.
+ *
+ * The legacy Create Purchase Order screen has two panels under the line grid:
+ * "Shipping Addresses" listing the site's own addresses, and "Group Address"
+ * listing the addresses of the chosen site group. Each row is a checkbox and a
+ * quantity box. Both panels post into ONE list and land in ONE table.
+ *
+ * THREE THINGS ARE DIFFERENT HERE, and all three are recorded rather than fixed
+ * quietly.
+ *
+ * 1. `kind` IS A COLUMN. The source tells the two panels apart by prefixing a
+ *    group address with the string `"Group-"` before posting it
+ *    (`PurchaseRequestScript.js:1003`) and stripping it on the way back out with
+ *    `Address.Replace("Group-", "")` (`CreatePurchaseOrder.cshtml:619`). That
+ *    puts a type tag inside the data it describes: `Replace` removes the marker
+ *    from ANY position, so an address reading "Ward 3, Group-B" is displayed as
+ *    "Ward 3, B", and a site address that genuinely starts with those characters
+ *    is read back as a group one.
+ *
+ * 2. `quantity` IS DECIMAL. `PodeliveryAddress.Quantity` is `int?` while the
+ *    browser collects it with `parseFloat` and every order line quantity is
+ *    `numeric`. An order measured in tonnes cannot allocate 2.5 of them to a
+ *    site: SQL Server rounds on the way in and the deliveries stop adding up to
+ *    the order. Widening a column that has only ever held whole numbers cannot
+ *    change an existing row.
+ *
+ * 3. `unit_type_id` IS NOT HERE. The source copies the HEADER's single
+ *    `UnitTypeId` onto every delivery row (`PurchaseOrderRepo.cs:688`). Units in
+ *    this port are per LINE, so there is no single header unit to copy, and
+ *    stamping one unit onto an address serving lines measured in three different
+ *    units would state something false. Nothing reads the source column: the
+ *    view projects it and no screen displays it.
+ *
+ * The source ALSO has an `IsDeleted` flag here that nothing sets, because its
+ * update path hard-deletes with `RemoveRange` instead
+ * (`PurchaseOrderRepo.cs:806`). Rows are replaced wholesale here for the same
+ * reason the line items are — see the note on `updatePurchaseOrderSchema` — so a
+ * flag that only ever reads false is not carried.
+ */
+export const purchaseOrderDeliveryAddresses = pgTable(
+  "purchase_order_delivery_addresses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    purchaseOrderId: uuid("purchase_order_id")
+      .notNull()
+      .references(() => purchaseOrders.id, { onDelete: "cascade" }),
+
+    /** `site` or `group` — which panel the address was ticked in. */
+    kind: text("kind").notNull(),
+
+    /**
+     * A SNAPSHOT of the address text, as the source stores it.
+     *
+     * Not a reference to `sites` or to `site_group_addresses`, deliberately.
+     * Editing a group's address later must not rewrite where an order that has
+     * already shipped was sent, and a purchase order is a document of record.
+     */
+    address: text("address").notNull(),
+
+    quantity: numeric("quantity", { precision: 18, scale: 2 }).notNull(),
+
+    /** Position in the panel, so a reopened order lists them as they were keyed. */
+    lineNumber: integer("line_number").notNull(),
+
+    createdBy: uuid("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("purchase_order_delivery_addresses_po_id_idx").on(table.purchaseOrderId),
   ],
 );

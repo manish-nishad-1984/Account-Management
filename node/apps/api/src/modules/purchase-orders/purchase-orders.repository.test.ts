@@ -3,7 +3,9 @@ import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { eq } from "drizzle-orm";
 import {
   createPurchaseOrderSchema,
+  TERMS_TEMPLATES,
   listQuerySchema,
+  updatePurchaseOrderSchema,
   type CreatePurchaseOrder,
 } from "@accountmanagement/contracts";
 import { financialYear } from "@accountmanagement/domain";
@@ -12,6 +14,8 @@ import { PurchaseRequestsRepository } from "../purchase-requests/purchase-reques
 import * as schema from "../../db/schema";
 import { freshDatabase } from "../../test/fresh-database";
 import type { Database } from "../../db/database";
+
+const patch = (body: Record<string, unknown>) => updatePurchaseOrderSchema.parse(body);
 
 const ACTOR = "11111111-1111-1111-1111-111111111111";
 
@@ -233,11 +237,7 @@ describe("PurchaseOrdersRepository (real PostgreSQL)", () => {
     it("recomputes the totals when the lines are replaced", async () => {
       const created = await repo.create(input(), ACTOR);
 
-      const updated = await repo.update(
-        created.id,
-        { items: [{ itemId, unitId, quantity: "1", unitPrice: "100.00", gstPercent: "5" }] },
-        ACTOR,
-      );
+      const updated = await repo.update(created.id, patch({ items: [{ itemId, unitId, quantity: "1", unitPrice: "100.00", gstPercent: "5" }] }), ACTOR);
 
       expect(updated.items).toHaveLength(1);
       expect(updated.subtotal).toBe("100.00");
@@ -466,6 +466,356 @@ describe("PurchaseOrdersRepository (real PostgreSQL)", () => {
 
       expect(created.deliveryImmediate).toBe(false);
       expect(created.deliveryDate).toBeNull();
+    });
+  });
+
+  /**
+   * The two address panels of `08-create-purchase-order.md`, left as a carve-out
+   * when the rest of the screen shipped.
+   */
+  describe("delivery addresses", () => {
+    const site = (quantity: string, address = "Plot 4, GIDC Estate") => ({
+      kind: "site" as const,
+      address,
+      quantity,
+    });
+    const group = (quantity: string, address = "Ward 3, Colony Office") => ({
+      kind: "group" as const,
+      address,
+      quantity,
+    });
+
+    it("stores both panels' rows against the order, in the order they were keyed", async () => {
+      const created = await repo.create(
+        input({ deliveryAddresses: [site("2"), group("1")] }),
+        ACTOR,
+      );
+
+      expect(created.deliveryAddresses).toHaveLength(2);
+      expect(created.deliveryAddresses.map((row) => [row.kind, row.lineNumber])).toEqual([
+        ["site", 1],
+        ["group", 2],
+      ]);
+    });
+
+    it("keeps a decimal quantity, which the source's int column cannot", async () => {
+      const created = await repo.create(input({ deliveryAddresses: [site("1.50")] }), ACTOR);
+      expect(created.deliveryAddresses[0]!.quantity).toBe("1.50");
+    });
+
+    it("saves an order with no delivery addresses at all", async () => {
+      const created = await repo.create(input(), ACTOR);
+      expect(created.deliveryAddresses).toEqual([]);
+    });
+
+    it("stores an address containing the source's own Group- marker unchanged", async () => {
+      // The source posts group rows prefixed with "Group-" and strips the marker
+      // with `Replace`, which removes it from any position. This address comes
+      // back as "Ward 3, B Quarters" there.
+      const created = await repo.create(
+        input({ deliveryAddresses: [group("1", "Ward 3, Group-B Quarters")] }),
+        ACTOR,
+      );
+      expect(created.deliveryAddresses[0]!.address).toBe("Ward 3, Group-B Quarters");
+    });
+
+    it("keeps two rows that carry the same address text", async () => {
+      // The source matches existing rows BY ADDRESS TEXT on update, so two rows
+      // sharing one address collapse into one there.
+      const created = await repo.create(
+        input({ deliveryAddresses: [site("1", "Gate 2"), group("2", "Gate 2")] }),
+        ACTOR,
+      );
+      expect(created.deliveryAddresses).toHaveLength(2);
+    });
+
+    it("replaces the addresses wholesale on update", async () => {
+      const created = await repo.create(
+        input({ deliveryAddresses: [site("1"), group("1")] }),
+        ACTOR,
+      );
+
+      const updated = await repo.update(
+        created.id,
+        patch({ deliveryAddresses: [site("3", "Yard 7")] }),
+        ACTOR,
+      );
+
+      expect(updated.deliveryAddresses).toHaveLength(1);
+      expect(updated.deliveryAddresses[0]!.address).toBe("Yard 7");
+      expect(updated.deliveryAddresses[0]!.lineNumber).toBe(1);
+    });
+
+    it("clears them when an empty list is sent", async () => {
+      const created = await repo.create(input({ deliveryAddresses: [site("1")] }), ACTOR);
+      const updated = await repo.update(created.id, patch({ deliveryAddresses: [] }), ACTOR);
+      expect(updated.deliveryAddresses).toEqual([]);
+    });
+
+    it("leaves them alone when the update does not mention them", async () => {
+      const created = await repo.create(input({ deliveryAddresses: [site("1")] }), ACTOR);
+      const updated = await repo.update(created.id, patch({ buyersPurchaseNo: "X" }), ACTOR);
+      expect(updated.deliveryAddresses).toHaveLength(1);
+    });
+
+    it("goes with the order when the order is really deleted", async () => {
+      const created = await repo.create(input({ deliveryAddresses: [site("1")] }), ACTOR);
+      await db.delete(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, created.id));
+
+      const left = await db
+        .select()
+        .from(schema.purchaseOrderDeliveryAddresses)
+        .where(eq(schema.purchaseOrderDeliveryAddresses.purchaseOrderId, created.id));
+      expect(left).toEqual([]);
+    });
+
+    /**
+     * THE DEPARTURE. The order is for 3 units; the source's two independent
+     * accumulators each see 3, neither exceeds it, and it saves 6 units of
+     * deliveries against a 3 unit order. See `domain/delivery-allocation.ts`.
+     */
+    describe("the quantity rule", () => {
+      it("refuses more than was ordered, counting both panels together", async () => {
+        await expect(
+          repo.create(input({ deliveryAddresses: [site("3"), group("3")] }), ACTOR),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      });
+
+      it("accepts exactly the ordered quantity across both panels", async () => {
+        const created = await repo.create(
+          input({ deliveryAddresses: [site("2"), group("1")] }),
+          ACTOR,
+        );
+        expect(created.deliveryAddresses).toHaveLength(2);
+      });
+
+      it("accepts a part allocation", async () => {
+        const created = await repo.create(input({ deliveryAddresses: [site("1")] }), ACTOR);
+        expect(created.deliveryAddresses).toHaveLength(1);
+      });
+
+      it("names both totals in the message", async () => {
+        await expect(repo.create(input({ deliveryAddresses: [site("4")] }), ACTOR)).rejects.toThrow(
+          /4\.00 units, and the order is for 3\.00/,
+        );
+      });
+
+      it("issues no document number when the allocation is refused", async () => {
+        // The counter increments inside the insert's transaction, so a request
+        // that was always going to fail must fail before it opens one —
+        // otherwise a rejected save burns an order number and the sequence gains
+        // a permanent gap that nothing explains.
+        await expect(
+          repo.create(input({ deliveryAddresses: [site("9")] }), ACTOR),
+        ).rejects.toBeInstanceOf(BadRequestException);
+
+        const next = await repo.create(input(), ACTOR);
+        expect(next.poNo).toBe(`DHP/PO/${FY}/001`);
+      });
+
+      it("checks new addresses against the lines already stored", async () => {
+        const created = await repo.create(input(), ACTOR);
+        await expect(
+          repo.update(created.id, patch({ deliveryAddresses: [site("4")] }), ACTOR),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      });
+
+      /**
+       * The case a naive implementation misses entirely: the request mentions no
+       * address at all, and it is still the request that breaks the rule.
+       */
+      it("checks stored addresses against new lines when only the lines change", async () => {
+        const created = await repo.create(input({ deliveryAddresses: [site("3")] }), ACTOR);
+
+        await expect(
+          repo.update(
+            created.id,
+            patch({ items: [{ itemId, unitId, quantity: "1", unitPrice: "1000.00" }] }),
+            ACTOR,
+          ),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      });
+
+      it("leaves the order untouched when an update is refused", async () => {
+        const created = await repo.create(input({ deliveryAddresses: [site("3")] }), ACTOR);
+
+        await expect(
+          repo.update(created.id, patch({ deliveryAddresses: [site("3"), group("3")] }), ACTOR),
+        ).rejects.toBeInstanceOf(BadRequestException);
+
+        const after = await repo.findById(created.id);
+        expect(after.deliveryAddresses).toHaveLength(1);
+        expect(after.deliveryAddresses[0]!.quantity).toBe("3.00");
+      });
+    });
+  });
+
+  describe("terms and conditions", () => {
+    it("stores a template's html unchanged", async () => {
+      const template = TERMS_TEMPLATES[0]!;
+      const created = await repo.create(
+        input({ terms: template.html, termsTemplate: template.key }),
+        ACTOR,
+      );
+
+      expect(created.terms).toBe(template.html);
+      expect(created.termsTemplate).toBe("template-1");
+    });
+
+    /**
+     * The whole reason this column held plain text until now: the legacy print
+     * view renders it with `@Html.Raw`, so anything stored here runs for every
+     * reader of the order.
+     */
+    it("strips markup that is not on the allowlist", async () => {
+      const created = await repo.create(
+        input({ terms: '<p>Payment in 30 days</p><script>fetch("//evil")</script>' }),
+        ACTOR,
+      );
+
+      expect(created.terms).toBe("<p>Payment in 30 days</p>");
+    });
+
+    it("strips it on update too, not only on create", async () => {
+      const created = await repo.create(input({ terms: "<p>Clean</p>" }), ACTOR);
+      const updated = await repo.update(
+        created.id,
+        patch({ terms: '<p>Still clean</p><img src=x onerror="steal()">' }),
+        ACTOR,
+      );
+
+      expect(updated.terms).toBe("<p>Still clean</p>");
+    });
+
+    it("stores null for terms that were emptied in the editor", async () => {
+      const created = await repo.create(input({ terms: "<p>Something</p>" }), ACTOR);
+      const updated = await repo.update(created.id, patch({ terms: "<p><br></p>" }), ACTOR);
+      expect(updated.terms).toBeNull();
+    });
+
+    it("leaves the terms alone when the update does not mention them", async () => {
+      const created = await repo.create(input({ terms: "<p>Kept</p>" }), ACTOR);
+      const updated = await repo.update(created.id, patch({ buyersPurchaseNo: "X" }), ACTOR);
+      expect(updated.terms).toBe("<p>Kept</p>");
+    });
+
+    it("reads an unrecognised stored template as none, rather than failing the row", async () => {
+      // What an imported row carrying the legacy "Term-1" string looks like
+      // before the ETL maps it, and what a hand-edited row could always be.
+      const created = await repo.create(input(), ACTOR);
+      await db
+        .update(schema.purchaseOrders)
+        .set({ termsTemplate: "Term-1" })
+        .where(eq(schema.purchaseOrders.id, created.id));
+
+      expect((await repo.findById(created.id)).termsTemplate).toBeNull();
+    });
+  });
+
+  describe("delivery options", () => {
+    it("offers the site's shipping address first, then its main address", async () => {
+      const [only] = await db
+        .insert(schema.sites)
+        .values({
+          name: "Hazira Yard",
+          address: "Survey 118",
+          area: "Hazira",
+          pincode: "394270",
+          shippingAddress: "Gate 3, Plot 9",
+          shippingArea: "Mora",
+          shippingPincode: "394517",
+        })
+        .returning({ id: schema.sites.id });
+
+      const options = await repo.deliveryOptions(only!.id);
+
+      expect(options.siteAddresses).toEqual([
+        "Gate 3, Plot 9, Mora, 394517",
+        "Survey 118, Hazira, 394270",
+      ]);
+    });
+
+    it("offers one line when the two addresses are the same", async () => {
+      const [same] = await db
+        .insert(schema.sites)
+        .values({ name: "One Address", address: "Plot 1", shippingAddress: "Plot 1" })
+        .returning({ id: schema.sites.id });
+
+      expect((await repo.deliveryOptions(same!.id)).siteAddresses).toEqual(["Plot 1"]);
+    });
+
+    it("skips the parts a site has not filled in rather than leaving gaps", async () => {
+      // The source concatenates with no null handling and produces ", , Surat,".
+      const [sparse] = await db
+        .insert(schema.sites)
+        .values({ name: "Sparse", address: "Plot 7" })
+        .returning({ id: schema.sites.id });
+
+      expect((await repo.deliveryOptions(sparse!.id)).siteAddresses).toEqual(["Plot 7"]);
+    });
+
+    it("offers nothing rather than an empty string when a site has no address", async () => {
+      expect((await repo.deliveryOptions(siteId)).siteAddresses).toEqual([]);
+    });
+
+    it("lists the groups the site is in, with their addresses", async () => {
+      const [group] = await db
+        .insert(schema.siteGroups)
+        .values({ name: "ROAD-GATE" })
+        .returning({ id: schema.siteGroups.id });
+      await db.insert(schema.siteGroupSites).values({ groupId: group!.id, siteId });
+      await db.insert(schema.siteGroupAddresses).values([
+        { groupId: group!.id, address: "Ward 3" },
+        { groupId: group!.id, address: "Ward 1" },
+      ]);
+
+      const options = await repo.deliveryOptions(siteId);
+
+      expect(options.groups).toHaveLength(1);
+      expect(options.groups[0]!.name).toBe("ROAD-GATE");
+      expect(options.groups[0]!.addresses).toEqual(["Ward 1", "Ward 3"]);
+    });
+
+    it("lists a group that has no addresses, because it is still a real group", async () => {
+      const [group] = await db
+        .insert(schema.siteGroups)
+        .values({ name: "EMPTY" })
+        .returning({ id: schema.siteGroups.id });
+      await db.insert(schema.siteGroupSites).values({ groupId: group!.id, siteId });
+
+      const options = await repo.deliveryOptions(siteId);
+      expect(options.groups).toHaveLength(1);
+      expect(options.groups[0]!.addresses).toEqual([]);
+    });
+
+    it("does not offer a group from another site", async () => {
+      const [other] = await db
+        .insert(schema.sites)
+        .values({ name: "Elsewhere" })
+        .returning({ id: schema.sites.id });
+      const [group] = await db
+        .insert(schema.siteGroups)
+        .values({ name: "THEIRS" })
+        .returning({ id: schema.siteGroups.id });
+      await db.insert(schema.siteGroupSites).values({ groupId: group!.id, siteId: other!.id });
+
+      expect((await repo.deliveryOptions(siteId)).groups).toEqual([]);
+    });
+
+    it("does not offer a deleted group", async () => {
+      const [group] = await db
+        .insert(schema.siteGroups)
+        .values({ name: "GONE", isDeleted: true })
+        .returning({ id: schema.siteGroups.id });
+      await db.insert(schema.siteGroupSites).values({ groupId: group!.id, siteId });
+
+      expect((await repo.deliveryOptions(siteId)).groups).toEqual([]);
+    });
+
+    it("refuses a site that does not exist", async () => {
+      await expect(
+        repo.deliveryOptions("99999999-9999-9999-9999-999999999999"),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

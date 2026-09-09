@@ -1,9 +1,13 @@
 import { Inject, Injectable, NotFoundException, BadRequestException } from "@nestjs/common";
 import { and, count, eq, ilike, inArray, or, sql } from "drizzle-orm";
-import { purchaseOrderTotal } from "@accountmanagement/domain";
+import { deliveryAllocation, purchaseOrderTotal } from "@accountmanagement/domain";
+import { TERMS_TEMPLATE_KEYS } from "@accountmanagement/contracts";
 import type {
   CreatePurchaseOrder,
   ListQuery,
+  PurchaseOrderDeliveryAddressInput,
+  PurchaseOrderDeliveryAddressRow,
+  PurchaseOrderDeliveryOptions,
   PurchaseOrderDetail,
   PurchaseOrderItemRow,
   PurchaseOrderLineInput,
@@ -14,12 +18,17 @@ import { DATABASE, type Database } from "../../db/database";
 import {
   companies,
   items,
+  purchaseOrderDeliveryAddresses,
   purchaseOrderItems,
   purchaseOrders,
+  siteGroupAddresses,
+  siteGroupSites,
+  siteGroups,
   sites,
   suppliers,
   units,
 } from "../../db/schema";
+import { sanitiseTerms } from "../../common/sanitise-terms";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
@@ -61,6 +70,40 @@ const ITEM_LABEL = sql<string>`coalesce(${items.name}, ${purchaseOrderItems.item
 const iso = (value: Date | string | null): string | null =>
   value === null ? null : value instanceof Date ? value.toISOString() : value;
 
+/**
+ * Narrow the stored template to one the contract knows.
+ *
+ * The column is plain text because that is what the source's `nvarchar(100)`
+ * becomes, and because a row imported from a database nobody has extracted yet
+ * may carry anything. An unrecognised value reads as "no template recorded" —
+ * the order keeps its terms and only loses the note about where they started,
+ * which is the harmless half of the pair.
+ */
+const templateKey = (value: string | null): PurchaseOrderDetail["termsTemplate"] =>
+  TERMS_TEMPLATE_KEYS.includes(value as never)
+    ? (value as PurchaseOrderDetail["termsTemplate"])
+    : null;
+
+/**
+ * One line of address from the columns a site actually has.
+ *
+ * The legacy version is `Address + " , " + Area + ", " + City + ", " + State +
+ * ", " + Country` — string concatenation with no null handling at all, so a site
+ * missing its area reads ", , Surat," with the gap left in. Empty parts are
+ * dropped here, and null comes back when there is nothing to compose, because
+ * an address of ", ," is not an address and should not be offered as one.
+ *
+ * City, state and country are absent by necessity, not by choice: they are bare
+ * integer ids with no lookup table until the census runs (PLAN.md §1.4).
+ */
+const composeAddress = (...parts: (string | null)[]): string | null => {
+  const line = parts
+    .map((part) => part?.trim() ?? "")
+    .filter((part) => part.length > 0)
+    .join(", ");
+  return line.length > 0 ? line : null;
+};
+
 const HEADER_COLUMNS = {
   id: purchaseOrders.id,
   poNo: purchaseOrders.poNo,
@@ -72,6 +115,7 @@ const HEADER_COLUMNS = {
   deliveryDate: purchaseOrders.deliveryDate,
   deliveryImmediate: purchaseOrders.deliveryImmediate,
   terms: purchaseOrders.terms,
+  termsTemplate: purchaseOrders.termsTemplate,
   description: purchaseOrders.description,
   billingAddress: purchaseOrders.billingAddress,
   groupAddress: purchaseOrders.groupAddress,
@@ -256,6 +300,103 @@ export class PurchaseOrdersRepository extends BaseRepository {
     return rows;
   }
 
+  /**
+   * The order's delivery addresses, both panels' worth, in the order they were
+   * keyed.
+   *
+   * One query for both kinds, because they are one list in the source and one
+   * table here. The screen splits them by `kind` for display; the storage does
+   * not need to know that.
+   */
+  private async deliveries(
+    purchaseOrderId: string,
+  ): Promise<PurchaseOrderDeliveryAddressRow[]> {
+    const rows = await this.db
+      .select({
+        id: purchaseOrderDeliveryAddresses.id,
+        kind: purchaseOrderDeliveryAddresses.kind,
+        address: purchaseOrderDeliveryAddresses.address,
+        quantity: purchaseOrderDeliveryAddresses.quantity,
+        lineNumber: purchaseOrderDeliveryAddresses.lineNumber,
+      })
+      .from(purchaseOrderDeliveryAddresses)
+      .where(eq(purchaseOrderDeliveryAddresses.purchaseOrderId, purchaseOrderId))
+      .orderBy(purchaseOrderDeliveryAddresses.lineNumber);
+
+    return rows.map((row) => ({ ...row, kind: row.kind === "group" ? "group" : "site" }));
+  }
+
+  /**
+   * What the two address panels offer for a given site.
+   *
+   * The site's own addresses and every group that site belongs to, with each
+   * group's addresses, in one query pair — see the contract for why they are not
+   * three separate endpoints.
+   *
+   * NO `group.view` PERMISSION IS INVOLVED, deliberately, and for the reason
+   * §5h gives about `/sites/assignable`: `group.view` guards the site group
+   * MASTER screen. A clerk who may raise a purchase order but not administer
+   * groups would otherwise get an empty Group dropdown they cannot save past.
+   * The route is guarded by `purchase-orders.view`, which is the right that
+   * gets you to this screen at all.
+   */
+  async deliveryOptions(siteId: string): Promise<PurchaseOrderDeliveryOptions> {
+    const [site] = await this.db
+      .select({
+        address: sites.address,
+        area: sites.area,
+        pincode: sites.pincode,
+        shippingAddress: sites.shippingAddress,
+        shippingArea: sites.shippingArea,
+        shippingPincode: sites.shippingPincode,
+      })
+      .from(sites)
+      .where(and(eq(sites.id, siteId), eq(sites.isDeleted, false)))
+      .limit(1);
+
+    if (!site) {
+      throw new NotFoundException("Site not found");
+    }
+
+    /**
+     * Shipping first, because that is what the panel is for. Deduplicated,
+     * because a site whose shipping address equals its main address would
+     * otherwise offer the same line twice and a user ticking both would allocate
+     * the same delivery to one place under two rows.
+     */
+    const siteAddresses = [
+      composeAddress(site.shippingAddress, site.shippingArea, site.shippingPincode),
+      composeAddress(site.address, site.area, site.pincode),
+    ].filter((address, index, all): address is string => address !== null && all.indexOf(address) === index);
+
+    /**
+     * The groups this site is in, each with its addresses.
+     *
+     * `array_agg` with a LEFT JOIN, so a group with no addresses still appears —
+     * it is a real group and the Group select must be able to name it. The
+     * filter on the aggregate is what keeps a null from the outer join becoming
+     * an empty-string address in the list.
+     */
+    const groups = await this.db
+      .select({
+        id: siteGroups.id,
+        name: siteGroups.name,
+        addresses: sql<string[]>`coalesce(
+          array_agg(${siteGroupAddresses.address} order by ${siteGroupAddresses.address})
+            filter (where ${siteGroupAddresses.address} is not null),
+          '{}'
+        )`,
+      })
+      .from(siteGroups)
+      .innerJoin(siteGroupSites, eq(siteGroupSites.groupId, siteGroups.id))
+      .leftJoin(siteGroupAddresses, eq(siteGroupAddresses.groupId, siteGroups.id))
+      .where(and(eq(siteGroupSites.siteId, siteId), eq(siteGroups.isDeleted, false)))
+      .groupBy(siteGroups.id, siteGroups.name)
+      .orderBy(siteGroups.name);
+
+    return { siteAddresses, groups };
+  }
+
   async findById(id: string): Promise<PurchaseOrderDetail> {
     const [header] = await this.db
       .select(HEADER_COLUMNS)
@@ -267,13 +408,56 @@ export class PurchaseOrdersRepository extends BaseRepository {
       throw new NotFoundException("Purchase order not found");
     }
 
+    const [items, deliveryAddresses] = await Promise.all([this.lines(id), this.deliveries(id)]);
+
     return {
       ...header,
+      termsTemplate: templateKey(header.termsTemplate),
       documentDate: iso(header.documentDate),
       deliveryDate: iso(header.deliveryDate),
       createdAt: iso(header.createdAt) as string,
-      items: await this.lines(id),
+      items,
+      deliveryAddresses,
     };
+  }
+
+  /**
+   * Refuse an allocation that sends out more than was ordered.
+   *
+   * The rule is the source's; the arithmetic is `deliveryAllocation.allocate`,
+   * which sums BOTH panels together where the source keeps two independent
+   * counters and lets an order be delivered twice over. See that module for the
+   * defect and why the departure is deliberate.
+   *
+   * Checked on the server even though the form checks it too. The form's version
+   * is a courtesy that stops a save being attempted; this one is the rule.
+   */
+  private guardAllocation(
+    addresses: readonly PurchaseOrderDeliveryAddressInput[],
+    orderedQuantity: string,
+  ): void {
+    const message = deliveryAllocation.allocationError(
+      deliveryAllocation.allocate(addresses, orderedQuantity),
+    );
+    if (message) {
+      throw new BadRequestException(message);
+    }
+  }
+
+  /** The delivery rows as they are stored, numbered by their position. */
+  private deliveryRows(
+    addresses: readonly PurchaseOrderDeliveryAddressInput[],
+    purchaseOrderId: string,
+    actorId: string,
+  ) {
+    return addresses.map((address, index) => ({
+      purchaseOrderId,
+      kind: address.kind,
+      address: address.address,
+      quantity: address.quantity,
+      lineNumber: index + 1,
+      ...createdBy(actorId),
+    }));
   }
 
   /**
@@ -351,6 +535,12 @@ export class PurchaseOrdersRepository extends BaseRepository {
     const now = new Date();
     const { totals, rows } = this.priced(input.items);
 
+    // Both before the transaction opens: neither needs the database, and a
+    // rejection here costs no document number. `nextDocumentNumber` increments a
+    // counter, so a request that was always going to fail should fail before it.
+    this.guardAllocation(input.deliveryAddresses, totals.totalQuantity);
+    const terms = sanitiseTerms(input.terms);
+
     const id = await writing(() =>
       this.db.transaction(async (tx) => {
         const handle = tx as unknown as Database;
@@ -363,12 +553,13 @@ export class PurchaseOrdersRepository extends BaseRepository {
           now,
         });
 
-        const { items: _lines, ...header } = input;
+        const { items: _lines, deliveryAddresses, ...header } = input;
 
         const [created] = await tx
           .insert(purchaseOrders)
           .values({
             ...header,
+            terms,
             poNo,
             documentDate: header.documentDate ? new Date(header.documentDate) : null,
             deliveryDate: header.deliveryDate ? new Date(header.deliveryDate) : null,
@@ -384,6 +575,12 @@ export class PurchaseOrdersRepository extends BaseRepository {
         await tx
           .insert(purchaseOrderItems)
           .values(rows.map((row) => ({ ...row, purchaseOrderId: orderId, ...createdBy(actorId) })));
+
+        if (deliveryAddresses.length > 0) {
+          await tx
+            .insert(purchaseOrderDeliveryAddresses)
+            .values(this.deliveryRows(deliveryAddresses, orderId, actorId));
+        }
 
         return orderId;
       }),
@@ -408,7 +605,36 @@ export class PurchaseOrdersRepository extends BaseRepository {
     actorId: string,
   ): Promise<PurchaseOrderDetail> {
     const now = new Date();
-    const { items: lines, ...header } = input;
+    const { items: lines, deliveryAddresses, ...header } = input;
+
+    /**
+     * WHAT THE ALLOCATION IS CHECKED AGAINST WHEN ONLY ONE HALF IS SENT.
+     *
+     * The two are independent partial updates: a caller may send new delivery
+     * addresses without touching the lines, or new lines without touching the
+     * addresses. Either way the rule is about the pair, so the half that was not
+     * sent has to be read back rather than assumed.
+     *
+     * Editing the lines alone is the case that would otherwise slip through:
+     * halving the quantity on an order that is fully allocated leaves the
+     * deliveries adding up to twice what is now ordered, and nothing in the
+     * request mentions an address.
+     */
+    if (deliveryAddresses !== undefined || lines !== undefined) {
+      const ordered =
+        lines !== undefined
+          ? this.priced(lines).totals.totalQuantity
+          : purchaseOrderTotal.compute(
+              (await this.lines(id)).map((line) => ({
+                unitPrice: line.unitPrice,
+                quantity: line.quantity,
+                gstPercent: line.gstPercent ?? undefined,
+              })),
+            ).totalQuantity;
+
+      const addresses = deliveryAddresses ?? (await this.deliveries(id));
+      this.guardAllocation(addresses, ordered);
+    }
 
     await writing(() =>
       this.db.transaction(async (tx) => {
@@ -419,6 +645,11 @@ export class PurchaseOrdersRepository extends BaseRepository {
         }
         if (header.deliveryDate !== undefined) {
           patch.deliveryDate = header.deliveryDate ? new Date(header.deliveryDate) : null;
+        }
+        // `undefined` means "not sent" and must not become a null column; the
+        // sanitiser turns an emptied editor into null, which IS a value to write.
+        if (header.terms !== undefined) {
+          patch.terms = sanitiseTerms(header.terms);
         }
 
         if (lines !== undefined) {
@@ -433,6 +664,30 @@ export class PurchaseOrdersRepository extends BaseRepository {
             .values(
               rows.map((row) => ({ ...row, purchaseOrderId: id, ...createdBy(actorId) })),
             );
+        }
+
+        /**
+         * Replaced wholesale, for the same reason the lines are: the panels have
+         * no stable client-side row identity, so a partial update cannot say
+         * which address it means.
+         *
+         * The source instead matches existing rows BY ADDRESS TEXT and deletes
+         * whatever is not in the posted list (`PurchaseOrderRepo.cs:776-808`),
+         * which has two consequences it does not intend. Two addresses that are
+         * the same string collapse into one row, and a group address stored with
+         * the `"Group-"` prefix never matches the unprefixed string posted back,
+         * so it is deleted and reinserted on every save.
+         */
+        if (deliveryAddresses !== undefined) {
+          await tx
+            .delete(purchaseOrderDeliveryAddresses)
+            .where(eq(purchaseOrderDeliveryAddresses.purchaseOrderId, id));
+
+          if (deliveryAddresses.length > 0) {
+            await tx
+              .insert(purchaseOrderDeliveryAddresses)
+              .values(this.deliveryRows(deliveryAddresses, id, actorId));
+          }
         }
 
         const [updated] = await tx

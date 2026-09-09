@@ -71,7 +71,7 @@ export function FormDialog({
         event.preventDefault();
         onSubmit();
       }}
-      className="space-y-5"
+      className="space-y-4"
     >
       {formError && <Alert tone="danger">{formError}</Alert>}
       {children}

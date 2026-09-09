@@ -110,6 +110,7 @@ export function InvoiceLineGrid({
   lineError,
   onAdd,
   onRemove,
+  onItemChosen,
   footerNote,
 }: {
   /** `useFieldArray`'s fields — only the key is used here. */
@@ -133,6 +134,8 @@ export function InvoiceLineGrid({
   lineError: (index: number, field: InvoiceLineField) => string | undefined;
   onAdd: () => void;
   onRemove: (index: number) => void;
+  /** Clear that line's free-text name — the caller owns `setValue`. */
+  onItemChosen?: (index: number) => void;
   footerNote?: ReactNode;
 }) {
   return (
@@ -165,16 +168,36 @@ export function InvoiceLineGrid({
                     options={itemChoices}
                     error={lineError(index, "itemId")}
                     {...register(`items.${index}.itemId`)}
+                    onChange={(event) => {
+                      void register(`items.${index}.itemId`).onChange(event);
+                      // Choosing a catalogue item clears the free text. React
+                      // Hook Form keeps an unmounted field's value, so without
+                      // this a name typed before an item was picked would be
+                      // submitted beside it and contradict the item the line
+                      // actually references.
+                      if (event.target.value) onItemChosen?.(index);
+                    }}
                   />
-                  <div className="mt-1">
-                    <TextField
-                      label={`Or name the product on line ${index + 1}`}
-                      labelHidden
-                      placeholder="…or type a name"
-                      error={lineError(index, "itemName")}
-                      {...register(`items.${index}.itemName`)}
-                    />
-                  </div>
+                  {/*
+                    THE FREE-TEXT NAME APPEARS ONLY WHEN NO ITEM IS CHOSEN,
+                    which is the only time it does anything.
+
+                    It used to sit under every row, so each line was two controls
+                    tall whether it needed one or not — and this grid carries
+                    eight columns, so that height is paid on the widest form in
+                    the application.
+                  */}
+                  {!lines?.[index]?.itemId && (
+                    <div className="mt-1">
+                      <TextField
+                        label={`Or name the product on line ${index + 1}`}
+                        labelHidden
+                        placeholder="…or type a name"
+                        error={lineError(index, "itemName")}
+                        {...register(`items.${index}.itemName`)}
+                      />
+                    </div>
+                  )}
                 </td>
                 <td className="py-2 pr-2">
                   <TextField

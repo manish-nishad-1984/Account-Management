@@ -148,6 +148,7 @@ export function SalesInvoiceFormDialog({
     handleSubmit,
     reset,
     setError,
+    setValue,
     watch,
     control,
     formState: { errors },
@@ -319,6 +320,7 @@ export function SalesInvoiceFormDialog({
               lineError={(index, field) => errors.items?.[index]?.[field]?.message}
               onAdd={() => append(EMPTY_LINE)}
               onRemove={remove}
+              onItemChosen={(index) => setValue(`items.${index}.itemName`, "")}
               footerNote={
                 itemsTruncated && (
                   <Alert tone="info">

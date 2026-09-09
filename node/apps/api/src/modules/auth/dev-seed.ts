@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { financialYear, invoiceTotal, purchaseOrderTotal } from "@accountmanagement/domain";
+import { TERMS_TEMPLATES } from "@accountmanagement/contracts";
 import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { InMemoryUserRepository, UserRepository } from "./user.repository";
 import { ENV, type Env } from "../../config/env";
@@ -14,6 +15,7 @@ import {
   purchaseInvoices,
   salesInvoiceItems,
   salesInvoices,
+  purchaseOrderDeliveryAddresses,
   purchaseOrderItems,
   purchaseOrders,
   purchaseRequests,
@@ -130,24 +132,60 @@ export class DevSeed implements OnModuleInit {
       )
       .returning({ id: companies.id, name: companies.name, invoicePrefix: companies.invoicePrefix });
 
+    /**
+     * Held in a variable rather than inlined into the insert, because the
+     * purchase order seed below needs the ADDRESS TEXT to build delivery rows
+     * with — and `returning` only gives back ids. Recomputing the same strings
+     * at the second call site is how the seeded deliveries would come to name
+     * addresses no site actually has.
+     */
+    const siteValues = SITE_NAMES.map((name, i) => ({
+      name,
+      companyId: insertedCompanies[i % insertedCompanies.length]!.id,
+      isActive: i % 9 !== 0,
+      contactPersonName:
+        FIRST_NAMES[i % FIRST_NAMES.length] + " " + LAST_NAMES[i % LAST_NAMES.length],
+      contactPersonPhoneNo: "97" + String(20000000 + i),
+      // The AREA is its own column and is appended by anything that composes a
+      // full address, so repeating it here put "Navrangpura, Navrangpura" in the
+      // purchase order's delivery address list. Right code, seed data that made
+      // it look wrong — the §5q failure mode again.
+      address: "Plot " + (10 + i),
+      area: AREAS[i % AREAS.length]!,
+      cityId: 1 + (i % 5),
+      stateId: 24,
+      countryId: 1,
+      pincode: String(380001 + i),
+
+      /**
+       * A SEPARATE shipping address on two sites in three, and none on the
+       * third.
+       *
+       * The purchase order's Shipping Addresses panel composes its options from
+       * these columns, so a seed that filled them everywhere would hide the case
+       * a real site office hits most — nothing recorded, and a panel that has to
+       * say so. Seeding both states is what makes the panel's own empty message
+       * reachable without editing a row by hand.
+       */
+      shippingAddress: i % 3 === 0 ? null : "Gate " + (1 + (i % 4)) + ", loading yard",
+      shippingArea: i % 3 === 0 ? null : AREAS[(i + 2) % AREAS.length]!,
+      shippingPincode: i % 3 === 0 ? null : String(390001 + i),
+    }));
+
+    /** The same composition the delivery options endpoint does, for the seed. */
+    const siteAddressLines = (i: number): string[] => {
+      const site = siteValues[i]!;
+      const compose = (...parts: (string | null)[]) =>
+        parts.filter((part): part is string => Boolean(part)).join(", ");
+      return [
+        compose(site.shippingAddress, site.shippingArea, site.shippingPincode),
+        compose(site.address, site.area, site.pincode),
+      ].filter((line, index, all) => line !== "" && all.indexOf(line) === index);
+    };
+
     const insertedSites = await db
       .insert(sites)
-      .values(
-        SITE_NAMES.map((name, i) => ({
-          name,
-          companyId: insertedCompanies[i % insertedCompanies.length]!.id,
-          isActive: i % 9 !== 0,
-          contactPersonName:
-            FIRST_NAMES[i % FIRST_NAMES.length] + " " + LAST_NAMES[i % LAST_NAMES.length],
-          contactPersonPhoneNo: "97" + String(20000000 + i),
-          address: "Plot " + (10 + i) + ", " + AREAS[i % AREAS.length],
-          area: AREAS[i % AREAS.length]!,
-          cityId: 1 + (i % 5),
-          stateId: 24,
-          countryId: 1,
-          pincode: String(380001 + i),
-        })),
-      )
+      .values(siteValues)
       .returning({ id: sites.id, name: sites.name });
 
     // Groups own their sites and their addresses independently — the shape SQL
@@ -499,6 +537,7 @@ export class DevSeed implements OnModuleInit {
     const ordersPerCompany = 4;
     const orderRows: (typeof purchaseOrders.$inferInsert)[] = [];
     const orderLineRows: (typeof purchaseOrderItems.$inferInsert)[] = [];
+    const orderAddressRows: (typeof purchaseOrderDeliveryAddresses.$inferInsert)[] = [];
 
     /**
      * How many orders have already been placed at each site.
@@ -550,10 +589,44 @@ export class DevSeed implements OnModuleInit {
           })),
         );
 
+        /**
+         * DELIVERY ADDRESSES, on two orders in three AT EVERY SITE.
+         *
+         * KEYED OFF `seqAtSite`, NOT `offset`, and that is the whole point. The
+         * list is site-scoped, so what has to vary is the orders WITHIN one
+         * site — and `offset % 3` cannot vary there, because the site is
+         * `offset % 45` and **3 divides 45**. Every order at a given site lands
+         * on the same remainder, so a third of all sites would show no delivery
+         * address on any order, ever, and the panel would look like it had
+         * failed to load. §5r found exactly this arithmetic twice; a per-site
+         * counter cannot have the defect by construction.
+         *
+         * Allocated to the FIRST site address only, and to the whole ordered
+         * quantity, so every seeded order satisfies the rule the form enforces.
+         * A seed that over-allocated would make every existing order refuse to
+         * save the moment somebody opened and edited it — right code, data that
+         * makes it look broken.
+         *
+         * Group addresses are deliberately not seeded: a group's addresses
+         * belong to the group, not to the order's site, and pairing them here
+         * would state a relationship the data does not have.
+         */
+        const addressLines = seqAtSite % 3 === 0 ? [] : siteAddressLines(siteIndex).slice(0, 1);
+        addressLines.forEach((address, a) => {
+          orderAddressRows.push({
+            purchaseOrderId: orderId,
+            kind: "site",
+            address,
+            quantity: totals.totalQuantity,
+            lineNumber: a + 1,
+            createdBy: admin.id,
+          });
+        });
+
         orderRows.push({
           id: orderId,
           poNo: `${company.invoicePrefix}/PO/${financialYearLabel}/${String(seq).padStart(3, "0")}`,
-          siteId: insertedSites[offset % insertedSites.length]!.id,
+          siteId: insertedSites[siteIndex]!.id,
           supplierId: insertedSuppliers[offset % insertedSuppliers.length]!.id,
           companyId: company.id,
           documentDate: new Date(Date.UTC(2026, 7, ((offset * 5) % 27) + 1)),
@@ -567,6 +640,24 @@ export class DevSeed implements OnModuleInit {
           contactNumber: "9825012345",
           dispatchBy: offset % 2 === 0 ? "Road" : "Rail",
           paymentTerms: "30 days from invoice",
+
+          /**
+           * TERMS FROM A ROTATING TEMPLATE, and none on every fourth order.
+           *
+           * `seqAtSite` again, for the reason above: the template index is
+           * `% 3` and the site is `% 45`, so keying it off `offset` would give
+           * every order at a site the same template and the editor would look
+           * stuck on one tab wherever you were scoped. Measured after seeding
+           * rather than reasoned about — that is what settled it last time.
+           *
+           * Stored HTML, exactly as the sanitiser would leave it: the templates
+           * are already inside the allowlist, which `purchase-order-terms.test.ts`
+           * pins. The order with no terms proves an empty editor renders as
+           * empty rather than as broken.
+           */
+          terms: seqAtSite % 4 === 3 ? null : TERMS_TEMPLATES[seqAtSite % 3]!.html,
+          termsTemplate: seqAtSite % 4 === 3 ? null : TERMS_TEMPLATES[seqAtSite % 3]!.key,
+
           subtotal: totals.subtotal,
           totalGstAmount: totals.totalGst,
           totalAmount: totals.grandTotal,
@@ -601,6 +692,9 @@ export class DevSeed implements OnModuleInit {
 
     await db.insert(purchaseOrders).values(orderRows);
     await db.insert(purchaseOrderItems).values(orderLineRows);
+    if (orderAddressRows.length > 0) {
+      await db.insert(purchaseOrderDeliveryAddresses).values(orderAddressRows);
+    }
 
     await db.insert(documentCounters).values(
       insertedCompanies.map((company) => ({
@@ -1042,6 +1136,7 @@ export class DevSeed implements OnModuleInit {
       ["site_groups", siteGroups as unknown as Record<string, unknown>],
       ["site_group_sites", siteGroupSites as unknown as Record<string, unknown>],
       ["site_group_addresses", siteGroupAddresses as unknown as Record<string, unknown>],
+      ["purchase_order_delivery_addresses", purchaseOrderDeliveryAddresses as unknown as Record<string, unknown>],
       ["user_sites", userSites as unknown as Record<string, unknown>],
       ["user_companies", userCompanies as unknown as Record<string, unknown>],
       ["user_form_permissions", userFormPermissions as unknown as Record<string, unknown>],

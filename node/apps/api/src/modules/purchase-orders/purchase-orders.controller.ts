@@ -22,6 +22,7 @@ import {
   type BulkApprovalResult,
   type CreatePurchaseOrder,
   type ListResponse,
+  type PurchaseOrderDeliveryOptions,
   type PurchaseOrderDetail,
   type PurchaseOrderRow,
   type SetApproval,
@@ -94,6 +95,15 @@ const filterSchema = z.object({
 
 const listRequestSchema = listQuerySchema.and(filterSchema);
 
+/**
+ * The site is REQUIRED, not optional.
+ *
+ * Both panels are about one site. Defaulting to "every site" would offer a user
+ * every group and every address in the business to tick against one order, which
+ * is a worse answer than an error.
+ */
+const deliveryOptionsQuerySchema = z.object({ siteId: z.string().uuid() });
+
 @Controller("purchase-orders")
 export class PurchaseOrdersController {
   constructor(private readonly orders: PurchaseOrdersRepository) {}
@@ -129,6 +139,30 @@ export class PurchaseOrdersController {
       nextCursor: page.nextCursor,
       total,
     };
+  }
+
+  /**
+   * The addresses the two delivery panels offer for a site, and the groups that
+   * site belongs to.
+   *
+   * Guarded by `purchase-orders.view` rather than by `group.view` or
+   * `site.view`, for the reason §5h records about `/sites/assignable`: those are
+   * the rights that guard the MASTER screens, and requiring one here would give
+   * a clerk who may raise an order an empty Group dropdown they cannot save
+   * past.
+   *
+   * A static segment beside `:id`. Fastify's radix tree prefers the static route
+   * whatever the declaration order — verified with `printRoutes()` when
+   * `sites/assignable` was added — so this sits above `:id` for reading, not for
+   * correctness.
+   */
+  @Get("delivery-options")
+  @Permissions("purchase-orders.view")
+  deliveryOptions(
+    @Query(new ZodValidationPipe(deliveryOptionsQuerySchema))
+    query: ReturnType<typeof deliveryOptionsQuerySchema.parse>,
+  ): Promise<PurchaseOrderDeliveryOptions> {
+    return this.orders.deliveryOptions(query.siteId);
   }
 
   @Get(":id")

@@ -151,6 +151,7 @@ export function PurchaseInvoiceFormDialog({
     handleSubmit,
     reset,
     setError,
+    setValue,
     watch,
     control,
     formState: { errors },
@@ -358,6 +359,7 @@ export function PurchaseInvoiceFormDialog({
               lineError={(index, field) => errors.items?.[index]?.[field]?.message}
               onAdd={() => append(EMPTY_LINE)}
               onRemove={remove}
+              onItemChosen={(index) => setValue(`items.${index}.itemName`, "")}
               footerNote={
                 itemsTruncated && (
                   <Alert tone="info">

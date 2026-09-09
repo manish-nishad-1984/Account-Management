@@ -3,6 +3,7 @@ import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react
 import { forwardRef } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Loader2 } from "lucide-react";
+import { CONTROL_BASE, LABEL_BASE, MESSAGE_BASE, ringFor } from "./fields";
 
 export function Card({
   children,
@@ -17,7 +18,7 @@ export function Card({
     <div
       className={clsx(
         "rounded-xl border border-slate-200/80 bg-white shadow-card",
-        padded && "p-5",
+        padded && "p-4",
         className,
       )}
     >
@@ -36,7 +37,7 @@ export function CardHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-4 flex items-start justify-between gap-3">
+    <div className="mb-3 flex items-start justify-between gap-3">
       <div>
         <h2 className="heading text-sm">{title}</h2>
         {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
@@ -56,9 +57,9 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h1 className="heading text-2xl">{title}</h1>
+        <h1 className="heading text-xl">{title}</h1>
         {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}
@@ -100,7 +101,7 @@ export const Button = forwardRef<
       ref={ref}
       disabled={disabled || loading}
       className={clsx(
-        "inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2",
+        "inline-flex items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5",
         "text-sm font-medium transition-all duration-150",
         "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
         "disabled:cursor-not-allowed",
@@ -149,15 +150,15 @@ export const TextField = forwardRef<
     <div className={className}>
       <label
         htmlFor={inputId}
-        className={labelHidden ? "sr-only" : "block text-sm font-medium text-slate-700"}
+        className={labelHidden ? "sr-only" : LABEL_BASE}
       >
         {label}
       </label>
-      <div className="relative mt-1.5">
+      <div className={clsx("relative", !labelHidden && "mt-1")}>
         {Icon && (
           <Icon
             aria-hidden
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
+            className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400"
           />
         )}
         <input
@@ -165,22 +166,18 @@ export const TextField = forwardRef<
           id={inputId}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${inputId}-error` : undefined}
-          className={clsx(
-            "block w-full rounded-lg border-0 py-2.5 text-sm text-slate-900",
-            "shadow-sm ring-1 ring-inset transition-shadow placeholder:text-slate-400",
-            "focus:ring-2 focus:ring-inset focus:ring-brand-500",
-            Icon ? "pl-9 pr-3" : "px-3",
-            error ? "ring-rose-400 focus:ring-rose-500" : "ring-slate-300",
-          )}
+          // The same three constants the select and the textarea use, so a row
+          // of mixed controls lines up. See `fields.tsx` for the density scale.
+          className={clsx(CONTROL_BASE, ringFor(error), Icon ? "pl-8 pr-2.5" : "px-2.5")}
           {...rest}
         />
       </div>
       {error ? (
-        <p id={`${inputId}-error`} className="mt-1.5 text-xs font-medium text-rose-600">
+        <p id={`${inputId}-error`} className={clsx(MESSAGE_BASE, "font-medium text-rose-600")}>
           {error}
         </p>
       ) : hint ? (
-        <p className="mt-1.5 text-xs text-slate-500">{hint}</p>
+        <p className={clsx(MESSAGE_BASE, "text-slate-500")}>{hint}</p>
       ) : null}
     </div>
   );
@@ -270,7 +267,7 @@ export function Alert({
     <div
       role="alert"
       className={clsx(
-        "flex items-start gap-2 rounded-lg px-3 py-2.5 text-sm ring-1 ring-inset",
+        "flex items-start gap-2 rounded-md px-2.5 py-2 text-[13px] leading-5 ring-1 ring-inset",
         BADGE_STYLES[tone],
         className,
       )}

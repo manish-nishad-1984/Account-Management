@@ -9,7 +9,7 @@
 ## Why you are reading this
 
 We are rebuilding Account Book on newer technology. Before we write the parts that
-handle money, we need decisions on **thirteen points** where the current system does
+handle money, we need decisions on **fourteen points** where the current system does
 something we cannot safely guess about.
 
 Most of these are places where the software today does something that looks like a
@@ -539,6 +539,40 @@ separate approval like hand-entered ones do?
 
 ---
 
+## Question 14 — A purchase order can be sent out twice over
+
+**What we found.** On the Create Purchase Order screen there are two lists of
+delivery addresses side by side: the site's own addresses, and the addresses of
+the chosen group. You tick the places the goods are going and type how much goes
+to each.
+
+The screen checks that you have not sent out more than you ordered — but it
+**checks each list separately**. So an order for 100 tonnes is accepted with 100
+tonnes going to the site's addresses and another 100 tonnes going to the group's:
+200 tonnes of deliveries against 100 tonnes ordered, saved without a word, and
+both halves printed on the same order.
+
+**Why it matters.** It is not a display problem. Those quantities are what tells
+a supplier how much to send where, and the printed order carries both halves. We
+have no way from here to tell how often it has happened; the check being there at
+all says somebody meant the total to be right.
+
+**What we have done.** The new screen adds the two lists together and compares
+the total once — the same rule, applied to the number it was always about. It
+also shows you the running total as you type, so you can see it before you save
+rather than being told afterwards.
+
+**What we need to know.** This means the new screen will **refuse a save the old
+one accepted**. That only happens when both lists are used on one order. If there
+is a reason the two lists were meant to be counted separately — if they are two
+different deliveries of the same order, say, rather than two destinations for one
+— we need to know, because then the new check is wrong and we will take it out.
+
+> **Decision:** ☐ Adding them together is right, keep the new check  ☐ The two
+> lists are separate on purpose — explain  ☐ Discuss
+
+---
+
 # Summary sheet
 
 | # | Question | Blocks work? | Decision |
@@ -557,12 +591,17 @@ separate approval like hand-entered ones do?
 | 11 | Who can edit suppliers, and who can APPROVE suppliers and items | Before cutover | |
 | 12 | Record over the list, or beside it | **Gets dearer weekly** | |
 | 13 | Does uploading a spreadsheet approve the items? | No | |
+| 14 | **A purchase order can be sent out twice over** — should the two delivery lists be added together? | Changes what saves | |
 
 **Updated 9 Sep 2026.** The invoicing rebuild is no longer waiting on these — the
 purchase invoice and sales invoice screens are both built, and both calculate
 correctly. What questions 1, 1a and 2 now decide is **what happens to the
 invoices you have already issued**, and question 3 still blocks the supplier
 balance reports.
+
+**Question 14 is new on 9 Sep 2026** and is the only one here that changes what
+the new system will let you SAVE, so it wants an answer before cutover rather
+than before the reports.
 
 **Question 2 is still the one to act on first**, because it may affect data that
 is being created right now, and every day it goes unanswered adds documents to
@@ -590,3 +629,4 @@ whatever the answer turns out to cover.
 | 12 | `legacy-screens/PLAN.md` §1.2; `contexts/RecordLayoutContext.tsx` |
 | 11 | `SESSION-HANDOFF.md` §5b decision 1 and §5p; finding C-6; `legacy-screens/01-dashboard.md` |
 | 13 | `SESSION-HANDOFF.md` §5o; `modules/items/item-sheet.service.ts` `toCreateItem` |
+| 14 | `SESSION-HANDOFF.md` §5s; `packages/domain/src/delivery-allocation.ts`; `PurchaseRequestScript.js:964-1006`; `legacy-screens/08-create-purchase-order.md` |

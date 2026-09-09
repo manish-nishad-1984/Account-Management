@@ -43,6 +43,34 @@ Two panels, empty until a site and group are chosen. The Group Address list come
 from the chosen group's "Multiple Group Address" repeater — see
 `04-group-master.md`.
 
+> **CORRECTED 9 Sep 2026, by reading the view rather than the screenshot.** These
+> are not display panels. Each row is a **checkbox and a quantity box**, and the
+> ticked rows post as ONE list into ONE table, `PodeliveryAddress` — so an order
+> allocates its quantity across the places it is delivered to.
+>
+> Three things the capture could not show, all now in
+> `packages/domain/src/delivery-allocation.ts` and the schema:
+>
+> 1. **Which panel a row came from is a string prefix.**
+>    `PurchaseRequestScript.js:1003` posts a group address as
+>    `'Group-' + address`, and the view strips it with
+>    `Address.Replace("Group-", "")` — which removes the marker from ANY
+>    position, so "Ward 3, Group-B" displays as "Ward 3, B". `kind` is a column
+>    in the port.
+> 2. **The quantity check is per panel, so an order can be delivered twice.**
+>    `totalShippingQuantity` and `totalGroupQuantity` are separate accumulators,
+>    each compared to the ordered quantity on its own. 100 to site addresses and
+>    100 to group addresses passes against an order for 100. The port sums them
+>    together — a departure, flagged for sign-off.
+> 3. **`PodeliveryAddress.Quantity` is an `int`** while the browser collects it
+>    with `parseFloat` and every line quantity is decimal, so 2.5 tonnes cannot
+>    be allocated. `numeric` in the port.
+>
+> Also: the header's own `GroupAddress` column is filled with
+> `$('input[name="selectedPOGroupAddress"]:checked').val()`, and jQuery's `.val()`
+> on a set returns only the FIRST value — so the header records one address while
+> the detail rows carry all of them.
+
 ### Select Terms and Conditions
 **Three tabbed templates** (Template 1/2/3) over a **rich text editor** with a
 full toolbar: paragraph style, bold, italic, link, bullet and numbered lists,
@@ -50,6 +78,25 @@ indent/outdent, image, blockquote, table, embed, undo/redo.
 
 Template 1 in the capture is an 8-clause boilerplate: prices, packing, freight,
 tax ("18% Gst Extra"), delivery, payment terms, validity of offer, warranty.
+
+> **CORRECTED 9 Sep 2026. The templates are not stored anywhere.** All three are
+> hard-coded in this view, one per tab pane (`:704-855`), and no screen edits
+> them — changing a template means changing the Razor and redeploying. They are
+> constants in `contracts/purchase-order-terms.ts` for exactly that reason.
+>
+> **The column is `PaymentTerms`, not `Terms`.** The editor's HTML posts as
+> `PaymentTerms` and the chosen tab as `PaymentTermsId` ("Term-1"/"Term-2"/
+> "Term-3"). Nothing on this screen binds to `Terms` at all, and the "Payment
+> Terms" text input that would explain the name is **commented out** (`:427-436`).
+> The ETL must load legacy `PaymentTerms` into `purchase_orders.terms`.
+>
+> **Only the ACTIVE tab is read on save** (`PurchaseRequestScript.js:1013-1025`),
+> so text typed into either of the other two editors is discarded with no
+> indication. The port has one editor and one set of terms.
+>
+> **And the print view renders it with `@Html.Raw`** (`POPrintDetails.cshtml:406`),
+> so whatever HTML is stored executes for every reader of that order. That is why
+> the port stored plain text until a sanitiser existed.
 
 Final action, bottom right: **Add Purchase Order**.
 

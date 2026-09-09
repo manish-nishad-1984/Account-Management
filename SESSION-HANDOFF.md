@@ -1,15 +1,15 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
 **Written:** 2 September 2026, after the unblocking session. **Last extended
-9 September 2026** (§5r). Supersedes all earlier handoffs of the same name.
+9 September 2026** (§5s). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `c4268864`.** If `git log` shows commits after
+> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
 
 **Sections §3, §4, §8, §10 and §11 describe _now_ and are re-measured on every
-handoff. Sections §5, §5b … §5r are a log of days that already happened and are
+handoff. Sections §5, §5b … §5s are a log of days that already happened and are
 never edited.** If the two disagree, the numbered sections win — run
 `/handoff check` and it will say which have drifted.
 
@@ -35,16 +35,22 @@ only the "planned" nav placeholders for the two invoice screens. The record
 layouts of §5m, the Item Master Excel pair of §5o and the dashboard queues of
 §5p all shipped with it.
 
-**Four commits are built, tested and NOT deployed** — `1212f12a`, `3f863c72`,
-`b296085c`, `17304ea7` (plus `c77268a3`, which touches only skills and this
-file). They are §5r: the purchase order grid fixes, the dialog layout fix, and
-both invoice modules.
+**Five commits are built, tested and NOT deployed** — `1212f12a`, `3f863c72`,
+`b296085c`, `17304ea7` (§5r: the purchase order grid fixes, the dialog layout fix
+and both invoice modules) and `<COMMIT>` (§5s: the purchase order delivery
+addresses, the terms editor with its sanitiser, and a compact pass over every
+form). `c77268a3` is also unshipped and touches only skills and this file.
 
-**Two of them carry migrations — `0009_purchase_invoices` and
-`0010_sales_invoices`** — so this is not a static-only deploy. Read step 5 of
-`/deploy` before shipping it: the migration runner has printed *"Already
-migrated. Nothing to do."* while silently skipping every new migration, and
-`0 applied` after shipping a new one means something is wrong.
+**THREE of them carry migrations — `0009_purchase_invoices`,
+`0010_sales_invoices` and `0011_purchase_order_delivery_addresses`** — so this is
+not a static-only deploy. Read step 5 of `/deploy` before shipping it: the
+migration runner has printed *"Already migrated. Nothing to do."* while silently
+skipping every new migration, and `0 applied` after shipping a new one means
+something is wrong. Expect **`3 applied`** on the next deploy.
+
+**`sanitize-html` is a new runtime dependency of the API** (§5s). `npm ci` on the
+server picks it up from the lockfile, so there is nothing to do by hand — but a
+deploy that skips the install step now ships an API that cannot boot.
 
 **Deploying was offered and not answered**, twice, so it was not done. Nothing
 about it is blocked — no new environment variable and no nginx change — it needs
@@ -107,14 +113,20 @@ AC/
         └── web/                   React 19 + Vite + Tailwind (297 tests)
 ```
 
-**948 tests pass** — 929 Node (37 contracts + 55 domain + 540 API + 297 web)
-plus 19 .NET. The Node figure was **run** at `17304ea7` on 9 Sep 2026, exit 0,
-31 of 31 API files and 28 of 28 web files, zero failures.
+**1074 tests pass** — 1055 Node (63 contracts + 65 domain + 607 API + 320 web)
+plus 19 .NET. The Node figure was **run** on 9 Sep 2026 against the tree that
+became `<COMMIT>`, exit 0, 32 of 32 API files and 29 of 29 web files, zero
+failures.
 
 The 19 .NET tests were **proved rather than run**, which the rule allows and
 which is stated here so nobody mistakes it for a measurement:
 `git diff --name-only 5fdd81f6..HEAD` returns nothing outside `node/` and `.md`,
 and no `.cs`, `.csproj` or `.sln` file has been touched since that suite last ran.
+
+**`npm run typecheck` is clean in every workspace, including the API's test
+files.** It was NOT, on a clean tree, before 9 Sep 2026 — three test files handed
+partial objects to a repository method that wants the contract's output type. See
+§5s; a broken typecheck hides the next real error in it.
 
 > These two figures — here and in §4 — said **310** for five consecutive sessions
 > while the true count more than doubled. Nobody was careless: each session
@@ -162,10 +174,10 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 ## 4. Repository state
 
 Branch **`main`**, working tree clean, pushed to `origin/main`. Builds,
-typechecks, and all **948 tests pass** — 929 Node (37 contracts + 55 domain +
-540 API + 297 web) + 19 .NET.
+typechecks, and all **1074 tests pass** — 1055 Node (63 contracts + 65 domain +
+607 API + 320 web) + 19 .NET.
 
-The Node suite was last measured at **`17304ea7`**, the final code commit of
+The Node suite was last measured at **`<COMMIT>`**, the final code commit of
 9 Sep 2026. Anything after that on `main` is documentation — a handoff always
 commits after its own measurement, so the newest hash is never the one the
 numbers were taken at, and naming it here would be a lie that looks precise.
@@ -188,6 +200,9 @@ The .NET 19 is proved, not run — see §3 for the diff that proves it.
 - **Phase 4 is built.** `6b1164ae`, `1212f12a` and `3f863c72` are the corrections
   that followed the purchase order port — the permission subject, the grid that
   computed nothing, and the dialog layout. All of §5r.
+- `<COMMIT>` closed the two purchase order carve-outs and made every form denser
+  (§5s). It carries migration `0011_purchase_order_delivery_addresses` and the
+  API's first sanitiser dependency.
 - **`main` is pushed to `origin/main`** and the working tree is clean.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
   credential is in the HISTORY, not the working tree. Rotation is the fix.
@@ -1551,11 +1566,12 @@ the screens whose UI is gated on `usePermission`.
 | Blocker | Detail |
 |---|---|
 | **`Migration-Assessment/db-extract/` is empty** | The 3 read-only scripts have never been run. Until then the orphan volume across ~62 unconstrained FK columns is unknown, and no schema can be *finalised*. **This is the binding constraint.** No longer a day in SSMS — it is now one command, `tools/run-db-extract.ps1` (§5c). It still needs the rotated credential. **As of §5o this blocker now stops ordinary feature work, not just schema work:** Supplier's Excel import resolves State and City by NAME against tables that have never been extracted, so it cannot be written until the census runs. |
-| **13 business-rule questions unanswered** | 2-4 week lead time — the longest pole. The money calculator cannot start without them. They are now written to be sent: `Migration-Assessment/19-Business-Decisions-Required.md` (§5c). **The clock does not start until someone sends it.** |
+| **14 business-rule questions unanswered** | 2-4 week lead time — the longest pole. The money calculator cannot start without them. They are now written to be sent: `Migration-Assessment/19-Business-Decisions-Required.md` (§5c). **The clock does not start until someone sends it.** |
 | **Credentials not rotated** | The `sa` account on `srv1925876.hstgr.cloud` is still live, and its password is still in git history in earlier commits of `appsettings.json`. Removing it from the file did not remove it from history. `gitleaks` in CI will fail on the first push, correctly. **Rotation is the fix, not a history rewrite.** |
 | **Which of 3 jQuery money calculators is correct** | **No longer blocks building — it now decides what happens to invoices ALREADY ISSUED.** Doc 19 Question 2. All three screens are built (§5r) and only the purchase invoice was ever genuinely behind B-2; the arithmetic they use is `invoice-total.ts`, derived by running the source rather than reading it. What is unanswered is historical remediation. The Items screen still stores the GST amount as entered rather than deriving it, precisely so this stays an open question rather than being answered by implication. |
 | **Is the whole-rupee rounding deliberate?** | **New — doc 19 Question 1a** (§5r). Every invoice total the system has ever produced is a whole rupee, and exactly 50 paise rounds **DOWN**, in the counterparty's favour. It was in no specification and no assessment; it was found by running the calculator. Reproduced deliberately and defaulted on, because matching history is the safer default — but it should be a choice, and it affects issued documents. |
 | **Record over the list, or beside it** | Doc 19 **Question 12**. Both layouts are built and switchable (§5m), so this is answerable on the real screens in two minutes — it needs a person, not a session. It gets dearer every week: today the answer is one shared change, and every new screen built against the wrong one is another to re-check. **When it comes back, delete the loser and the `RecordLayoutPicker`.** |
+| **Delivery quantities are now checked ACROSS both address panels** | **New — §5s.** The legacy screen keeps one accumulator per panel and compares each to the ordered quantity on its own, so an order for 100 saves with 100 allocated to site addresses and 100 more to group addresses — 200 units of deliveries against 100 ordered, no warning. The port sums them and refuses. It is the rule the source's own error message states, applied to the number it was always about, but it **refuses saves the old screen accepted** and only ever bites when both panels are used on one order. It cannot change an existing order, because nothing recomputes an order that is not being edited. Needs a decision, not code. |
 | **Supplier edit/delete/APPROVE permission change** | The port guards `supplier.edit` and `supplier.delete`; the source guards neither (§5b decision 1). Whoever edits suppliers today needs those boxes ticked before cutover, or they lose the ability. **§5p adds a third right to the same question: `supplier.approve` exists in the port and NO production user holds it**, because supplier approval only ever happened through the source’s single `Dashboard` permission. Until an administrator grants it, the Suppliers queue is read-only on the live database. All three are doc 19 Question 11. Needs a decision, not code. |
 
 ---
@@ -1642,9 +1658,10 @@ are not (see the header).
 its rows currently read:
 
 ```
+DONE     PO delivery addresses + T&C editor   (9 Sep 2026, §5s)
 NOW      master-detail ANSWER             <- with the business, doc 19 Q12
 NEXT     item price history               <- UNBLOCKED: reads purchase invoices
-         PO delivery addresses + T&C editor
+         per-site address list            <- NEW, from §5s; needs the census too
 BLOCKED  Supplier Excel import            <- needs the States/Cities census
 BLOCKED  Reports, payments, supplier balances  <- needs D7 and the payments model
 ```
@@ -1656,11 +1673,21 @@ three, and in doing so **unblocked item price history** — it reads
 `purchase_invoices` and `purchase_invoice_items`, which now exist. It is a query
 and a panel with no business decision behind it.
 
-**Two carve-outs from the purchase order port are deliberately still open**, and
-were said on screen rather than faked: the `PodeliveryAddresses` panels, and the
-terms-and-conditions rich text editor. **The T&C column stays plain text until a
-sanitiser lands with it** — storing the legacy HTML without one is stored XSS on
-the app's own origin.
+**Both purchase order carve-outs closed on 9 Sep 2026 (§5s).** The delivery
+address panels and the terms editor are built, and the terms column now holds
+sanitised HTML rather than plain text. Two things came out of it that change what
+is written elsewhere: the three "templates" were never stored anywhere and are
+constants, and **the legacy column holding the terms is `PaymentTerms`, not
+`Terms`** — an ETL that reads the two names the obvious way round loses every
+imported order's terms.
+
+**A NEW next item, from the same session: the per-site address list.** The legacy
+Shipping Addresses panel reads a `SiteAddresses` TABLE, many rows per site, which
+this port does not have — `sites` carries one main address and one shipping
+address, so at most two are offered where the legacy screen may show several, and
+the geography each address ends with is still bare integer ids. The form says so
+on screen. Building it needs a `site_addresses` table, an editor on the Site
+master, and the census (§1.4).
 
 **The NOW row is not code.** Both layouts are built (§5m); what is missing is a
 decision, and the answer deletes the loser and the switch.
@@ -1726,14 +1753,19 @@ Then, in rough order of value:
   step 2, not before. "No orphan entries" means deciding, per relationship,
   whether an orphan is cleaned, quarantined or rejected — that decision needs the
   counts in front of you.
-- **Deploy §5r, or decide not to.** Four commits and two migrations are waiting
-  (header). It was offered twice and not answered, so it was not done.
+- **Deploy §5r and §5s, or decide not to.** Five commits and THREE migrations are
+  waiting (header), and the API has gained a runtime dependency. It was offered
+  twice and not answered, so it was not done. It grows more expensive to verify
+  the longer it waits, because one deploy now covers three modules and a schema
+  change rather than one of each.
 - **Item price history** — the PLAN.md NEXT row, and newly unblocked by the
   purchase invoice tables (§5r). Everything the legacy partial renders now has a
   column behind it: `displayNo`, the supplier and site joins, `document_date`,
   and `unit_price` / `gst_amount` / `line_total`.
-- **The two purchase order carve-outs** — delivery addresses, and the T&C editor
-  **with a sanitiser**, never without one.
+- **The per-site address list** — a `site_addresses` table, an editor for it on
+  the Site master, and the city/state/country names each address ends with. §5s
+  built the delivery panels against the two address columns `sites` has, and the
+  form states the gap; this closes it. Needs the census for the geography.
 - **Phase 4 is built, so what remains of B-2 and D7 is historical.** §5k ran all
   three calculators rather than reading them and §5r re-derived the question per
   screen; the arithmetic is settled and lives in `invoice-total.ts`. What doc 19
@@ -2511,3 +2543,316 @@ and counting, by hand.
 **Two migrations are committed and not deployed** — `0009_purchase_invoices` and
 `0010_sales_invoices`. Production still runs release `20260908-184331`, which is
 commit `6b1164ae`: purchase orders and the subject fix, and nothing after them.
+
+---
+
+## 5s. The purchase order carve-outs, and a compact pass over every form (9 Sep 2026)
+
+Committed as `<COMMIT>`.
+
+The two things `08-create-purchase-order.md` left open when purchase orders
+shipped — the delivery address panels and the terms and conditions editor — plus
+a density pass across the shared form components, asked for in the same breath:
+*"design of input form should be compact and less scroll and input control should
+be compact, better professional ui"*.
+
+**The headline is not the editor. It is that the screen capture was wrong about
+what both carve-outs are**, in the same way §5r's B-2 claim was wrong: the
+document described what a screenshot looks like, and the view describes what it
+does.
+
+### The templates were never stored anywhere
+
+`08-create-purchase-order.md` calls them "three stored templates" and PLAN.md
+budgets for a `terms_templates` table. There is no such table and never has been.
+All three are **hard-coded in the Razor view**, one per tab pane
+(`CreatePurchaseOrder.cshtml:704-855`), and no screen in the application edits
+one — changing a template means changing the view and redeploying.
+
+So they are constants in `contracts/purchase-order-terms.ts`, transcribed verbatim
+including the misspellings ("Premies", "possiblity", "ap.proval", "reching") and
+the two company names that are baked into templates 2 and 3. **A table would have
+looked more faithful and would have invented a screen that has never existed.**
+Making them editable is a new capability the business has to ask for, and doc 19
+is where that gets raised.
+
+### The column the legacy screen writes is `PaymentTerms`, not `Terms`
+
+This is the expensive one, and it is an ETL trap rather than a code one.
+
+The editor's HTML posts as **`PaymentTerms`** and the chosen tab as
+`PaymentTermsId` — the literal strings "Term-1", "Term-2", "Term-3" in an
+`nvarchar(100)`. **Nothing on the create screen binds to `Terms` at all.** The
+"Payment Terms" text input that would explain the name is present in the view and
+**commented out** (`:427-436`).
+
+The port's column names read the other way round: `purchase_orders.terms` is the
+terms and conditions, and `payment_terms` is a short free-text field of its own.
+So legacy `PaymentTerms` loads into `terms`, and loading it into `payment_terms` —
+which is the obvious reading of the two names — would drop a page of terms into a
+one-line box and leave every imported order with no terms at all. The note is on
+the schema column, because that is where an ETL author looks, and not only here.
+
+### The delivery panels are an allocation, not a display
+
+The capture describes "two panels, empty until a site and group are chosen". They
+are not display panels. **Each row is a checkbox and a quantity box**, and the
+ticked rows post as one list into one table, `PodeliveryAddress` — so a purchase
+order allocates its quantity across the places it is delivered to. Three defects
+came out of reading it, and all three are departed from:
+
+**1. Which panel a row came from is a string prefix inside the address.**
+`PurchaseRequestScript.js:1003` posts a group address as `'Group-' + address`, and
+the view strips it with `Address.Replace("Group-", "")`. `Replace` removes the
+marker from ANY position, so an address reading "Ward 3, Group-B Quarters" is
+displayed as "Ward 3, B Quarters" — and a site address that genuinely begins with
+those characters is read back as a group one. `kind` is a column here.
+
+**2. The quantity check is per panel, so an order can be delivered twice over.**
+
+```javascript
+var totalShippingQuantity = 0;
+var totalGroupQuantity = 0;
+$(".shipping-checkbox:checked").each(...)      // totalShippingQuantity > totalProductQuantity
+$(".GroupAddress-Checkbox:checked").each(...)  // totalGroupQuantity   > totalProductQuantity
+```
+
+Two accumulators, each compared to the ordered quantity **on its own**. An order
+for 100 units passes with 100 allocated to site addresses and 100 more to group
+addresses — 200 units of deliveries against 100 ordered, both halves landing in
+the same table and printing on the same order, with no warning anywhere.
+
+`packages/domain/src/delivery-allocation.ts` sums them together and compares once.
+That is the rule the source states, applied to the number it was always about, and
+it is **a departure that refuses saves the old screen accepted** — flagged here for
+sign-off. Its test carries the legacy check transcribed beside it as an oracle,
+which is what pins the departure to exactly the both-panels case: with one panel
+the two implementations agree on every input tried.
+
+**3. `PodeliveryAddress.Quantity` is an `int`** while the browser collects it with
+`parseFloat` and every order line quantity is `numeric`. So an order measured in
+tonnes cannot allocate 2.5 of them to a site — SQL Server rounds on the way in and
+the deliveries stop adding up to the order they came from. Decimal here.
+
+There is a fourth, smaller one that needs no departure because nothing reads it:
+the header's own `GroupAddress` column is filled with
+`$('input[name="selectedPOGroupAddress"]:checked').val()`, and jQuery's `.val()` on
+a SET returns only the first element's value. So an order delivered to four group
+addresses records one of them in the header while its detail rows carry all four.
+The column is kept for a lossless ETL and the screen reads the rows.
+
+### The editor, and why it is not a library
+
+The legacy toolbar offers paragraph styles, bold, italic, link, lists, indent,
+image, blockquote, table, embed and undo. What the three templates actually
+contain is a heading and a numbered list of clauses.
+
+`components/ui/RichTextField.tsx` offers six commands — bold, italic, underline,
+bulleted list, numbered list, clear formatting — and **each maps to tags the
+server's allowlist keeps**. That correspondence is the point rather than a
+coincidence: an editor that can produce markup the server strips teaches users
+that saving loses their formatting, and they cannot tell a security control from
+a bug.
+
+It uses `document.execCommand`, which is deprecated and implemented everywhere.
+The alternative for six commands is hand-written Selection and Range work —
+splitting text nodes, merging adjacent formatting, rebuilding list structure on
+outdent — which is the genuinely hard part of an editor library, and writing a
+worse version of it to avoid a deprecation notice is the wrong trade. The
+replacement standard does not cover lists at all.
+
+**Two things in it are load-bearing and easy to delete by accident:**
+
+- **The DOM is written only when the value came from somewhere else.** A
+  `contenteditable` cannot be a controlled React input: re-rendering it with the
+  value being typed replaces its child nodes and drops the caret to the start on
+  every keystroke, so text arrives reversed one character at a time. Comparing
+  against `innerHTML` first makes a keystroke's own round trip a no-op.
+- **The toolbar buttons use `onMouseDown` with `preventDefault`, not `onClick`.**
+  A mousedown on a button blurs the editor and collapses the selection before the
+  click fires, so a click-driven Bold has nothing to embolden and the button reads
+  as dead.
+
+Paste is flattened to plain text at the moment of paste, because the sanitiser
+would strip a word processor's markup on save and the pasted block would change
+shape after the fact.
+
+### The sanitiser is the actual feature
+
+The legacy print view renders stored terms with
+`@Html.Raw(firstItem.PaymentTerms)` (`POPrintDetails.cshtml:406`) — unescaped,
+straight into the page. **Whatever HTML sits in that column runs for everyone who
+opens that order.** That is why this port stored plain text until now rather than
+shipping the editor first and the sanitiser afterwards, and it is the same class
+of hole §5l closed on attachments.
+
+`common/sanitise-terms.ts` uses `sanitize-html`, a **new runtime dependency of the
+API**. Not hand-written, deliberately: parsing hostile HTML correctly is a
+specialist job with a long history of near-misses, and a regular expression over
+tags is the classic wrong answer. The allowlist lives in `contracts` as data, so
+the editor and the server cannot drift apart.
+
+**The allowlist is applied on the SERVER, not in the Zod schema.** `contracts`
+runs in the browser too, so a transform there would be applied by the form and
+skipped entirely by anything posting to the API directly — which is the case that
+matters. The contract checks the LENGTH, which is a property of the string; the
+server checks the MARKUP, which is a boundary. A contracts test pins that division
+so nobody "fixes" it by adding a transform and assuming the API is covered.
+
+35 tests, and the one worth knowing about:
+
+> **`<scr<script>ipt>` is rendered inert, not removed.** That payload is the one
+> that defeats a REGEX sanitiser — strip the inner `<script>` as a pattern and the
+> outer fragments close up into a live tag that was never there. A parser drops
+> the inner element and leaves the fragments as ESCAPED TEXT, so a few characters
+> of nonsense can survive into an order's terms. Inert, and visible. Pinned by a
+> test so that the day somebody sees `ipt&gt;` in a document, the answer is
+> already written down rather than being investigated as a breach.
+
+`img` is off the allowlist though the legacy toolbar has it: an external image on
+a purchase order is a tracking pixel that fires for every reader and prints as a
+broken box the day the host goes away, and a data URI is a second way to smuggle
+bytes past §5l's attachment allowlist. `table` IS on it, because the toolbar has
+one and a rate table inside terms is a plausible thing to have typed over several
+years.
+
+### The compact pass, measured rather than asserted
+
+Every control on every form is now **32px tall where it was 40**, its label 12px
+rather than 14, and the numbers are shared from one place in `fields.tsx` rather
+than repeated per control — three controls that are each "about the same height"
+is precisely how a form comes to look hand-assembled.
+
+The modal's body also reserved **16rem** of chrome when the header, footer and
+backdrop padding together occupy about 10, so a form that fitted the screen
+scrolled anyway.
+
+Measured in a real browser, on the same purchase order form, by injecting a
+stylesheet that restores the old values and re-measuring the same DOM:
+
+| | old | new |
+|---|---|---|
+| content height | 2406px | **2022px** |
+| visible body at 900px tall | 644px | **740px** |
+| control height | 40px | **32px** |
+
+So the form is 16% shorter and the window onto it is 15% taller: the distance
+that has to be scrolled to reach the Save button falls from 1762px to 1282px,
+**27% less scrolling**.
+
+One change did more than the spacing. **The free-text product name used to sit
+under every row of both line grids**, so a line was two controls tall whether it
+needed one or not — and it is the ALTERNATIVE to the item dropdown, meaningful
+only while that dropdown is empty. It now appears only then, and choosing an item
+clears it. Grid rows went from 84px to 61px. The clearing matters on its own:
+React Hook Form keeps an unmounted field's value, so a name typed before an item
+was picked would otherwise be posted beside it and sit in `item_name`
+contradicting the item the line references.
+
+All 297 existing web tests passed unchanged through the density change, first
+run, because they query by role and label rather than by class. That is the
+argument for the shared components having been shared in the first place.
+
+### Two seed defects, and one of them is §5r's arithmetic again
+
+**`3` divides `45`. Again.** §5r records this exact trap — the seed picks a site
+with `offset % 45`, so any expression `offset % 3` is CONSTANT for every order at
+a given site, and the list is site-scoped. Both new seed values had it: every
+order at a third of the sites got no delivery address at all, and every order at
+every site got the same terms template. The purchase order screen showed
+"Template 1" on all three visible orders and an empty Shipping Addresses panel,
+which reads as a screen that failed to load.
+
+**It was found by looking, not by reasoning.** The browser check reported three
+orders all on Template 1; the API confirmed the data said the same thing; the
+arithmetic explained why. Both are now keyed off the per-site counter, which
+cannot have the defect by construction. Measured after seeding: **45 of 45 sites
+carry both allocated and unallocated orders, and 45 of 45 show more than one
+terms template.** Counted, because counting is what settled it last time.
+
+**The second: the seeded site address repeated its own area.** `address` was
+`"Plot 10, Navrangpura"` and `area` was `"Navrangpura"`, so the composed delivery
+address read "Plot 10, Navrangpura, Navrangpura, 380001". Right code, seed data
+that made it look wrong — the §5q failure mode, for the third session running.
+
+### The drizzle snapshot chain was broken, and `generate` lied quietly
+
+**`drizzle-kit generate` does not read the database.** It diffs the schema against
+the newest snapshot in `meta/`, and the snapshots for `0008`, `0009` and `0010`
+were never committed — `meta/` went straight from `0007_snapshot.json` to nothing.
+
+So the first `generate` after them diffed against **0007** and produced a
+migration that re-creates `purchase_orders`, `purchase_order_items`,
+`purchase_invoices`, `purchase_invoice_items`, `sales_invoices` and
+`sales_invoice_items`: six tables that already exist, alongside the one new table
+that was wanted.
+
+**Nothing about that output says it is wrong.** It is valid SQL, it is named after
+what was asked for, and it lands in the journal like any other migration. Shipping
+it would have failed on the server with `42P07 relation already exists` — and §5f's
+adoption logic only swallows that on the FIRST run against a database that predates
+the tracking table, so on production it is a hard deploy failure found at the worst
+possible moment.
+
+`0011_purchase_order_delivery_addresses.sql` is hand-trimmed to its real delta.
+`meta/0011_snapshot.json` — the generated one — was KEPT, because it is a full
+snapshot of the whole schema and that is what repairs the chain. Diffs from here
+on are correct. The whole trap is written up in `node/apps/api/drizzle/README.md`,
+which is where somebody about to run the command will be standing.
+
+### Two pre-existing breakages fixed on the way
+
+- **`npm run typecheck` was failing in the API**, on a clean tree, before any of
+  this. Three test files built partial line objects and passed them straight to
+  `repo.update`, which wants the contract's OUTPUT type. They now go through
+  `updatePurchaseOrderSchema.parse`, and the API typechecks clean including its
+  tests. A broken typecheck hides the next real error in it.
+- **The purchase order form's `UNIT` test fixture was missing `itemCount` and
+  `capabilities`**, so `unitRowSchema` threw inside the query and the Unit
+  dropdown was empty in every test in that file. Nothing failed, because no test
+  had ever needed to choose a unit. Same trap as §5r's company fixture, and it
+  stays invisible until somebody tries to use the control.
+
+### Verified by running it, not only by asserting
+
+In a real browser at 1440×900, against the local stack: **zero console errors**,
+no horizontal overflow, and a full round trip — open an order, tick a site
+address, allocate 6.25 of 12.5, switch to Template 3, save, reopen, and find the
+box ticked at 6.25 with Template 3's clauses in the editor.
+
+Against the running API, by curl:
+
+| | |
+|---|---|
+| 12.50 to a site address AND 12.50 to a group address, on an order for 12.50 | **400** — "account for 25.00 units, and the order is for 12.50" |
+| 6.25 and 6.25 on the same order | 200 |
+| terms posted as `<p>Pay in 30 days</p><script>fetch("//evil")</script><img src=x onerror=alert(1)>` | stored as **`<p>Pay in 30 days</p>`** |
+
+The first row is the departure, live: it is the exact allocation the source
+accepts without comment.
+
+### The honest cost
+
+**The site address panel is short of the legacy one and says so on screen.** The
+legacy list reads a `SiteAddresses` TABLE, many rows per site, which this port
+does not have — `sites` carries one main address and one shipping address, so at
+most two are offered where the legacy screen may show several. And the legacy
+string ends with city, state and country names, which are bare integer ids here
+with no lookup behind them until the census runs. Both are PLAN.md §1.4, both are
+now a NEXT row of their own, and the form states the gap rather than presenting a
+short list as a complete one.
+
+**The delivery quantity rule is a departure that can refuse a save the old system
+allowed.** It only bites when both panels are used on one order, and it is the
+rule the source's own error message states — but it is a behaviour change and it
+belongs in front of the business rather than only in this file.
+
+**`sanitize-html` is a new runtime dependency** on an API that had none for this,
+and it brings its own transitive tree. The alternative was writing a sanitiser,
+which is worse.
+
+**The dev seed grew again**, and §5r already called it "materially more
+complicated than the thing it seeds". It now also carries a site-address composer
+that duplicates what the delivery options endpoint does, so the seeded deliveries
+name addresses the endpoint will actually offer. Still no test imports `DevSeed`;
+it is verified by seeding and counting, by hand.
