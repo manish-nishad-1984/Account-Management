@@ -145,15 +145,29 @@ async function resolveSchemas(pool, tableNames) {
   `);
 
   const catalogue = new Map(
-    result.recordset.map((r) => [r.table.toLowerCase(), r.schema]),
+    result.recordset.map((r) => [r.table.toLowerCase(), { schema: r.schema, actual: r.table }]),
   );
 
   const resolved = new Map();
   const missing = [];
-  for (const name of tableNames) {
-    const schema = catalogue.get(name.toLowerCase());
-    if (schema) resolved.set(name, schema);
-    else missing.push(name);
+  for (const entry of tableNames) {
+    // An entry may be a single name, or a list of spellings the same table has
+    // been seen under. The FIRST is canonical — it is the key everything below
+    // reads by — and the rest are accepted as aliases.
+    const names = Array.isArray(entry) ? entry : [entry];
+    const canonical = names[0];
+
+    const found = names.map((name) => catalogue.get(name.toLowerCase())).find(Boolean);
+    if (found) {
+      resolved.set(canonical, found);
+      if (found.actual.toLowerCase() !== canonical.toLowerCase()) {
+        report.notes.push(
+          `${canonical} is spelled ${found.actual} in this database — read under that name.`,
+        );
+      }
+    } else {
+      missing.push(names.join(" / "));
+    }
   }
 
   if (missing.length > 0) {
@@ -163,11 +177,11 @@ async function resolveSchemas(pool, tableNames) {
     );
   }
 
-  const nonDbo = [...resolved].filter(([, s]) => s.toLowerCase() !== "dbo");
+  const nonDbo = [...resolved].filter(([, v]) => v.schema.toLowerCase() !== "dbo");
   if (nonDbo.length > 0) {
     report.notes.push(
       `Tables outside the dbo schema: ` +
-        nonDbo.map(([t, s]) => `${s}.${t}`).join(", "),
+        nonDbo.map(([t, v]) => `${v.schema}.${v.actual === t ? t : v.actual}`).join(", "),
     );
   }
 
@@ -175,8 +189,8 @@ async function resolveSchemas(pool, tableNames) {
 }
 
 async function readAll(pool, schemas, table) {
-  const schema = schemas.get(table);
-  const result = await pool.request().query(`SELECT * FROM [${schema}].[${table}]`);
+  const { schema, actual } = schemas.get(table);
+  const result = await pool.request().query(`SELECT * FROM [${schema}].[${actual}]`);
   return result.recordset;
 }
 
@@ -218,7 +232,12 @@ try {
     "PurchaseRequest",
     "InventoryInward",
     "ItemInword",
-    "ItemInWordDocument",
+    // Seen under BOTH spellings. The database this tool first ran against had
+    // the singular; the copy on this machine has the plural, and the tool
+    // aborted on it — "Not found in DBAccManegment: ItemInWordDocument" — which
+    // stopped the whole import over one letter. Drift in the live schema is
+    // this tool's subject matter, so it is reported and read, not fatal.
+    ["ItemInWordDocument", "ItemInWordDocuments"],
   ];
   const schemas = await resolveSchemas(pool, SOURCE_TABLES);
   for (const note of report.notes) console.log(`  note: ${note}`);
