@@ -390,6 +390,14 @@ blocked on the business:
   own origin, the same hole §5l closed on attachments. The editor and the
   sanitiser land together or not at all.
 
+> **BOTH WERE BUILT ON 9 Sep 2026 (§5s). The paragraph above is kept as the
+> record of why they were deferred, not as a description of now.** The delivery
+> addresses are `purchase_order_delivery_addresses`, a quantity per row rather
+> than the read-only list this document described, and `terms` holds sanitised
+> HTML — `apps/api/src/common/sanitise-terms.ts` runs on every write, so the
+> hole the deferral was waiting on is closed. What the deferral got right is
+> that the editor and the sanitiser had to land together, and they did.
+
 **The two things on the critical path are still not code.** B-2 and D7 have a 2-4
 week lead time with the business, and the census gates the geography lookups and
 every foreign key that is still a bare integer. Everything in the NOW and NEXT
