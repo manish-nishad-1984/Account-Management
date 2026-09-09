@@ -1,9 +1,9 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
 **Written:** 2 September 2026, after the unblocking session. **Last extended
-9 September 2026** (§5s). Supersedes all earlier handoffs of the same name.
+9 September 2026** (§5t). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `98fe1b46`.** If `git log` shows commits after
+> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
@@ -35,11 +35,22 @@ only the "planned" nav placeholders for the two invoice screens. The record
 layouts of §5m, the Item Master Excel pair of §5o and the dashboard queues of
 §5p all shipped with it.
 
-**Five commits are built, tested and NOT deployed** — `1212f12a`, `3f863c72`,
+**Six commits are built, tested and NOT deployed** — `1212f12a`, `3f863c72`,
 `b296085c`, `17304ea7` (§5r: the purchase order grid fixes, the dialog layout fix
-and both invoice modules) and `98fe1b46` (§5s: the purchase order delivery
+and both invoice modules), `98fe1b46` (§5s: the purchase order delivery
 addresses, the terms editor with its sanitiser, and a compact pass over every
-form). `c77268a3` is also unshipped and touches only skills and this file.
+form) and `f28737d2` (§5t: item price history, two pre-existing typecheck
+failures, and the dev seed). `c77268a3` is also unshipped and touches only skills
+and this file.
+
+**The deploy was AUTHORISED on 9 Sep 2026 and still did not happen.** The user
+asked for the work to be shipped in the same breath as asking for it to be
+built, so the decision that had been outstanding since §5r is made — what
+stopped it was the session's own tooling, not a question. Every `ssh` to the VPS
+was refused by the permission classifier, so `/deploy` could not run a single
+step. **Nothing is wrong with the release**; it is staged-ready and the suites
+are green. The next session should be able to run `/deploy` directly, and if the
+same refusal appears, the user has to allow `Bash(ssh:*)` before it can proceed.
 
 **THREE of them carry migrations — `0009_purchase_invoices`,
 `0010_sales_invoices` and `0011_purchase_order_delivery_addresses`** — so this is
@@ -106,27 +117,25 @@ AC/
 ├── .github/workflows/ci.yml       build + test + gitleaks + node job
 ├── Migration-Assessment/          the 18-doc assessment + tools/ + db-extract/
 └── node/                          npm workspaces
-    ├── packages/domain/           shared business rules (55 tests)
-    ├── packages/contracts/        Zod schemas shared by API and web (37 tests)
+    ├── packages/domain/           shared business rules (65 tests)
+    ├── packages/contracts/        Zod schemas shared by API and web (63 tests)
     └── apps/
-        ├── api/                   NestJS + Fastify + Drizzle (540 tests)
-        └── web/                   React 19 + Vite + Tailwind (297 tests)
+        ├── api/                   NestJS + Fastify + Drizzle (626 tests)
+        └── web/                   React 19 + Vite + Tailwind (330 tests)
 ```
 
-**1074 tests pass** — 1055 Node (63 contracts + 65 domain + 607 API + 320 web)
-plus 19 .NET. The Node figure was **run** on 9 Sep 2026 against the tree that
-became `98fe1b46`, exit 0, 32 of 32 API files and 29 of 29 web files, zero
-failures.
+**1103 tests pass** — 1084 Node (63 contracts + 65 domain + 626 API + 330 web)
+plus 19 .NET. **Both figures were RUN on 9 Sep 2026**, against the tree that
+became `f28737d2`: Node exit 0, 34 of 34 API files and 31 of 31 web files, zero
+failures; .NET `Passed! - Failed: 0, Passed: 19`.
 
-The 19 .NET tests were **proved rather than run**, which the rule allows and
-which is stated here so nobody mistakes it for a measurement:
-`git diff --name-only 5fdd81f6..HEAD` returns nothing outside `node/` and `.md`,
-and no `.cs`, `.csproj` or `.sln` file has been touched since that suite last ran.
-
-**`npm run typecheck` is clean in every workspace, including the API's test
-files.** It was NOT, on a clean tree, before 9 Sep 2026 — three test files handed
-partial objects to a repository method that wants the contract's output type. See
-§5s; a broken typecheck hides the next real error in it.
+**`npm run typecheck` is clean in all four workspaces.** It was NOT on a clean
+tree before 9 Sep 2026 (§5t), and the previous handoff said it was — see the
+correction note in §5s below. Two test files failed it, one in `web` and one in
+`domain`, both on `noUncheckedIndexedAccess`. **`npm run build` does not catch
+this**, because the build configs exclude test files and `typecheck` does not;
+so a green build is not evidence of a green typecheck, and a broken typecheck
+hides the next real error in it.
 
 > These two figures — here and in §4 — said **310** for five consecutive sessions
 > while the true count more than doubled. Nobody was careless: each session
@@ -174,15 +183,14 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 ## 4. Repository state
 
 Branch **`main`**, working tree clean, pushed to `origin/main`. Builds,
-typechecks, and all **1074 tests pass** — 1055 Node (63 contracts + 65 domain +
-607 API + 320 web) + 19 .NET.
+typechecks, and all **1103 tests pass** — 1084 Node (63 contracts + 65 domain +
+626 API + 330 web) + 19 .NET.
 
-The Node suite was last measured at **`98fe1b46`**, the final code commit of
-9 Sep 2026. Anything after that on `main` is documentation — a handoff always
-commits after its own measurement, so the newest hash is never the one the
-numbers were taken at, and naming it here would be a lie that looks precise.
-
-The .NET 19 is proved, not run — see §3 for the diff that proves it.
+Both suites were last measured at **`f28737d2`**, the final code commit of
+9 Sep 2026, and both were RUN rather than proved. Anything after that on `main`
+is documentation — a handoff always commits after its own measurement, so the
+newest hash is never the one the numbers were taken at, and naming it here would
+be a lie that looks precise.
 
 - `b8d03922` completed the broken commit `6cefc164` (see §5).
 - `f0f69f95` merged `newNode` into `main`, resolving 3 conflicts.
@@ -203,6 +211,10 @@ The .NET 19 is proved, not run — see §3 for the diff that proves it.
 - `98fe1b46` closed the two purchase order carve-outs and made every form denser
   (§5s). It carries migration `0011_purchase_order_delivery_addresses` and the
   API's first sanitiser dependency.
+- `f28737d2` ported item price history and fixed three things that were already
+  broken on a clean tree — the web and domain typechecks, the dev seed's line
+  arithmetic, and a stale sentence in the item delete dialog (§5t). **It carries
+  NO migration**; it is a query, a panel and a seed change.
 - **`main` is pushed to `origin/main`** and the working tree is clean.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
   credential is in the HISTORY, not the working tree. Rotation is the fix.
@@ -1614,7 +1626,8 @@ the screens whose UI is gated on `usePermission`.
   icon. **Update, 9 Sep 2026 (§5r): supplier invoices ARE migrated now**, as
   `purchase_invoices` and `purchase_invoice_items`, so this is unblocked and back
   in the PLAN.md NEXT row. The finding above stands — it is still a purchase-price
-  history and still not an audit log.
+  history and still not an audit log. **Built 9 Sep 2026 (§5t)**, which found
+  four more defects in the seven columns the partial renders.
 - **Site group to document links are by name string** (section 6).
 - `AccountManegments.Web/Models/Common.cs:28` and `:61` use obsolete
   `RijndaelManaged` for encryption.
@@ -1659,19 +1672,21 @@ its rows currently read:
 
 ```
 DONE     PO delivery addresses + T&C editor   (9 Sep 2026, §5s)
+         item price history                   (9 Sep 2026, §5t)
 NOW      master-detail ANSWER             <- with the business, doc 19 Q12
-NEXT     item price history               <- UNBLOCKED: reads purchase invoices
-         per-site address list            <- NEW, from §5s; needs the census too
+NEXT     per-site address list            <- from §5s; needs the census
 BLOCKED  Supplier Excel import            <- needs the States/Cities census
 BLOCKED  Reports, payments, supplier balances  <- needs D7 and the payments model
 ```
 
-**The build queue has re-opened.** The previous handoff said it was empty and
-that the §8 blockers were the whole critical path. That was true when written and
-is not now: §5r found that B-2 blocked one screen rather than three, built all
-three, and in doing so **unblocked item price history** — it reads
-`purchase_invoices` and `purchase_invoice_items`, which now exist. It is a query
-and a panel with no business decision behind it.
+**The build queue is empty again, and this time say so carefully.** §5r reopened
+it by unblocking item price history; §5t built that, and it was the last row that
+needed neither the census nor an answer from the business. Everything left in
+PLAN.md is behind one of the two: the per-site address list and the Supplier
+Excel import both need the geography census, reports and payments need D7, and
+the NOW row is a decision. **So the §8 blockers are the whole critical path
+again** — but the deploy is not one of them, and it is the one thing that can
+move without the user doing anything except granting a permission.
 
 **Both purchase order carve-outs closed on 9 Sep 2026 (§5s).** The delivery
 address panels and the terms editor are built, and the terms column now holds
@@ -1753,15 +1768,14 @@ Then, in rough order of value:
   step 2, not before. "No orphan entries" means deciding, per relationship,
   whether an orphan is cleaned, quarantined or rejected — that decision needs the
   counts in front of you.
-- **Deploy §5r and §5s, or decide not to.** Five commits and THREE migrations are
-  waiting (header), and the API has gained a runtime dependency. It was offered
-  twice and not answered, so it was not done. It grows more expensive to verify
-  the longer it waits, because one deploy now covers three modules and a schema
-  change rather than one of each.
-- **Item price history** — the PLAN.md NEXT row, and newly unblocked by the
-  purchase invoice tables (§5r). Everything the legacy partial renders now has a
-  column behind it: `displayNo`, the supplier and site joins, `document_date`,
-  and `unit_price` / `gst_amount` / `line_total`.
+- **DEPLOY. It is now the top item, and it is no longer a question.** Six commits
+  and THREE migrations are waiting (header), the API has gained a runtime
+  dependency, and the user asked for all of it to go live on 9 Sep 2026. The only
+  thing that stopped it was that every `ssh` in the session was refused by the
+  permission classifier. Run `/deploy`; expect **`3 applied`** from the migration
+  step, and if the refusal recurs, ask the user to allow `Bash(ssh:*)` rather
+  than working around it. Nothing else in this list moves the product forward
+  without the user first doing something.
 - **The per-site address list** — a `site_addresses` table, an editor for it on
   the Site master, and the city/state/country names each address ends with. §5s
   built the delivery panels against the two address columns `sites` has, and the
@@ -2856,3 +2870,240 @@ complicated than the thing it seeds". It now also carries a site-address compose
 that duplicates what the delivery options endpoint does, so the seeded deliveries
 name addresses the endpoint will actually offer. Still no test imports `DevSeed`;
 it is verified by seeding and counting, by hand.
+
+---
+
+## 5t. Item price history, and the three things already broken on a clean tree (9 Sep 2026)
+
+Committed as `<COMMIT>`.
+
+The last PLAN.md row that needed neither the census nor an answer from the
+business: the clock icon in the Item Master's Action column. It is
+`GET /items/:id/price-history` and a panel behind the icon, and it took about a
+third of the session. The other two thirds went on things that were already
+wrong before it started, which is the more useful half of this entry.
+
+### The screenshot was wrong about this screen for the second time
+
+§5p already recorded that the clock icon is **not** an audit log of
+`items.price_per_unit` — that PLAN.md had inferred an audit-table-versus-
+temporal-rows decision from a picture of a clock, and that reading
+`GetItemHistory` showed it returns a `SupplierInvoiceList` instead. That
+correction was right and it was not enough. It established what the panel READS.
+It did not look at what the partial DISPLAYS.
+
+`_ItemHistoryPartial.cshtml` renders seven columns and **four of them are
+wrong**. Each is departed from and each has a test that fails if anybody
+reproduces it.
+
+**1. `PriceWithGST` divides the whole invoice by one of its lines.**
+
+```csharp
+decimal? Quantity = item.Quantity;          // e.Quantity — ONE LINE
+decimal? TotalAmount = item.TotalAmount;    // a.TotalAmount — THE INVOICE
+decimal? PerItemTotalAmoount = TotalAmount / Quantity;
+```
+
+`a` is `SupplierInvoices`, so `TotalAmount` is the document's grand total, TDS
+and adjustment included. `e` is `SupplierInvoiceDetails`, so `Quantity` is one
+line's. On a single-line invoice with no TDS that lands near the right answer by
+coincidence, which is exactly why it has survived: **the defect is invisible on
+the simplest document and grows with the size of the invoice.**
+
+Measured against the dev data on a real two-line invoice — 8 units of one item
+and 3.5 of another, document total ₹37,309.00:
+
+| | per unit |
+|---|---|
+| what the legacy column shows | **4,663.63** |
+| what was actually paid | **3,399.58** |
+
+37% high, in the column a buyer reads to decide what to pay next.
+
+**2. The GST column shows today's master rate against a historical invoice.**
+The cell is `@item.GSTper`, filled from `f.Gstper` — `ItemMasters`, joined in
+purely to supply it. The line's own `e.Gstper` is projected into the model and
+never rendered. So editing an item's GST percentage silently rewrites the rate
+displayed against every invoice it has ever appeared on. The port reads the
+line, and the test edits the item afterwards to prove the history does not move.
+
+**3. The grouping keeps one line per invoice and discards the rest.**
+`GroupBy(g => g.Invoice.Id)` then `group.First().Invoice`. An item bought twice
+on one document at two prices — a rate change mid-invoice, or two grades keyed
+against one catalogue row — loses the second silently. One row per LINE here.
+
+**4. `Sites` is INNER JOINed and `site_id` is nullable.** Every invoice raised
+without a site is absent from its own item's history. LEFT JOIN, and the panel
+says "No site" — the §5f decision again, for the same reason.
+
+There is a fifth that needed no departure because nothing consumes it: the query
+builds `invoiceItemList`, a whole second GroupBy aggregating quantity and amount
+per item name, and **the only code that reads it is commented out** in the
+partial. It is computed on every open and thrown away.
+
+### What was ADDED, and the one that matters
+
+The legacy query excludes exactly one thing — `where a.InvoiceNo != "PayOut"`,
+because payments are written into the invoice table under that literal number.
+It does **not** exclude purchase returns or credit notes. So they have always
+been in this list, unlabelled and indistinguishable from purchases, and a return
+priced differently reads as a price that was paid. They stay, because dropping
+them changes what the panel contains, and they are now **marked**. Unapproved
+invoices are marked for the same reason.
+
+That `PayOut` filter carries a trap of its own. `ne(invoiceNo, 'PayOut')` alone
+is NULL — not true — for a row whose number is NULL, and both number columns are
+nullable, so a bare `!=` silently drops every invoice with no number at all from
+its own history. The predicate is `isNull(...) OR ne(...)`, with a test.
+
+### Not site-scoped, and the faithful answer is also the right one
+
+`GetItemHistory(Guid ItemId)` takes no site and applies none, and that happens to
+be what the panel is for: a buyer asking what an item has cost is asking across
+the business. A history narrowed to whichever site is in the header would show a
+fraction of the purchases while looking complete — the §5q failure mode, on a
+screen whose entire purpose is comparison.
+
+Guarded by `item.view`, which the legacy action does not have at all — C-6 for
+the third screen in a row, after the Excel download and supplier edit. It
+deliberately does **not** require `purchase-invoice.view`: no invoice can be
+opened from the panel, and requiring the document right would lock the buyer out
+of the one screen that answers their question. Same shape as `/sites/assignable`.
+
+### THE SEED HAS THE SAME ARITHMETIC DEFECT, FOR THE FOURTH TIME
+
+This is the paragraph worth keeping.
+
+§5r found `offset % 3` constant per site because 3 divides 45. §5s found it
+twice more, in the delivery addresses and the terms template. This session found
+it in the purchase invoice LINES, where it was subtler and did more damage:
+
+```ts
+const item = insertedItems[(offset * 5 + l) % insertedItems.length]!;   // 50 items
+const quantity = l === 1 ? "3.50" : String((l + 1) * 8) + ".00";
+const discountPerUnit = l % 3 === 2 ? "0" : String(5 + l * 2) + ".00";
+const gstPercent = ["18.00", "12.00", "5.00", "28.00"][l % 4]!;
+```
+
+**5 divides 50.** So `offset * 5 % 50` produces only ten of the fifty item
+indices, and an item's index modulo 5 completely determines which line position
+`l` it can ever occupy. Every other value on the line is then keyed off `l`
+alone. The consequence: **each item appeared on every invoice in the database at
+the same quantity, the same discount and the same GST rate.**
+
+Nine invoices for "10mm Aggregate", spanning four suppliers and four sites over
+three weeks: 8 units, 5.00 off, 18%, every single time.
+
+That is invisible on the invoice screens, which show one document at a time. It
+is glaring on the first screen built to compare one item across documents — and
+it also meant that no manual check against this seed could ever divide a line
+total by two different quantities, which is precisely the arithmetic the panel
+exists to get right.
+
+Stride is now 7, and gcd(7, 50) = 1, so an item reaches every line position.
+`offset` is mixed into quantity, discount and rate. Counted afterwards, because
+counting is what settled it the last two times:
+
+| | before | after |
+|---|---|---|
+| items with a price history | — | **50 of 50** |
+| histories with a varying quantity | 0 | **50 of 50** |
+| histories with a varying discount | 0 | **50 of 50** |
+| histories with a varying GST rate | 0 | **49 of 50** |
+
+**The general rule, since three sessions have now paid for it: never derive a
+seed value from `offset % n` where `n` shares a factor with the collection being
+indexed, and never key a per-line value off the line index alone.** Mix the
+outer counter in. The failure mode is always the same — right code, seed data
+shaped so the screen looks broken, or worse, so it looks fine while testing
+nothing.
+
+### `npm run typecheck` was RED on a clean tree, and §5s said it was green
+
+§3 and §5s both stated that typecheck was clean in every workspace. It was not,
+and had not been: `npm run typecheck` on `66b5a7ea`, with nothing of this
+session's applied, fails in **two** workspaces.
+
+```
+apps/web  PurchaseOrderFormDialog.test.tsx(323,14): error TS18048: 'line' is possibly 'undefined'
+packages/domain  delivery-allocation.test.ts(134,58): error TS2322: Type 'string | undefined' …
+```
+
+Both are `noUncheckedIndexedAccess` on an array index — `postedBody()!.items[0]`
+and a destructured `[quantity, ordered]` — and both were introduced by §5s
+itself, in the same session whose entry claims the typecheck was fixed.
+
+**How a claim like that gets made honestly: `npm run build` passes.** The build
+configs exclude test files and `typecheck` does not, so a green build says
+nothing about the test files, and §5s had genuinely fixed the API's — which is
+the workspace it was working in. It then generalised from one workspace to four.
+§3 now says the two commands are not interchangeable.
+
+Both fixed here, with a comment on each saying what the type actually is.
+
+### Also corrected
+
+The item delete dialog still told the user that "purchase requests and inward
+challans have not been migrated yet, so this cannot check whether any reference
+it." Both have been migrated since §5f and §5j, along with orders and both
+invoice modules. It was checked before rewriting rather than after: **no
+document join filters `items.is_deleted`**, so a soft-deleted item still names
+itself on every purchase request, order, challan and invoice, and its price
+history stays readable. So the answer is not to add a reference check — an item
+appearing on years of invoices would become undeletable forever. The copy now
+says what actually happens.
+
+### Verified by running it
+
+Against the local API over HTTP, and then in a real browser at 1440×900.
+
+| | |
+|---|---|
+| a real item's history | 9 lines across 4 suppliers and 4 sites, newest first |
+| `?limit=2` | 2 rows, `total` still 9 |
+| `?limit=500` | 400 — the cap is 200 |
+| no token | 401 |
+| a non-UUID id | 400 |
+| a UUID that is not an item | 404 |
+| an item nobody has bought | `{"rows":[],"total":0}` and "No invoices found" |
+
+In the browser: 25 History buttons, one per row; the panel opens naming the item;
+nine columns; the discount renders as "less 5.00" under the list price; a credit
+note carries its amber badge; Escape closes it. **Zero console errors.** The page
+does not scroll sideways and the table scrolls inside its own box — measured, not
+eyeballed, because §5m's padding bug looked correct in a screenshot.
+
+### The honest cost
+
+**The panel is a modal over a screen that has a side-by-side layout switch, and
+it ignores it.** Every other record on the Items screen honours
+`RecordLayoutContext`; this one is always a dialog. That is defensible — it is a
+read-only report, not a record being edited, and the split view exists so a list
+stays workable while a record is open — but it is an inconsistency on the very
+screen where doc 19 Question 12 is being evaluated, and whoever answers that
+question should know the history panel was not part of the comparison.
+
+**It adds a ninth column to a table the legacy shows with seven.** Quantity and
+"Paid / unit" are both additions. They earn their place — the per-unit price is
+meaningless without knowing the discount was taken off, and the quantity is what
+the division is by — but the table now needs 52rem before it scrolls, which on a
+laptop inside a modal is most of the width available.
+
+**Nothing was done about the underlying question this panel raises.** It now
+displays, per invoice line, what was actually paid; the legacy screen displayed
+something else for years. Whether anyone made a purchasing decision off the old
+number is not knowable from here, and it is not doc 19 material because there is
+no decision to put — nobody would choose to keep dividing a document total by one
+of its lines. It is recorded here and nowhere else.
+
+**And the deploy did not happen.** The user asked for this to go live in the same
+sentence that asked for it to be built, so the decision outstanding since §5r is
+made. Every `ssh` in the session was refused by the permission classifier, so
+`/deploy` could not run step one. Six commits and three migrations are still
+waiting, and the release is now larger than it was this morning — which is the
+cost §11 warned about, incurred for a reason that has nothing to do with the
+code.
+
+Tests: **1103** — 1084 Node (63 contracts + 65 domain + 626 API + 330 web) + 19
+.NET, up 29. **Both suites RUN**, not proved: Node exit 0 with 34 of 34 API files
+and 31 of 31 web files; .NET `Passed! - Failed: 0, Passed: 19`.
