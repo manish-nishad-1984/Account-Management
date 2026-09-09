@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ReportsController } from "./reports.controller";
 import { ReportsRepository } from "./reports.repository";
+import { ReportExportService } from "./report-export.service";
 
 /**
  * Reports are READ-ONLY and own no table. The payments they read belong to
@@ -10,6 +11,6 @@ import { ReportsRepository } from "./reports.repository";
  */
 @Module({
   controllers: [ReportsController],
-  providers: [ReportsRepository],
+  providers: [ReportsRepository, ReportExportService],
 })
 export class ReportsModule {}

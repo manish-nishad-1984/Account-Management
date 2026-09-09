@@ -3,6 +3,7 @@ import { AlertTriangle, Loader2 } from "lucide-react";
 import { Alert, EmptyState, PageHeader } from "../../components/ui";
 import { formatMoney } from "../../lib/format";
 import { EMPTY_FILTERS, ReportFilters, toQuery, type FilterState } from "./ReportFilters";
+import { ExportButtons } from "./ExportButtons";
 import { useSalesReport } from "./api";
 
 /**
@@ -33,6 +34,7 @@ export function SalesReportPage() {
       <PageHeader
         title="Sales report"
         description="What each customer owes, by site"
+        actions={<ExportButtons kind="sales" query={{ ...toQuery(applied), show: "all" }} />}
       />
 
       <ReportFilters

@@ -252,10 +252,11 @@ DONE     site selector                                    (7 Sep 2026, §1.1)
 DONE     PO delivery addresses + T&C editor              (9 Sep 2026, §5s)
          item price history                              (9 Sep 2026, §5t)
          Payments, Ledger, Sales Report                  (9 Sep 2026, §5u)
+         report exports, 7 of 11 (Excel and PDF)         (9 Sep 2026, §5v)
 NOW      master-detail ANSWER                            <- with the business now, doc 19 Q12
+NEXT     the OTHER 4 exports                             <- see below; purchase invoice list, item history
 NEXT     per-site address list (site_addresses)          <- see below; needs the census for geography
 BLOCKED  Supplier Excel import                           <- needs the States/Cities census
-BLOCKED  report EXPORTS (6 of them, Excel and PDF)       <- see below; deliberately not built yet
 ```
 
 **The two purchase order carve-outs closed on 9 Sep 2026.** Both panels and the
@@ -320,13 +321,51 @@ modelling decision left in the migration", per §14 of this folder — is decide
   carries no `SiteGroup` and `SalesInvoiceMasterModel` no `GroupName`, yet
   `Report.js:578` binds a column to `groupName`. It has never shown anything.
 
-**What is NOT built: the six exports.** `14-reports-and-payments.md` point 3 counts
-Export To Excel and Export To Pdf across three panels, plus a supplier-specific
-Excel. None are ported. The spreadsheet machinery from §5o (`common/spreadsheet/`)
-would carry the Excel ones cheaply; PDF is a new dependency and a new decision, and
-Phase 5 wanted these as async jobs anyway. They are a row of their own above rather
-than a footnote, because a report screen without its export button is a screen
-people will ask about.
+**THE EXPORTS: "six" WAS WRONG, AND SEVEN OF THE ELEVEN NOW EXIST (9 Sep 2026,
+§5v).** `14-reports-and-payments.md` point 3 counts "six exports across three
+panels". Counting `onclick` handlers in the views instead of counting panels
+gives **eleven buttons across five screens**:
+
+| Screen | Buttons | State |
+|---|---|---|
+| Payout Summary | Export To Excel, Export To Pdf | **built** |
+| Payment Report | Supplier Excel, Export To Excel, Export To Pdf | **built** |
+| Sales Report | Export To Excel, Export To Pdf | **built** |
+| Purchase Invoice list | Export To Excel, Export To Pdf | not built |
+| Item price history | Export To Excel, Export To Pdf | not built |
+
+The last four sit on screens that shipped in §5r and §5t without them. They are
+the NEXT row above, and they are cheap now that the machinery exists.
+
+**Three decisions came out of building the seven**, and the second is the one
+that will bite whoever changes it:
+
+- **PDF is `pdfkit`, not Aspose and not Playwright.** The legacy exporters use
+  **Aspose.Pdf**, which is licensed per developer and per deployment — a licence
+  to render a table of numbers.
+  `13-Migration-Strategy-and-Roadmap.md` proposed Playwright, which would put a
+  ~300 MB Chromium and a browser process on the VPS that also runs the live
+  business. These reports are a header block and one table.
+- **The rupee sign cannot be drawn, and pdfkit does not say so.** Its built-in
+  fonts are the 14 PDF standard ones, encoded WinAnsi; U+20B9 is not in that
+  encoding and `widthOfString` returns **0** for it. The glyph is dropped, the
+  text still lays out, and the file looks right. So amounts are written with no
+  symbol and the header says "All amounts in INR", and anything else the
+  encoding cannot hold becomes a visible `?` rather than vanishing. Embedding a
+  Unicode TTF lifts both restrictions for ~450 KB in every release tarball;
+  worth it the day a name needs it, and the live database holds none today.
+- **They are NOT async jobs**, which point 3 of doc 14 assumes. A queue is the
+  answer when a report times out; the largest one here is bounded at 20,000 rows
+  and renders in well under a second against live volumes. A job would have
+  added Redis to a deployment that does not otherwise need it — the same call
+  §5o made for the Item Master import.
+
+**And the legacy sheet has a defect the port cannot reproduce**, which is D7
+inside a single file: the rows are written by a loop in the controller while the
+three footer cells come from the API's own aggregate, computed with the
+arithmetic that adds purchase returns. So a legacy export's Total does not equal
+its own Credit column whenever a return is in range. Both come from one query
+here, and a test pins it.
 
 **A new NEXT item: the per-site address list.** The legacy Shipping Addresses
 panel reads a `SiteAddresses` TABLE — many rows per site — which this port does

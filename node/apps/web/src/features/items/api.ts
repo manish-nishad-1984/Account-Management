@@ -21,6 +21,7 @@ import {
 import { useListResource, type ListFilters, type ListParams } from "../../lib/list-query";
 import { useCreateResource, useDeleteResource, useUpdateResource } from "../../lib/crud";
 import { ApiError, apiRequest, downloadRequest, uploadRequest } from "../../lib/api-client";
+import { saveBlob } from "../../lib/download";
 
 const RESOURCE = "items";
 const UNITS = "units";
@@ -82,17 +83,7 @@ export const useAllUnits = () =>
 export async function downloadItemSheet(search?: string): Promise<void> {
   const query = search ? `?search=${encodeURIComponent(search)}` : "";
   const blob = await downloadRequest(`/${RESOURCE}/export${query}`);
-  const url = URL.createObjectURL(blob);
-
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = itemSheetFileName(new Date());
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-
-  // Without this every download leaks its blob for the life of the page.
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  saveBlob(blob, itemSheetFileName(new Date()));
 }
 
 /**

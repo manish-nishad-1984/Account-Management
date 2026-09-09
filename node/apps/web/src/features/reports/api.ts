@@ -2,10 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import {
   balancesResponseSchema,
   ledgerResponseSchema,
+  reportFileName,
   type BalancesResponse,
   type LedgerResponse,
 } from "@accountmanagement/contracts";
-import { apiRequest } from "../../lib/api-client";
+import { apiRequest, downloadRequest } from "../../lib/api-client";
+import { saveBlob } from "../../lib/download";
 
 const RESOURCE = "reports";
 
@@ -75,3 +77,52 @@ export const useSalesReport = (query: ReportQuery, enabled = true) =>
         signal,
       }),
   });
+
+/**
+ * The report downloads.
+ *
+ * The filters go with the file, and `limit` and `offset` deliberately do not:
+ * an export is the whole filtered set, so exporting from page 3 would produce a
+ * file whose Total describes something other than its rows. The server refuses
+ * paging parameters for the same reason.
+ *
+ * The legacy exports are POSTs with a JSON body, so none of them can be
+ * bookmarked, re-run from history, or opened in a second tab. These are GETs
+ * with the panel's own query string.
+ */
+type ExportKind = "ledger" | "balances" | "sales";
+
+const EXPORT_PATH: Record<string, string> = {
+  "ledger:xlsx": "ledger/export.xlsx",
+  "ledger:pdf": "ledger/export.pdf",
+  "ledger:by-party": "ledger/by-party.xlsx",
+  "balances:xlsx": "balances/export.xlsx",
+  "balances:pdf": "balances/export.pdf",
+  "sales:xlsx": "sales/export.xlsx",
+  "sales:pdf": "sales/export.pdf",
+};
+
+const EXPORT_NAME: Record<ExportKind, Parameters<typeof reportFileName>[0]> = {
+  ledger: "Ledger",
+  balances: "Balances",
+  sales: "Sales-Report",
+};
+
+export async function downloadReport(
+  kind: ExportKind,
+  format: "xlsx" | "pdf" | "by-party",
+  query: ReportQuery,
+): Promise<void> {
+  const path = EXPORT_PATH[`${kind}:${format}`]!;
+
+  // Paging never travels with an export.
+  const { limit: _limit, offset: _offset, ...filters } = query;
+  const blob = await downloadRequest(`/${RESOURCE}/${path}${toSearch(filters)}`);
+
+  const name =
+    format === "by-party"
+      ? reportFileName("Ledger-by-supplier", new Date(), "xlsx")
+      : reportFileName(EXPORT_NAME[kind], new Date(), format);
+
+  saveBlob(blob, name);
+}

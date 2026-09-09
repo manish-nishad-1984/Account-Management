@@ -4,6 +4,7 @@ import type { LedgerRow } from "@accountmanagement/contracts";
 import { Alert, Badge, Button, EmptyState, PageHeader } from "../../components/ui";
 import { formatDate, formatMoney } from "../../lib/format";
 import { EMPTY_FILTERS, ReportFilters, toQuery, type FilterState } from "./ReportFilters";
+import { ExportButtons } from "./ExportButtons";
 import { useBalances, useLedger } from "./api";
 
 /**
@@ -93,7 +94,13 @@ export function LedgerPage() {
 
       {/* Panel 1 — the summary, one row per site and party. */}
       <section className="mb-6">
-        <h2 className="heading mb-2 text-sm">Balance summary</h2>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="heading text-sm">Balance summary</h2>
+          <ExportButtons
+            kind="balances"
+            query={{ ...toQuery(applied), direction, show: "all" }}
+          />
+        </div>
         {balances.isError && (
           <Alert icon={AlertTriangle}>The balance summary could not be loaded.</Alert>
         )}
@@ -165,7 +172,10 @@ export function LedgerPage() {
 
       {/* Panel 2 — the ledger, with the running balance. */}
       <section>
-        <h2 className="heading mb-2 text-sm">Ledger</h2>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="heading text-sm">Ledger</h2>
+          <ExportButtons kind="ledger" withByParty query={{ ...toQuery(applied), direction }} />
+        </div>
         {ledger.isError && <Alert icon={AlertTriangle}>The ledger could not be loaded.</Alert>}
         {ledger.isPending && (
           <div className="flex items-center gap-2 py-6 text-sm text-slate-500">
