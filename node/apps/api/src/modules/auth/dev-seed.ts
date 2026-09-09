@@ -761,13 +761,41 @@ export class DevSeed implements OnModuleInit {
 
         const lineCount = 2 + (offset % 3);
         const lines = Array.from({ length: lineCount }, (_, l) => {
-          const item = insertedItems[(offset * 5 + l) % insertedItems.length]!;
-          const quantity = l === 1 ? "3.50" : String((l + 1) * 8) + ".00";
+          /*
+           * EVERY VALUE ON A LINE MIXES `offset`, NOT ONLY `l`.
+           *
+           * This is the fourth appearance of the same seed defect — see §5r and
+           * §5s, where `offset % 3` was constant per site because 3 divides 45.
+           * Here it was subtler and worse. The item was picked with a stride of
+           * FIVE into fifty items, and 5 divides 50, so `offset * 5 % 50` only
+           * ever produced ten of the fifty indices. An item index congruent to
+           * 0 mod 5 could therefore only ever land on line 0, one congruent to
+           * 1 mod 5 only on line 1, and so on.
+           *
+           * Every other value on the line was then keyed off `l` alone. So each
+           * item appeared on every invoice in the database at the SAME quantity,
+           * the SAME discount and the SAME GST rate — for "10mm Aggregate", nine
+           * invoices all reading 8 units, 5.00 off, 18%.
+           *
+           * That is invisible on the invoice screens, which show one document at
+           * a time, and it is glaring on the price history panel, which exists
+           * to compare one item across documents. It also meant no manual check
+           * against this seed could ever exercise a per-unit division by two
+           * different quantities.
+           *
+           * The stride is now SEVEN, and gcd(7, 50) = 1, so an item reaches every
+           * line position. `offset` is mixed into the rest for the same reason.
+           */
+          const item = insertedItems[(offset * 7 + l) % insertedItems.length]!;
+          const step = offset + l;
+          // Whole and fractional quantities both, so the per-unit arithmetic is
+          // exercised against a quantity that does not divide evenly.
+          const quantity = step % 4 === 1 ? String(2 + (step % 5)) + ".50" : String(4 + (step % 9) * 3) + ".00";
           const unitPrice = String(180 + offset * 41 + l * 17) + ".00";
           // No discount on every third line, so the derived percent column shows
           // both "0.00" and a real figure.
-          const discountPerUnit = l % 3 === 2 ? "0" : String(5 + l * 2) + ".00";
-          const gstPercent = ["18.00", "12.00", "5.00", "28.00"][l % 4]!;
+          const discountPerUnit = step % 3 === 2 ? "0" : String(5 + (step % 4) * 2) + ".00";
+          const gstPercent = ["18.00", "12.00", "5.00", "28.00"][step % 4]!;
           return { item, quantity, unitPrice, discountPerUnit, gstPercent };
         });
 

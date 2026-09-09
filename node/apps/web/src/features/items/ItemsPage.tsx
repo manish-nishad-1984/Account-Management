@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ITEM_SORT_FIELDS, type ItemRow } from "@accountmanagement/contracts";
-import { AlertTriangle, Download, Plus, Ruler, Upload } from "lucide-react";
+import { AlertTriangle, Clock, Download, Plus, Ruler, Upload } from "lucide-react";
 import { DataGrid, RowActions } from "../../components/DataGrid";
 import { Alert, Badge, Button, ConfirmDialog, PageHeader } from "../../components/ui";
 import { downloadItemSheet, useDeleteItem, useItemList } from "./api";
 import { ApiError } from "../../lib/api-client";
 import { ItemFormDialog } from "./ItemFormDialog";
+import { ItemHistoryDialog } from "./ItemHistoryDialog";
 import { ItemImportDialog } from "./ItemImportDialog";
 import { UnitsDialog } from "./UnitsDialog";
 import { usePermission } from "../../lib/permissions";
@@ -25,6 +26,16 @@ export function ItemsPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  /**
+   * The row whose price history is open, held whole rather than by id.
+   *
+   * The dialog names the item and shows its master price beside what was
+   * actually paid, and both are already on the row that was clicked. Keeping the
+   * row means the title is right on the first frame instead of appearing once a
+   * second request resolves.
+   */
+  const [historyRow, setHistoryRow] = useState<ItemRow | null>(null);
 
   const { openEdit, askDelete } = screen;
 
@@ -112,12 +123,31 @@ export function ItemsPage() {
         id: "actions",
         header: "",
         cell: ({ row }) => (
-          <RowActions
-            capabilities={row.original.capabilities}
-            label={row.original.name}
-            onEdit={() => openEdit(row.original.id)}
-            onDelete={() => askDelete(row.original)}
-          />
+          <div className="flex items-center justify-end gap-1">
+            {/*
+              The clock icon in the legacy Action column. It sits OUTSIDE
+              RowActions rather than inside it: that component renders from the
+              row capabilities the server computes for edit, delete and approve,
+              and history is none of those — it is guarded by `item.view`, the
+              right that drew the screen. Twelve screens share RowActions, and
+              adding an item-only button to it would be a change to all of them.
+            */}
+            <Button
+              variant="ghost"
+              icon={Clock}
+              className="px-2 py-1 text-xs"
+              aria-label={`Price history for ${row.original.name}`}
+              onClick={() => setHistoryRow(row.original)}
+            >
+              History
+            </Button>
+            <RowActions
+              capabilities={row.original.capabilities}
+              label={row.original.name}
+              onEdit={() => openEdit(row.original.id)}
+              onDelete={() => askDelete(row.original)}
+            />
+          </div>
         ),
       },
     ],
@@ -192,6 +222,14 @@ export function ItemsPage() {
 
       <ItemImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
 
+      <ItemHistoryDialog
+        open={historyRow !== null}
+        itemId={historyRow?.id ?? null}
+        itemName={historyRow?.name ?? ""}
+        pricePerUnit={historyRow?.pricePerUnit ?? null}
+        onClose={() => setHistoryRow(null)}
+      />
+
       <ConfirmDialog
         open={screen.deleteTarget !== null}
         onClose={screen.cancelDelete}
@@ -205,9 +243,11 @@ export function ItemsPage() {
               Delete <span className="font-medium text-slate-900">{screen.deleteTarget?.name}</span>?
             </p>
             <p className="mt-2 text-xs text-slate-500">
-              The item is marked deleted and hidden from every list. Purchase
-              requests and inward challans have not been migrated yet, so this
-              cannot check whether any reference it.
+              The item is marked deleted and hidden from every list. Documents
+              that already reference it — purchase requests, orders, challans and
+              invoices — keep showing it by name, so its price history stays
+              readable. Nothing is refused: an item appearing on years of
+              invoices would otherwise be undeletable forever.
             </p>
           </>
         }

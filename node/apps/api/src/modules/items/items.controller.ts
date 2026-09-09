@@ -22,6 +22,7 @@ import {
   createItemSchema,
   createUnitSchema,
   hasPermission,
+  itemPriceHistoryQuerySchema,
   itemSheetFileName,
   listQuerySchema,
   setApprovalSchema,
@@ -32,6 +33,8 @@ import {
   type CreateItem,
   type CreateUnit,
   type ItemDetail,
+  type ItemPriceHistory,
+  type ItemPriceHistoryQuery,
   type ItemRow,
   type ItemSheetImportResult,
   type ListResponse,
@@ -41,6 +44,7 @@ import {
   type UpdateUnit,
 } from "@accountmanagement/contracts";
 import { ItemsRepository } from "./items.repository";
+import { ItemPriceHistoryRepository } from "./item-price-history.repository";
 import { UnitsRepository } from "./units.repository";
 import { ItemSheetRejected, ItemSheetService } from "./item-sheet.service";
 import { Permissions } from "../../common/auth/permissions.decorator";
@@ -87,6 +91,7 @@ export class ItemsController {
   constructor(
     private readonly items: ItemsRepository,
     private readonly sheets: ItemSheetService,
+    private readonly history: ItemPriceHistoryRepository,
   ) {}
 
   @Get()
@@ -192,6 +197,32 @@ export class ItemsController {
   @Permissions("item.view")
   findOne(@Param("id", ParseUUIDPipe) id: string): Promise<ItemDetail> {
     return this.items.findById(id);
+  }
+
+  /**
+   * The clock icon in the legacy Action column — what this item has cost.
+   *
+   * Guarded by `item.view`, the right for the screen the icon sits on. The
+   * legacy action `GetItemHistory` carries no `[FormPermissionAttribute]`, like
+   * the download beside it, so anyone reaching the site could read every price
+   * the business has paid and every supplier it paid them to. C-6 again, and
+   * closed here for the reason supplier edit was: a missing authorization check
+   * is not a business rule to reproduce faithfully.
+   *
+   * It reads purchase invoices WITHOUT requiring `purchase-invoice.view`, which
+   * is deliberate and is what the source does. The panel shows prices for one
+   * item, not documents — no invoice can be opened from it, and a buyer
+   * choosing what to pay is exactly who it is for. The same shape of decision as
+   * `/sites/assignable`, where guarding a dropdown with the master screen's
+   * right locked clerks out of a form they were entitled to use.
+   */
+  @Get(":id/price-history")
+  @Permissions("item.view")
+  priceHistory(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Query(new ZodValidationPipe(itemPriceHistoryQuerySchema)) query: ItemPriceHistoryQuery,
+  ): Promise<ItemPriceHistory> {
+    return this.history.forItem(id, query.limit);
   }
 
   @Post()

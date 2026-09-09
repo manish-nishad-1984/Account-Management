@@ -250,9 +250,9 @@ DONE     site selector                                    (7 Sep 2026, §1.1)
          Dashboard approval queues, ALL 6                 (8 Sep 2026, §01)
          Sales Invoices (list, form, approval)            (9 Sep 2026, §12/§13)
 DONE     PO delivery addresses + T&C editor              (9 Sep 2026, §5s)
+         item price history                              (9 Sep 2026, §5t)
 NOW      master-detail ANSWER                            <- with the business now, doc 19 Q12
-NEXT     item price history                              <- UNBLOCKED: reads purchase invoices
-         per-site address list (site_addresses)          <- see below; needs the census for geography
+NEXT     per-site address list (site_addresses)          <- see below; needs the census for geography
 BLOCKED  Supplier Excel import                           <- needs the States/Cities census
 BLOCKED  Reports, payments, supplier balances            <- needs D7 and the payments model
 ```
@@ -273,6 +273,26 @@ and change what is written above:
 - **The delivery panels are a quantity-per-address repeater**, not the read-only
   display this document described. Both post into one table, and the source tells
   them apart by prefixing group addresses with the string `"Group-"`.
+
+**Item price history shipped on 9 Sep 2026**, as `GET /items/:id/price-history`
+and a panel behind the clock icon. See SESSION-HANDOFF §5t. §1.3 above already
+records that this is a PURCHASE-price history rather than an audit log; what
+reading `_ItemHistoryPartial.cshtml` added is that **four of its seven columns
+are wrong**, and the worst of them is arithmetic:
+
+- Its `PriceWithGST` column is `TotalAmount / Quantity`, where TotalAmount is the
+  invoice HEADER grand total and Quantity is ONE LINE quantity. On a single-line
+  invoice that lands near the right answer by coincidence; on a real multi-line
+  one it divides the whole document by one of its lines. Measured against the dev
+  data: 4,663.63 a unit displayed where 3,399.58 was paid.
+- Its GST column reads the rate off the ITEM MASTER, not the invoice line, so
+  editing an item silently rewrites the rate shown against every past invoice.
+- It groups by invoice and takes the first line, so an item bought twice on one
+  document at two prices loses the second.
+- It INNER JOINs sites, and `site_id` is nullable, so invoices raised without a
+  site are invisible.
+
+All four are departed from and each is pinned by a test.
 
 **A new NEXT item: the per-site address list.** The legacy Shipping Addresses
 panel reads a `SiteAddresses` TABLE — many rows per site — which this port does

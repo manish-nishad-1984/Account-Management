@@ -19,3 +19,4 @@ export * from "./sales-invoices";
 export * from "./inventory-inward";
 export * from "./inward-challans";
 export * from "./item-sheet";
+export * from "./item-price-history";

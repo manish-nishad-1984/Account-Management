@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   itemDetailSchema,
+  itemPriceHistorySchema,
   itemRowSchema,
   itemSheetFileName,
   itemSheetImportResultSchema,
@@ -9,6 +10,7 @@ import {
   type CreateItem,
   type CreateUnit,
   type ItemDetail,
+  type ItemPriceHistory,
   type ItemRow,
   type ItemSheetImportResult,
   type ListResponse,
@@ -124,3 +126,27 @@ export function importRejectionFrom(error: unknown): ItemSheetImportResult | nul
 export const useCreateUnit = () => useCreateResource<CreateUnit, UnitRow>(UNITS, unitRowSchema);
 export const useUpdateUnit = () => useUpdateResource<UpdateUnit, UnitRow>(UNITS, unitRowSchema);
 export const useDeleteUnit = () => useDeleteResource(UNITS);
+
+/**
+ * The clock icon's panel — every purchase invoice line for one item.
+ *
+ * Enabled only when a row is open, so opening the Items screen does not fetch a
+ * history nobody asked for. It is NOT `useListResource`: the endpoint is not
+ * keyset-paged, deliberately, because it sorts on a nullable `document_date`
+ * and §7.2 is exactly that a nullable keyset sort column silently drops rows.
+ *
+ * `staleTime` is left at the client default. A price history changes when an
+ * invoice is entered, which is a different screen and a different session, so
+ * there is nothing here to invalidate it from — and a buyer reopening the panel
+ * expects to see the invoice they just keyed.
+ */
+export const useItemPriceHistory = (id: string | null) =>
+  useQuery({
+    queryKey: [RESOURCE, "price-history", id],
+    enabled: id !== null,
+    queryFn: ({ signal }) =>
+      apiRequest<ItemPriceHistory>(`/${RESOURCE}/${id}/price-history`, {
+        schema: itemPriceHistorySchema,
+        signal,
+      }),
+  });

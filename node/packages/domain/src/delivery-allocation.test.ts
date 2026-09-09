@@ -125,12 +125,15 @@ describe("the departure from the source", () => {
     // panel the two implementations are the same rule, and that is worth
     // pinning: it bounds what the change can affect.
     for (const kind of ["site", "group"] as const) {
+      // `as const` makes these TUPLES rather than `string[]`. Without it,
+      // destructuring yields `string | undefined` under
+      // `noUncheckedIndexedAccess` and the file does not typecheck.
       for (const [quantity, ordered] of [
         ["50", "100"],
         ["100", "100"],
         ["101", "100"],
         ["0", "100"],
-      ]) {
+      ] as const) {
         const lines: DeliveryAllocationLine[] = [{ kind, quantity }];
         expect(allocate(lines, ordered).exceedsOrder).toBe(legacyRefuses(lines, ordered));
       }

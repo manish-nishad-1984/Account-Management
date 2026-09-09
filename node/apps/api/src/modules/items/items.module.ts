@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ItemsController, UnitsController } from "./items.controller";
 import { ItemsRepository } from "./items.repository";
+import { ItemPriceHistoryRepository } from "./item-price-history.repository";
 import { UnitsRepository } from "./units.repository";
 import { ItemSheetService } from "./item-sheet.service";
 
@@ -16,6 +17,6 @@ import { ItemSheetService } from "./item-sheet.service";
  */
 @Module({
   controllers: [ItemsController, UnitsController],
-  providers: [ItemsRepository, UnitsRepository, ItemSheetService],
+  providers: [ItemsRepository, UnitsRepository, ItemSheetService, ItemPriceHistoryRepository],
 })
 export class ItemsModule {}

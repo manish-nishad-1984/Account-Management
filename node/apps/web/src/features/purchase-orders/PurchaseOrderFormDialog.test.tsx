@@ -319,7 +319,10 @@ describe("PurchaseOrderFormDialog", () => {
       await waitFor(() => {
         expect(postedBody()).not.toBeNull();
       });
-      const line = postedBody()!.items[0];
+      // Indexing an array yields `T | undefined` under
+      // `noUncheckedIndexedAccess`. The `waitFor` above proves a body was
+      // posted; it does not prove it had a line, so the assertion says so.
+      const line = postedBody()!.items[0]!;
       expect(line.itemId).toBe("44444444-4444-4444-8444-444444444444");
       expect(line.itemName ?? "").toBe("");
     });
