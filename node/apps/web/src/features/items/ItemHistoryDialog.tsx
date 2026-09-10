@@ -2,6 +2,7 @@ import { AlertTriangle, Clock, Loader2 } from "lucide-react";
 import type { ItemPriceHistoryRow } from "@accountmanagement/contracts";
 import { Alert, Badge, EmptyState, Modal } from "../../components/ui";
 import { formatDate, formatMoney, formatPercent, formatQuantity } from "../../lib/format";
+import { describeLoadError } from "../../lib/load-error";
 import { useItemPriceHistory } from "./api";
 
 /**
@@ -88,7 +89,7 @@ export function ItemHistoryDialog({
 
       {query.isError && (
         <Alert icon={AlertTriangle} className="mb-3">
-          The price history could not be loaded.
+          {describeLoadError(query.error, "the price history")}
         </Alert>
       )}
 

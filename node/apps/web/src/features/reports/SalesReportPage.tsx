@@ -4,6 +4,7 @@ import { Alert, EmptyState, PageHeader } from "../../components/ui";
 import { formatMoney } from "../../lib/format";
 import { EMPTY_FILTERS, ReportFilters, toQuery, type FilterState } from "./ReportFilters";
 import { ExportButtons } from "./ExportButtons";
+import { describeLoadError } from "../../lib/load-error";
 import { useSalesReport } from "./api";
 
 /**
@@ -52,7 +53,9 @@ export function SalesReportPage() {
         partyLabel="Customer"
       />
 
-      {report.isError && <Alert icon={AlertTriangle}>The sales report could not be loaded.</Alert>}
+      {report.isError && (
+        <Alert icon={AlertTriangle}>{describeLoadError(report.error, "the sales report")}</Alert>
+      )}
 
       {report.isPending && (
         <div className="flex items-center gap-2 py-6 text-sm text-slate-500">

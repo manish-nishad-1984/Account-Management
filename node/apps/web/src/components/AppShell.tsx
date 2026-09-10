@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import clsx from "clsx";
 import { CalendarDays, LogOut, Menu, X } from "lucide-react";
 import { financialYear } from "@accountmanagement/domain";
+import { hasPermission } from "@accountmanagement/contracts";
 import { useAuth } from "../contexts/AuthContext";
 import { NAV } from "../navigation/nav";
 import { SiteScopePicker } from "./SiteScopePicker";
@@ -24,6 +25,33 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const initials = (user?.userName ?? "?").slice(0, 2).toUpperCase();
   const fy = financialYear.format(financialYear.currentAsProduced(new Date()));
+
+  /**
+   * ONLY THE SCREENS THIS USER CAN ACTUALLY OPEN.
+   *
+   * Every nav entry has carried a `permission` since the navigation was written
+   * and nothing read it, so the sidebar offered all seventeen screens to
+   * everyone. Two of them answer 403 for a real production user — the reports,
+   * whose forms are deliberately inactive — and following those links produced a
+   * fully drawn page with "could not be loaded" on it, which reads as a fault to
+   * retry rather than a door that is closed.
+   *
+   * This is presentation only. `PermissionsGuard` refuses the request again on
+   * the server, which is the difference from the .NET app, where the Razor
+   * partial was the only check.
+   *
+   * A section whose every item is hidden hides its heading too — otherwise the
+   * rail grows an empty "REPORTS" label with nothing under it.
+   */
+  const nav = useMemo(() => {
+    const granted = user?.permissions ?? [];
+    return NAV.map((section) => ({
+      ...section,
+      items: section.items.filter(
+        (item) => !item.permission || hasPermission(granted, item.permission, "view"),
+      ),
+    })).filter((section) => section.items.length > 0);
+  }, [user?.permissions]);
 
   return (
     <div className="flex h-full bg-slate-50">
@@ -66,7 +94,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="scroll-subtle flex-1 overflow-y-auto px-3 py-4" aria-label="Main">
-          {NAV.map((section) => (
+          {nav.map((section) => (
             <div key={section.title} className="mb-6 last:mb-2">
               <div className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                 {section.title}

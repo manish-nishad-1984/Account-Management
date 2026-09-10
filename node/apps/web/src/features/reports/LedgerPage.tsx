@@ -5,6 +5,7 @@ import { Alert, Badge, Button, EmptyState, PageHeader } from "../../components/u
 import { formatDate, formatMoney } from "../../lib/format";
 import { EMPTY_FILTERS, ReportFilters, toQuery, type FilterState } from "./ReportFilters";
 import { ExportButtons } from "./ExportButtons";
+import { describeLoadError } from "../../lib/load-error";
 import { useBalances, useLedger } from "./api";
 
 /**
@@ -102,7 +103,9 @@ export function LedgerPage() {
           />
         </div>
         {balances.isError && (
-          <Alert icon={AlertTriangle}>The balance summary could not be loaded.</Alert>
+          <Alert icon={AlertTriangle}>
+            {describeLoadError(balances.error, "the balance summary")}
+          </Alert>
         )}
         {balances.isPending && (
           <div className="flex items-center gap-2 py-6 text-sm text-slate-500">
@@ -176,7 +179,9 @@ export function LedgerPage() {
           <h2 className="heading text-sm">Ledger</h2>
           <ExportButtons kind="ledger" withByParty query={{ ...toQuery(applied), direction }} />
         </div>
-        {ledger.isError && <Alert icon={AlertTriangle}>The ledger could not be loaded.</Alert>}
+        {ledger.isError && (
+          <Alert icon={AlertTriangle}>{describeLoadError(ledger.error, "the ledger")}</Alert>
+        )}
         {ledger.isPending && (
           <div className="flex items-center gap-2 py-6 text-sm text-slate-500">
             <Loader2 aria-hidden className="size-4 animate-spin" /> Loading ledger
