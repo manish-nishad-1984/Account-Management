@@ -111,13 +111,28 @@ export const suppliers = pgTable(
   },
   (table) => [
     /**
-     * A GST number identifies one legal entity; two live suppliers cannot share
-     * one. Not enforced in SQL Server. Partial, because the column is nullable
-     * and the source holds blanks.
+     * ~~A GST number identifies one legal entity; two live suppliers cannot
+     * share one.~~ **THAT RULE WAS WRONG, AND IT COST REAL HISTORY.**
+     *
+     * It was invented by this port — SQL Server does not enforce it — and the
+     * live data refuses it in three different ways:
+     *
+     * - **One entity, several supplier rows, deliberately.** UltraTech Cement
+     *   appears as `ULTRATECH CEMENT LIMITED- CONCRETE`, `-AMBIKA` and
+     *   `-SHIVAM`, all on `24AAACL6442L1ZG`. The business keeps a supplier row
+     *   per site and product, which is ordinary practice, not an error.
+     * - **A placeholder.** Four suppliers carry the GST number `00`.
+     * - **Copy-paste.** Five unrelated names share `24AADCD9500G2ZY`.
+     *
+     * Only the first case has to be legitimate for uniqueness to be the wrong
+     * constraint, and it is. Enforcing it dropped 11 live suppliers, and with
+     * them 34 invoices worth Rs 46.4 lakh and 15 payments worth Rs 29.8 lakh —
+     * history the old system holds and the new one would silently not have had.
+     *
+     * The index stays without the uniqueness, because suppliers are looked up
+     * by GST number.
      */
-    uniqueIndex("suppliers_gst_no_key")
-      .on(sql`upper(${table.gstNo})`)
-      .where(sql`${table.gstNo} is not null and ${table.isDeleted} = false`),
+    index("suppliers_gst_no_key").on(sql`upper(${table.gstNo})`),
 
     /**
      * Names are unique case-insensitively among live suppliers.

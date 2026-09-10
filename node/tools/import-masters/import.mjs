@@ -967,17 +967,26 @@ try {
     (r) => r.name,
   ).kept;
 
-  // Both passes are captured, not just `.kept`: an inward challan pointing at a
-  // supplier that was merged away must follow it to the winner rather than
-  // losing its supplier entirely.
-  const suppliersByGst = enforceUnique(
-    outSuppliers,
-    "suppliers_gst_no_key",
-    (r) => upperOrNull(r.gst_no),
-    (r) => r.name,
-  );
+  /**
+   * SUPPLIERS ARE NO LONGER DEDUPLICATED BY GST NUMBER, and the reason is that
+   * the constraint behind it was wrong.
+   *
+   * `suppliers_gst_no_key` used to be UNIQUE — a rule this port invented, which
+   * SQL Server does not have. Against the client's live data it dropped 11
+   * suppliers, and with them 34 invoices worth Rs 46.4 lakh and 15 payments
+   * worth Rs 29.8 lakh. Migration 0013 makes the index non-unique because at
+   * least one of the collisions is legitimate: UltraTech Cement is recorded as
+   * three supplier rows on one GST number, one per site and product, which is
+   * how the business actually buys cement. (The others are a placeholder `00`
+   * on four suppliers, and one GST number copy-pasted across five unrelated
+   * names — real data-entry debris, but not this tool's to merge away.)
+   *
+   * Names are still deduplicated. That constraint holds in the live data, and
+   * suppliers are chosen from a name dropdown where two identical entries are
+   * unusable.
+   */
   const suppliersByName = enforceUnique(
-    suppliersByGst.kept,
+    outSuppliers,
     "suppliers_name_lower_key",
     (r) => lowerOrNull(r.name),
     (r) => r.name,
@@ -985,10 +994,6 @@ try {
   const finalSuppliers = suppliersByName.kept;
 
   const supplierRemap = new Map();
-  for (const d of suppliersByGst.dropped) {
-    const winner = suppliersByGst.seen.get(upperOrNull(d.gst_no));
-    if (winner) supplierRemap.set(d.id, winner.id);
-  }
   for (const d of suppliersByName.dropped) {
     const winner = suppliersByName.seen.get(lowerOrNull(d.name));
     if (winner) supplierRemap.set(d.id, winner.id);

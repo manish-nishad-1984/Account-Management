@@ -153,12 +153,26 @@ describe("SuppliersRepository (real PostgreSQL)", () => {
       });
     });
 
-    it("refuses two live suppliers sharing a GST number", async () => {
-      await repo.create(input({ name: "One", gstNo: "24AAACD1234A1Z5" }), ACTOR);
+    /**
+     * THIS TEST USED TO ASSERT THE OPPOSITE, AND THE RULE IT ASSERTED WAS WRONG.
+     *
+     * `suppliers_gst_no_key` was UNIQUE — a rule this port invented, which SQL
+     * Server does not have. The client's live data refuses it: UltraTech Cement
+     * is kept as three supplier rows on the one GST number, one per site and
+     * product, which is how the business actually buys cement. Enforcing
+     * uniqueness dropped 11 suppliers on import and took 34 invoices worth
+     * Rs 46.4 lakh and 15 payments worth Rs 29.8 lakh down with them.
+     *
+     * So sharing a GST number must SUCCEED. Names are still unique among live
+     * suppliers, which is why the two rows below are named differently — and
+     * why the real data names them after the site each one buys for.
+     */
+    it("lets two live suppliers share a GST number", async () => {
+      await repo.create(input({ name: "Ultratech - Ambika", gstNo: "24AAACL6442L1ZG" }), ACTOR);
 
       await expect(
-        repo.create(input({ name: "Two", gstNo: "24AAACD1234A1Z5" }), ACTOR),
-      ).rejects.toMatchObject({ status: 409 });
+        repo.create(input({ name: "Ultratech - Shivam", gstNo: "24AAACL6442L1ZG" }), ACTOR),
+      ).resolves.toMatchObject({ gstNo: "24AAACL6442L1ZG" });
     });
 
     it("updates only what it is given", async () => {
