@@ -54,7 +54,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           <button
             onClick={() => setSidebarOpen(false)}
             aria-label="Close navigation"
-            className="ml-auto rounded-md p-1.5 text-slate-400 hover:bg-white/10 hover:text-white lg:hidden"
+            /*
+             * A 40px box, not the 28px this was. It only ever appears on a phone,
+             * where it is hit with a thumb — and it was the smallest control in
+             * the application. The icon stays the same size; the padding grows.
+             */
+            className="ml-auto rounded-md p-3 text-slate-400 hover:bg-white/10 hover:text-white lg:hidden"
           >
             <X className="size-4" />
           </button>
@@ -132,7 +137,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               onClick={() => void logout()}
               aria-label="Sign out"
               title="Sign out"
-              className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+              /*
+               * Bigger on touch, unchanged with a mouse. Sign out sits next to
+               * nothing else, so a 28px target was easy to miss and easy to hit
+               * by accident on the way past.
+               */
+              className="shrink-0 rounded-md p-3 text-slate-400 transition-colors hover:bg-white/10 hover:text-white lg:p-1.5"
             >
               <LogOut className="size-4" />
             </button>
@@ -142,18 +152,32 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/85 px-4 backdrop-blur lg:px-8">
-          <div className="flex items-center gap-3">
+          {/*
+            `min-w-0` is what lets this side give way, and its absence was a real
+            bug: a flex item defaults to `min-width: auto` and refuses to shrink
+            below its own content, so the breadcrumb held the header open and the
+            header pushed past the viewport. EVERY screen scrolled sideways on a
+            phone as a result — 424px of header in a 390px window, measured — and
+            the three that did not were simply the ones with short names.
+          */}
+          <div className="flex min-w-0 items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}
               aria-label="Open navigation"
-              className="-ml-1 rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 lg:hidden"
+              className="-ml-1 shrink-0 rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 lg:hidden"
             >
               <Menu className="size-5" />
             </button>
             <Breadcrumb pathname={location.pathname} />
           </div>
 
-          <div className="flex items-center gap-2">
+          {/*
+            This side does NOT give way. The scope picker says whose data is on
+            screen, and a reader who cannot see it is reading numbers without
+            knowing which site they belong to. The breadcrumb truncates instead —
+            the page below repeats its own name as a heading.
+          */}
+          <div className="flex shrink-0 items-center gap-2">
             {/* Temporary: here so the business can compare the two layouts on
                 real data and answer the question in doc 19. It goes when they do. */}
             <RecordLayoutPicker />
@@ -209,12 +233,18 @@ function Breadcrumb({ pathname }: { pathname: string }) {
     return null;
   }
   return (
-    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm">
-      <span className="text-slate-400">{section?.title}</span>
-      <span aria-hidden className="text-slate-300">
+    <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-sm">
+      {/*
+        The section and its separator go on a phone. They are the least useful
+        half — "Masters / Companies" says little more than "Companies" — and on a
+        390px screen they are the difference between a header that fits and one
+        that does not.
+      */}
+      <span className="hidden shrink-0 text-slate-400 sm:inline">{section?.title}</span>
+      <span aria-hidden className="hidden shrink-0 text-slate-300 sm:inline">
         /
       </span>
-      <span className="font-medium text-slate-700">{item.label}</span>
+      <span className="truncate font-medium text-slate-700">{item.label}</span>
     </nav>
   );
 }

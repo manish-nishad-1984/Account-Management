@@ -163,9 +163,10 @@ export function DashboardPage() {
           </p>
         </div>
 
+        {/* Same reasoning as "View all" on the approval queue. */}
         <Link
           to="/users"
-          className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 transition-colors hover:text-brand-700"
+          className="-mb-2 mt-5 inline-flex items-center gap-1.5 py-2 text-sm font-medium text-brand-600 transition-colors hover:text-brand-700 lg:mb-0 lg:py-0"
         >
           Manage users
           <ArrowRight aria-hidden className="size-4" />

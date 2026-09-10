@@ -142,17 +142,23 @@ export function ReportFilters({
         </div>
       </div>
 
+      {/*
+        `py-1.5` on touch, back to `py-0.5` with a mouse. At 20px tall these were
+        the two smallest controls left in the application — and they are the
+        shortcut that saves typing two dates on the screen where typing them is
+        most tedious.
+      */}
       <div className="mt-2 flex flex-wrap gap-2 text-xs">
         <button
           type="button"
-          className="rounded-full px-2 py-0.5 text-brand-700 ring-1 ring-inset ring-brand-200 hover:bg-brand-50"
+          className="rounded-full px-2.5 py-1.5 text-brand-700 ring-1 ring-inset ring-brand-200 hover:bg-brand-50 lg:px-2 lg:py-0.5"
           onClick={() => onChange({ ...value, ...financialYearRange() })}
         >
           This financial year
         </button>
         <button
           type="button"
-          className="rounded-full px-2 py-0.5 text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"
+          className="rounded-full px-2.5 py-1.5 text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-50 lg:px-2 lg:py-0.5"
           onClick={() => onChange({ ...value, fromDate: "", toDate: "" })}
         >
           All dates

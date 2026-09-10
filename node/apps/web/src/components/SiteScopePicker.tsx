@@ -28,17 +28,31 @@ export function SiteScopePicker() {
     );
   }
 
+  /*
+   * The vertical padding lives on the SELECT, not on this wrapper.
+   *
+   * With `py-1.5` out here the pill looked like a 32px control while the select
+   * inside it was 17px tall: padding on an ancestor is not part of the target, so
+   * tapping the visible edge of the pill did nothing at all.
+   */
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 ring-1 ring-inset ring-slate-200">
+    <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 ring-1 ring-inset ring-slate-200">
       <Building2 aria-hidden className="size-3.5 shrink-0 text-slate-400" />
       <label htmlFor="site-scope" className="sr-only">
         Site
       </label>
       <select
         id="site-scope"
-        // A site id is a UUID; without this the closed control is 36 characters
-        // wide on Chrome and the header wraps.
-        className="max-w-[13rem] truncate border-0 bg-transparent py-0 pl-0 pr-6 text-xs font-semibold text-slate-800 focus:ring-0"
+        /*
+         * A site id is a UUID; without a cap the closed control is 36 characters
+         * wide on Chrome and the header wraps.
+         *
+         * The cap is TIGHTER ON A PHONE. At 13rem this control alone was 208px
+         * of a 390px screen and the header could not fit whatever else was in
+         * it. Truncated site names are readable enough here because the full
+         * list is one tap away, and the option list is not truncated.
+         */
+        className="max-w-[7.5rem] truncate border-0 bg-transparent py-2 pl-0 pr-6 text-xs font-semibold text-slate-800 focus:ring-0 sm:max-w-[13rem]"
         title="The site every site-scoped screen is filtered to"
         disabled={!isReady}
         value={siteId ?? ALL}

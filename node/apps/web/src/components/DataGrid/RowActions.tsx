@@ -33,12 +33,17 @@ export function RowActions({
   }
 
   return (
-    <div className="flex justify-end gap-1">
+    /*
+      `gap-2` on touch, `gap-1` with a mouse. Edit and Delete sit side by side and
+      Delete is destructive; 4px between two 28px targets is a good way to tap the
+      wrong one with a thumb. The buttons themselves also grow — see below.
+    */
+    <div className="flex justify-end gap-2 lg:gap-1">
       {capabilities.canEdit && (
         <Button
           variant="ghost"
           icon={Pencil}
-          className="px-2 py-1 text-xs"
+          className="px-2 py-2 text-xs lg:py-1"
           aria-label={`Edit ${label}`}
           onClick={onEdit}
         >
@@ -49,7 +54,7 @@ export function RowActions({
         <Button
           variant="ghost"
           icon={Trash2}
-          className="px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+          className="px-2 py-2 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700 lg:py-1"
           aria-label={`Delete ${label}`}
           onClick={onDelete}
         >

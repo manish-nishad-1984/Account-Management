@@ -176,8 +176,14 @@ export function DataGrid<T>({
                           onClick={() =>
                             onSortChange(field, active && sortDir === "asc" ? "desc" : "asc")
                           }
+                          /*
+                            `-my-3 py-3` makes the button fill the header cell's
+                            own vertical padding, so the whole cell sorts instead
+                            of a 16px strip of text inside it. Nothing moves: the
+                            negative margin returns exactly what the padding adds.
+                          */
                           className={clsx(
-                            "inline-flex items-center gap-1 hover:text-slate-800",
+                            "-my-3 inline-flex items-center gap-1 py-3 hover:text-slate-800",
                             active && "text-brand-700",
                           )}
                         >

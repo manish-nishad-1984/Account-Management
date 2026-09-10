@@ -182,15 +182,26 @@ export function ApprovalQueue<T extends QueueRow>({
                       one genuinely unusual control, and the entry point for the
                       bulk action.
                     */}
-                    <input
-                      ref={headerBox}
-                      type="checkbox"
-                      className="size-3.5 cursor-pointer rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-                      checked={allSelected}
-                      onChange={toggleAll}
-                      disabled={approvable.length === 0}
-                      aria-label={`Select all ${title.toLowerCase()}`}
-                    />
+                    {/*
+                      THE LABEL IS THE TAP TARGET, not the box.
+
+                      A 14px checkbox is smaller than a fingertip, and this one
+                      approves records in bulk — a mis-tap here is a wrong
+                      approval, not a wrong page. The box keeps its size so the
+                      grid looks the same; the label around it gives about 36px
+                      to aim at, and clicking a label toggles the input inside it.
+                    */}
+                    <label className="-m-1 flex cursor-pointer items-center justify-center p-2.5">
+                      <input
+                        ref={headerBox}
+                        type="checkbox"
+                        className="size-3.5 cursor-pointer rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                        checked={allSelected}
+                        onChange={toggleAll}
+                        disabled={approvable.length === 0}
+                        aria-label={`Select all ${title.toLowerCase()}`}
+                      />
+                    </label>
                   </th>
                 )}
                 {columns.map((column) => (
@@ -209,14 +220,17 @@ export function ApprovalQueue<T extends QueueRow>({
                 <tr key={row.id}>
                   {canApprove && (
                     <td className="px-1 py-2">
-                      <input
-                        type="checkbox"
-                        className="size-3.5 cursor-pointer rounded border-slate-300 text-brand-600 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
-                        checked={selected.has(row.id)}
-                        onChange={() => toggleOne(row.id)}
-                        disabled={!row.capabilities.canApprove}
-                        aria-label={`Select row ${row.id}`}
-                      />
+                      {/* Same reasoning as the select-all above. */}
+                      <label className="-m-1 flex cursor-pointer items-center justify-center p-2.5">
+                        <input
+                          type="checkbox"
+                          className="size-3.5 cursor-pointer rounded border-slate-300 text-brand-600 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
+                          checked={selected.has(row.id)}
+                          onChange={() => toggleOne(row.id)}
+                          disabled={!row.capabilities.canApprove}
+                          aria-label={`Select row ${row.id}`}
+                        />
+                      </label>
                     </td>
                   )}
                   {columns.map((column) => (
@@ -234,9 +248,14 @@ export function ApprovalQueue<T extends QueueRow>({
         </div>
       )}
 
+      {/*
+        `py-2 -mb-2` on touch: a standalone action link is tapped like a button,
+        and 16px of text is not enough to aim at. The negative margin keeps the
+        spacing below the card exactly as it was.
+      */}
       <Link
         to={to}
-        className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 transition-colors hover:text-brand-700"
+        className="-mb-2 mt-3 inline-flex items-center gap-1.5 py-2 text-xs font-medium text-brand-600 transition-colors hover:text-brand-700 lg:mb-0 lg:py-0"
       >
         View all
         <ArrowRight aria-hidden className="size-3.5" />

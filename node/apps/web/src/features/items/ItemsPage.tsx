@@ -135,7 +135,8 @@ export function ItemsPage() {
             <Button
               variant="ghost"
               icon={Clock}
-              className="px-2 py-1 text-xs"
+              /* Matches RowActions beside it: taller on touch, unchanged with a mouse. */
+              className="px-2 py-2 text-xs lg:py-1"
               aria-label={`Price history for ${row.original.name}`}
               onClick={() => setHistoryRow(row.original)}
             >
