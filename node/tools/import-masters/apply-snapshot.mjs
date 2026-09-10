@@ -42,11 +42,17 @@ if (!FILE || !PGURL) {
 }
 
 /**
- * The master snapshot predates `__meta.truncate`, so its list lives here.
- * Children first; `restart identity cascade` matches what `import.mjs` does
- * when it loads directly.
+ * FALLBACK ONLY, for master snapshots written before `__meta.truncate` existed.
+ *
+ * A copy of a list that lives somewhere else is a copy that goes stale, and this
+ * one did: when the geography and site-address tables were added to `import.mjs`
+ * they were missing here, so applying an old snapshot would have left the four
+ * new tables untouched while replacing everything around them. `import.mjs` now
+ * writes its own list into the snapshot and that is what is used; this survives
+ * only to keep snapshots taken before that readable.
  */
 const MASTER_TRUNCATE = [
+  "site_addresses",
   "document_counters",
   "inward_challan_documents",
   "inward_challans",
@@ -66,13 +72,22 @@ const MASTER_TRUNCATE = [
   "users",
   "forms",
   "units",
+  "cities",
+  "states",
+  "countries",
 ];
 
 const snapshot = JSON.parse(readFileSync(FILE, "utf8"));
 const meta = snapshot.__meta ?? {};
 const tables = Object.keys(snapshot).filter((key) => key !== "__meta");
 
-const isMasters = !meta.truncate;
+/**
+ * `kind` is written by both importers now. The older test — "no truncate list
+ * means masters" — broke the moment `import.mjs` started writing one, because a
+ * master snapshot then read as transactional and lost its `restart identity`.
+ * Fall back to that test only for snapshots written before `kind` existed.
+ */
+const isMasters = meta.kind ? meta.kind === "masters" : !meta.truncate;
 const truncate = meta.truncate ?? MASTER_TRUNCATE;
 
 console.log(`Snapshot   ${FILE}`);
@@ -124,6 +139,37 @@ try {
         await tx`insert into ${tx(table)} ${tx(rows.slice(i, i + size))}`;
       }
       console.log(`  ${table.padEnd(36)} ${String(rows.length).padStart(6)}`);
+    }
+
+    /**
+     * PUT THE IDENTITY SEQUENCES BACK, and this was a real defect until now.
+     *
+     * A few tables take the source's own ids into a generated-by-default identity
+     * column. `truncate ... restart identity` sets each sequence to 1, and
+     * inserting explicit ids does not advance it — so after a load the sequence
+     * still says 1 while the table holds ids up to 82, and the FIRST unit anyone
+     * creates in the app fails on a duplicate key.
+     *
+     * `import.mjs` has always done this on its direct-load path; this file did
+     * not, so every snapshot load left production in that state. It was found on
+     * a live database whose units sequence was at 1 against a maximum id of 82.
+     *
+     * Older snapshots carry no `resetSequences`, so the known set is the default.
+     */
+    const resetSequences = meta.resetSequences ?? ["units", "forms", "site_addresses"];
+    const reset = resetSequences.filter((t) => tables.includes(t) && snapshot[t].length > 0);
+    if (reset.length > 0) {
+      console.log("Resetting identity sequences ...");
+      for (const table of reset) {
+        const [{ seq }] = await tx`select pg_get_serial_sequence(${table}, 'id') as seq`;
+        if (!seq) {
+          console.log(`  ${table.padEnd(36)}   no identity sequence, skipped`);
+          continue;
+        }
+        const [{ max }] = await tx.unsafe(`select max(id) as max from ${table}`);
+        await tx.unsafe(`select setval('${seq}', ${Number(max)})`);
+        console.log(`  ${table.padEnd(36)} ${String(max).padStart(6)}  next id is ${Number(max) + 1}`);
+      }
     }
   });
 

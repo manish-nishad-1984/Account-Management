@@ -221,8 +221,22 @@ try {
 
   const SOURCE_TABLES = [
     "UnitMaster",
+    /**
+     * THE ADDRESS LOOKUP TABLES, which this tool never read until now.
+     *
+     * Every `city_id` / `state_id` / `country_id` on companies, sites and
+     * suppliers has been carried across since the first import as a bare number
+     * with nothing in the target to resolve it against — so every address in the
+     * application displays an integer where a place name belongs. 639 rows fix
+     * that, and the census says all thirteen references resolve cleanly.
+     */
+    "Countries",
+    "States",
+    "Cities",
     "Company",
     "Site",
+    /** A site's ADDITIONAL shipping addresses, offered on the order screen. */
+    "SiteAddress",
     "SupplierMaster",
     "ItemMaster",
     "GroupMaster",
@@ -245,8 +259,12 @@ try {
   console.log("\nReading master tables ...");
   const raw = {
     units: await readAll(pool, schemas, "UnitMaster"),
+    countries: await readAll(pool, schemas, "Countries"),
+    states: await readAll(pool, schemas, "States"),
+    cities: await readAll(pool, schemas, "Cities"),
     companies: await readAll(pool, schemas, "Company"),
     sites: await readAll(pool, schemas, "Site"),
+    siteAddresses: await readAll(pool, schemas, "SiteAddress"),
     suppliers: await readAll(pool, schemas, "SupplierMaster"),
     items: await readAll(pool, schemas, "ItemMaster"),
     groups: await readAll(pool, schemas, "GroupMaster"),
@@ -268,8 +286,16 @@ try {
   // ── filter to what the app shows today ───────────────────────────────────
   const src = {
     units: raw.units,
+    /**
+     * Geography has no soft-delete column in the source, so there is nothing to
+     * filter: reference data is either present or it is not.
+     */
+    countries: raw.countries,
+    states: raw.states,
+    cities: raw.cities,
     companies: liveRows(raw.companies, "Company"),
     sites: liveRows(raw.sites, "Site"),
+    siteAddresses: liveRows(raw.siteAddresses, "SiteAddress"),
     suppliers: liveRows(raw.suppliers, "SupplierMaster"),
     items: liveRows(raw.items, "ItemMaster"),
     groups: raw.groups,
@@ -344,6 +370,62 @@ try {
     updated_at: date(field(r, "UpdatedOn")),
   }));
 
+  /**
+   * GEOGRAPHY. The source's own ids are kept, deliberately: 205 suppliers, 20
+   * sites and 8 companies already hold those numbers, and their columns are not
+   * being rewritten. `Cities.CityId` 412 has to stay 412.
+   *
+   * Loaded in dependency order — countries, then states, then cities — because
+   * the target declares real foreign keys between them. Rows whose parent is
+   * missing are dropped rather than allowed to fail the whole transaction, but
+   * the live census found none: 603 cities all resolve to a state, and all 35
+   * states to a country.
+   */
+  const outCountries = src.countries.map((r) => ({
+    id: field(r, "CountryId"),
+    // `char(n)` in SQL Server, so it arrives blank-padded — "IN  ", not "IN".
+    code: str(field(r, "CountryCode")),
+    name: str(field(r, "CountryName")) ?? "(unnamed)",
+  }));
+
+  const countryIds = new Set(outCountries.map((r) => r.id));
+  const outStates = src.states
+    .map((r) => ({
+      id: field(r, "StatesId"),
+      name: str(field(r, "StatesName")) ?? "(unnamed)",
+      // The GST state code (24 = Gujarat), not a postal abbreviation.
+      state_code: field(r, "StateCode") ?? null,
+      country_id: field(r, "Country_id", "CountryId"),
+    }))
+    .filter((r) => {
+      if (countryIds.has(r.country_id)) return true;
+      report.orphans.push({
+        relationship: "states.country_id -> countries",
+        id: r.id,
+        kind: "missing",
+        detail: `state "${r.name}" names country ${r.country_id}, which is not in Countries`,
+      });
+      return false;
+    });
+
+  const stateIds = new Set(outStates.map((r) => r.id));
+  const outCities = src.cities
+    .map((r) => ({
+      id: field(r, "CityId"),
+      name: str(field(r, "CityName")) ?? "(unnamed)",
+      state_id: field(r, "State_Id", "StateId"),
+    }))
+    .filter((r) => {
+      if (stateIds.has(r.state_id)) return true;
+      report.orphans.push({
+        relationship: "cities.state_id -> states",
+        id: r.id,
+        kind: "missing",
+        detail: `city "${r.name}" names state ${r.state_id}, which is not in States`,
+      });
+      return false;
+    });
+
   const outSites = src.sites.map((r) => ({
     id: uuid(field(r, "SiteId")),
     name: str(field(r, "SiteName")) ?? "(unnamed)",
@@ -371,6 +453,28 @@ try {
     updated_by: uuid(field(r, "UpdatedBy")),
     updated_at: date(field(r, "UpdatedOn")),
   }));
+
+  /**
+   * A site's additional shipping addresses. `site_id` is a real foreign key in
+   * the target, so an address on a soft-deleted site is dropped and reported
+   * rather than allowed to fail the transaction.
+   */
+  const outSiteAddresses = src.siteAddresses
+    .map((r) => ({
+      id: field(r, "AId"),
+      site_id: uuid(field(r, "SiteId")),
+      address: str(field(r, "Address")) ?? "",
+      is_deleted: false,
+    }))
+    .filter((r) => {
+      if (r.site_id && siteIds.has(r.site_id)) return true;
+      orphan("site_addresses.site_id -> sites", r.id, r.site_id, deleted.sites, (kind) =>
+        kind === "deleted"
+          ? `address ${r.id} belongs to a soft-deleted site`
+          : `address ${r.id} names site ${r.site_id}, which does not exist`,
+      );
+      return false;
+    });
 
   const outSuppliers = src.suppliers.map((r) => ({
     id: uuid(field(r, "SupplierId")),
@@ -1078,10 +1182,53 @@ try {
   console.log("\n" + "=".repeat(72));
   console.log("WHAT WOULD BE LOADED");
   console.log("=".repeat(72));
+  /**
+   * What to clear before loading, children first.
+   *
+   * Defined ONCE, because it is used twice — here when this tool writes straight
+   * into PostgreSQL, and inside the snapshot so `apply-snapshot.mjs` clears
+   * exactly the same set when the write happens on another machine. It used to
+   * be written out in both places and the copies drifted.
+   *
+   * `refresh_tokens` is named rather than left to CASCADE: it references users,
+   * and clearing it is correct — every session is invalidated when the user rows
+   * are replaced — but it should be visible, not a surprise.
+   */
+  const TRUNCATE_ORDER = [
+    "document_counters",
+    "inward_challan_documents",
+    "inward_challans",
+    "inventory_inward",
+    "purchase_requests",
+    "refresh_tokens",
+    "user_form_permissions",
+    "user_sites",
+    "user_companies",
+    "site_group_addresses",
+    "site_group_sites",
+    "site_groups",
+    "site_addresses",
+    "items",
+    "suppliers",
+    "sites",
+    "companies",
+    "users",
+    "forms",
+    "units",
+    "cities",
+    "states",
+    "countries",
+  ];
+
   const plan = [
     ["units", finalUnits],
+    // Geography first: states reference countries and cities reference states.
+    ["countries", outCountries],
+    ["states", outStates],
+    ["cities", outCities],
     ["companies", finalCompanies],
     ["sites", outSites],
+    ["site_addresses", outSiteAddresses],
     ["suppliers", finalSuppliers],
     ["items", finalItems],
     ["site_groups", outGroups],
@@ -1168,9 +1315,17 @@ try {
     const { writeFileSync } = await import("node:fs");
     const snapshot = Object.fromEntries(plan);
     snapshot.__meta = {
+      kind: "masters",
       generatedAt: new Date().toISOString(),
       source: `${MSSQL.server}:${MSSQL.port}/${MSSQL.database}`,
       devPassword: DEV_PASSWORD,
+      // Carried so the applier clears exactly what a direct load would, rather
+      // than relying on its own copy of this list.
+      truncate: TRUNCATE_ORDER,
+      // Tables whose ids the ETL supplies explicitly into an identity column.
+      // `truncate ... restart identity` puts each sequence back to 1, so without
+      // this the app's next insert collides with an imported row.
+      resetSequences: ["units", "forms", "site_addresses"],
       skippedNullDeleted: report.skippedNullDeleted,
       orphanCount: report.orphans.length,
     };
@@ -1195,23 +1350,7 @@ try {
   pg = postgres(PGURL, { max: 1, onnotice: () => {} });
 
   await pg.begin(async (tx) => {
-    // Reverse dependency order, so the import is repeatable.
-    // refresh_tokens is named explicitly rather than left to CASCADE: it
-    // references users, and clearing it is correct (every session is invalidated
-    // when the user rows are replaced) but it should be visible, not a surprise.
-    await tx.unsafe(`
-      truncate table
-        document_counters,
-        inward_challan_documents,
-        inward_challans,
-        inventory_inward,
-        purchase_requests,
-        refresh_tokens,
-        user_form_permissions, user_sites, user_companies,
-        site_group_addresses, site_group_sites, site_groups,
-        items, suppliers, sites, companies, users, forms, units
-      restart identity cascade
-    `);
+    await tx.unsafe(`truncate table ${TRUNCATE_ORDER.join(", ")} restart identity cascade`);
 
     const insert = async (table, rows) => {
       if (rows.length === 0) {
@@ -1239,6 +1378,14 @@ try {
       const seq = await tx.unsafe(`select pg_get_serial_sequence('forms','id') as s`);
       if (seq[0]?.s) {
         await tx.unsafe(`select setval('${seq[0].s}', (select max(id) from forms))`);
+      }
+    }
+    // Same reason: `site_addresses.id` is generated by default and the ETL
+    // supplied the source's own `AId`, so the sequence would hand out 1 next.
+    if (outSiteAddresses.length > 0) {
+      const seq = await tx.unsafe(`select pg_get_serial_sequence('site_addresses','id') as s`);
+      if (seq[0]?.s) {
+        await tx.unsafe(`select setval('${seq[0].s}', (select max(id) from site_addresses))`);
       }
     }
   });

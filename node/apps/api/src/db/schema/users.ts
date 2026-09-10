@@ -144,6 +144,38 @@ export const sites = pgTable(
   (table) => [index("sites_is_active_idx").on(table.isActive)],
 );
 
+/**
+ * Extra shipping addresses belonging to a site. `SiteAddress` in SQL Server — 24
+ * live rows, none soft-deleted, every one pointing at a site that exists.
+ *
+ * These are the addresses the purchase order screen offers under "Shipping
+ * Addresses": a site has one address of its own on `sites`, and any number of
+ * additional delivery addresses here. The chosen one is COPIED as free text onto
+ * the order (`purchase_order_delivery_addresses`), so editing an address here
+ * does not rewrite orders already placed — which is the correct behaviour for a
+ * document, and is reproduced rather than fixed.
+ *
+ * The source is only four columns wide: no audit trail, no geography, and the
+ * address is one free-text block rather than the structured address `sites`
+ * carries. Reproduced as-is.
+ *
+ * `AId` is an `int` identity in the source and stays an integer here, generated
+ * by default so the ETL can insert the source's own ids.
+ */
+export const siteAddresses = pgTable(
+  "site_addresses",
+  {
+    /** `AId`. */
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id),
+    address: text("address").notNull(),
+    isDeleted: boolean("is_deleted").notNull().default(false),
+  },
+  (table) => [index("site_addresses_site_id_idx").on(table.siteId)],
+);
+
 export const users = pgTable(
   "users",
   {
