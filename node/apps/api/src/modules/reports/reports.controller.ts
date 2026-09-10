@@ -76,13 +76,29 @@ export class ReportsController {
   /**
    * Panel 2, "Payment Report" — the running-balance ledger.
    *
-   * `details-report`, from the `Details Report` form row §5f read off the
-   * production `forms` table. The screen's own partials check
-   * `"Details Report & Payout"` and `"Reports"` instead; see the note in
-   * `payments.controller.ts` and doc 19 Question 14.
+   * ~~`details-report`, from the `Details Report` form row.~~ **THAT WAS WRONG,
+   * AND IT MADE THIS REPORT UNREACHABLE FOR EVERYONE.**
+   *
+   * DOC 19 QUESTION 14 IS ANSWERED, from the legacy source rather than a guess.
+   * `InvoiceMasterController.PayOutInvoice` — the screen this ports, served at
+   * `/InvoiceMaster/PayOutInvoice` — carries
+   * `[FormPermissionAttribute("Reports & Payments-View")]`, and so does
+   * `GetInvoiceDetails`, which fills it. `Details Report` and `Sales Report` are
+   * checked NOWHERE in the .NET solution: they are dead rows in the `Form`
+   * table, both `IsActive = false`, so the permission builder produces no
+   * subject for them and nobody can hold one.
+   *
+   * The port had split ONE legacy screen across THREE subjects — payments under
+   * `reports-payments`, this ledger under `details-report`, the sales summary
+   * under `sales-report` — and only the first matched the legacy app. The other
+   * two answered 403 for every user on the live site, on a report the old system
+   * shows to anyone holding `Reports & Payments-View`.
+   *
+   * All three panels now use the subject the legacy screen actually asks for,
+   * which is the one `payments.controller.ts` has used all along.
    */
   @Get("ledger")
-  @Permissions("details-report.view")
+  @Permissions("reports-payments.view")
   ledger(
     @Query(new ZodValidationPipe(ledgerQuerySchema))
     query: ReturnType<typeof ledgerQuerySchema.parse>,
@@ -96,7 +112,7 @@ export class ReportsController {
    * toggle, so `direction` is a parameter rather than fixed.
    */
   @Get("balances")
-  @Permissions("details-report.view")
+  @Permissions("reports-payments.view")
   balances(
     @Query(new ZodValidationPipe(balancesRequestSchema))
     query: ReturnType<typeof balancesRequestSchema.parse>,
@@ -108,13 +124,13 @@ export class ReportsController {
   /**
    * `/Sales/SalesReport` — the same aggregate, its own screen, its own right.
    *
-   * TWO ROUTES RATHER THAN ONE, and the reason is the guard rather than the
-   * query. `PermissionsGuard` requires EVERY permission listed on a route, not
-   * any of them — `required.filter(p => !granted.has(p))` must come back empty.
-   * So `@Permissions("details-report.view", "sales-report.view")` would demand
-   * both rights and lock out the person who holds exactly the one the legacy
-   * screen asks for. The repository method is shared, which was the win worth
-   * having; the route is not.
+   * TWO ROUTES RATHER THAN ONE, and the reason is no longer the guard — both
+   * now ask for `reports-payments.view`, because that is what the legacy screen
+   * asks for. It is worth keeping the note about why they were never merged into
+   * one route with two permissions: `PermissionsGuard` requires EVERY permission
+   * listed, not any of them, so a route naming two subjects demands both and
+   * locks out the person holding exactly one. The repository method is shared,
+   * which was the win worth having; the route is not.
    *
    * `/Sales/SalesReport` carries NO `[FormPermissionAttribute]` at all — doc 11
    * screen 30 flags it, and this is the fourth screen in a row where that is
@@ -136,7 +152,7 @@ export class ReportsController {
    * C-6, which this port does not reproduce.
    */
   @Get("ledger/export.xlsx")
-  @Permissions("details-report.view")
+  @Permissions("reports-payments.view")
   async ledgerXlsx(
     @Query(new ZodValidationPipe(ledgerExportQuerySchema))
     filter: ReturnType<typeof ledgerExportQuerySchema.parse>,
@@ -147,7 +163,7 @@ export class ReportsController {
   }
 
   @Get("ledger/export.pdf")
-  @Permissions("details-report.view")
+  @Permissions("reports-payments.view")
   async ledgerPdf(
     @Query(new ZodValidationPipe(ledgerExportQuerySchema))
     filter: ReturnType<typeof ledgerExportQuerySchema.parse>,
@@ -159,7 +175,7 @@ export class ReportsController {
 
   /** "Supplier Excel" — the same rows, one section and one total per party. */
   @Get("ledger/by-party.xlsx")
-  @Permissions("details-report.view")
+  @Permissions("reports-payments.view")
   async ledgerByPartyXlsx(
     @Query(new ZodValidationPipe(ledgerExportQuerySchema))
     filter: ReturnType<typeof ledgerExportQuerySchema.parse>,
@@ -175,7 +191,7 @@ export class ReportsController {
   }
 
   @Get("balances/export.xlsx")
-  @Permissions("details-report.view")
+  @Permissions("reports-payments.view")
   async balancesXlsx(
     @Query(new ZodValidationPipe(balancesExportQuerySchema))
     filter: ReturnType<typeof balancesExportQuerySchema.parse>,
@@ -186,7 +202,7 @@ export class ReportsController {
   }
 
   @Get("balances/export.pdf")
-  @Permissions("details-report.view")
+  @Permissions("reports-payments.view")
   async balancesPdf(
     @Query(new ZodValidationPipe(balancesExportQuerySchema))
     filter: ReturnType<typeof balancesExportQuerySchema.parse>,
@@ -204,7 +220,7 @@ export class ReportsController {
    * pair, and the direction is fixed rather than accepted from the query.
    */
   @Get("sales/export.xlsx")
-  @Permissions("sales-report.view")
+  @Permissions("reports-payments.view")
   async salesXlsx(
     @Query(new ZodValidationPipe(salesExportQuerySchema))
     filter: ReturnType<typeof salesExportQuerySchema.parse>,
@@ -218,7 +234,7 @@ export class ReportsController {
   }
 
   @Get("sales/export.pdf")
-  @Permissions("sales-report.view")
+  @Permissions("reports-payments.view")
   async salesPdf(
     @Query(new ZodValidationPipe(salesExportQuerySchema))
     filter: ReturnType<typeof salesExportQuerySchema.parse>,
@@ -229,7 +245,7 @@ export class ReportsController {
   }
 
   @Get("sales")
-  @Permissions("sales-report.view")
+  @Permissions("reports-payments.view")
   salesReport(
     @Query(new ZodValidationPipe(salesRequestSchema))
     query: ReturnType<typeof salesRequestSchema.parse>,

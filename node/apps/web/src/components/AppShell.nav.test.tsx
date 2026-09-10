@@ -61,31 +61,33 @@ describe("the sidebar", () => {
   });
 
   /**
-   * The exact production case: a user with everything except the two report
-   * forms, whose permissions the server does not issue because those forms are
-   * inactive. Fifteen screens work; two do not.
+   * ONE RIGHT OPENS THE WHOLE REPORTS AND PAYMENTS SCREEN, because that is what
+   * the legacy app does: `InvoiceMasterController.PayOutInvoice` guards the page
+   * and its data with `Reports & Payments-View`, and its three panels are the
+   * payments list, the ledger and the balance summary.
+   *
+   * THIS TEST ASSERTED THE OPPOSITE UNTIL 10 Sep 2026, and the thing it asserted
+   * was the defect: the ledger and the sales summary had been guarded by
+   * `details-report` and `sales-report`, two rows in the `Form` table that no
+   * .NET code checks and that are inactive in production, so nobody could ever
+   * hold them. The report was invisible on the live site until the client asked
+   * where it had gone.
    */
-  it("hides only the reports when only the report permissions are missing", () => {
-    renderShell([
-      "dashboard.view",
-      "company.view",
-      "site.view",
-      "group.view",
-      "supplier.view",
-      "item.view",
-      "user.view",
-      "purchase-request.view",
-      "purchase-orders.view",
-      "inward-challan.view",
-      "inventory-inward.view",
-      "purchase-invoice.view",
-      "sales-invoice.view",
-      "reports-payments.view",
-    ]);
+  it("opens all three panels of Reports and Payments on the one right", () => {
+    renderShell(["reports-payments.view"]);
 
     const names = navLinkNames().join("|");
     expect(names).toContain("Payments");
+    expect(names).toContain("Ledger & Balances");
+    expect(names).toContain("Sales Report");
+  });
+
+  it("shows none of them without that right", () => {
+    renderShell(["purchase-invoice.view"]);
+
+    const names = navLinkNames().join("|");
     expect(names).toContain("Purchase Invoices");
+    expect(names).not.toContain("Payments");
     expect(names).not.toContain("Ledger & Balances");
     expect(names).not.toContain("Sales Report");
   });

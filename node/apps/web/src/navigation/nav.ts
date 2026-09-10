@@ -84,8 +84,12 @@ export const NAV: NavSection[] = [
   {
     title: "Reports",
     items: [
-      { label: "Sales Report", to: "/reports/sales", icon: ScrollText, permission: "sales-report", status: "ready", legacy: "/Sales/SalesReport" },
-      { label: "Ledger & Balances", to: "/reports/ledger", icon: ScrollText, permission: "details-report", status: "ready", legacy: "/Report/ReportDetails" },
+      // Both panels of ONE legacy screen, and both guarded by the subject that
+      // screen actually asks for. `sales-report` and `details-report` are dead
+      // rows in the Form table, checked nowhere in the .NET solution and inactive
+      // in production, so naming them here hid the report from everyone.
+      { label: "Sales Report", to: "/reports/sales", icon: ScrollText, permission: "reports-payments", status: "ready", legacy: "/Sales/SalesReport" },
+      { label: "Ledger & Balances", to: "/reports/ledger", icon: ScrollText, permission: "reports-payments", status: "ready", legacy: "/InvoiceMaster/PayOutInvoice" },
     ],
   },
 ];

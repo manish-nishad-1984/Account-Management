@@ -624,6 +624,38 @@ access at cutover.
 > **Decision:** ☐ We will send the list of who has what  ☐ Grant it to whoever
 > has any of the three  ☐ Discuss
 
+### ANSWERED from the source — 10 Sep 2026. Nothing is needed from you.
+
+We said we could not tell from the code which name carries the grants. We could:
+the question was aimed at the Razor partials, and the answer is in the
+**controller**, which gates both the page and the data behind it.
+
+```csharp
+[FormPermissionAttribute("Reports & Payments-View")]
+public IActionResult PayOutInvoice()          // the screen
+
+[FormPermissionAttribute("Reports & Payments-View")]
+public async Task<IActionResult> GetInvoiceDetails(...)   // its data
+```
+
+`Reports & Payments` is the only one of the three that guards anything that
+matters. The other two appear in sub-section markup, and a partial that hides a
+panel cannot stop the data being fetched — so a person holding
+`Reports & Payments-View` already sees the whole screen today. **No permission
+audit is needed and nobody loses access at cutover.**
+
+**This was found the expensive way.** The port had guarded the ported screen with
+a `Details Report` right instead, invented from a row in the `Form` table. That
+row — and `Sales Report` beside it — is checked NOWHERE in the .NET solution and
+is `IsActive = false`, so the permission builder never emits it and no user can
+hold it. The report answered 403 for every user on the live site while the old
+system showed it to anyone. It was caught when the client asked why the report
+had gone, not by any test.
+
+The lesson is narrow and worth keeping: **a permission subject must come from a
+`[FormPermissionAttribute]` that some legacy action actually carries**, never
+from a row in the `Form` table that merely exists.
+
 ---
 
 # Summary sheet

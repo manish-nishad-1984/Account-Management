@@ -107,7 +107,7 @@ describe("the ledger and balances screen", () => {
         }),
       ]),
     );
-    renderWithAuth(<LedgerPage />, { permissions: ["details-report.view"] });
+    renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
 
     const table = await screen.findByRole("table", { name: "" }).catch(() => null);
     expect(table ?? (await screen.findAllByRole("table"))[0]).toBeTruthy();
@@ -130,7 +130,7 @@ describe("the ledger and balances screen", () => {
         }),
       ]),
     );
-    renderWithAuth(<LedgerPage />, { permissions: ["details-report.view"] });
+    renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
 
     // The row is a debit, so the credit cell is blank rather than showing 0.00.
     expect(await screen.findByText("2,500.00")).toBeInTheDocument();
@@ -145,7 +145,7 @@ describe("the ledger and balances screen", () => {
    */
   it("explains that returns reduce the balance", async () => {
     withReports(ledgerResponse([]), balancesResponse([balanceRow()]));
-    renderWithAuth(<LedgerPage />, { permissions: ["details-report.view"] });
+    renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
 
     // Awaited on the NUMBER, not on the sentence: the paragraph renders
     // unconditionally, so awaiting it passes while the panel is still loading.
@@ -163,7 +163,7 @@ describe("the ledger and balances screen", () => {
         nextCursor: "50",
       }),
     );
-    renderWithAuth(<LedgerPage />, { permissions: ["details-report.view"] });
+    renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
 
     expect(await screen.findByText(/Total over every entry/)).toBeInTheDocument();
     // Indian digit grouping — 4,00,000.00, not 400,000.00. See `groupIndian`.
@@ -173,7 +173,7 @@ describe("the ledger and balances screen", () => {
 
   it("disables Previous on the first page and offers Next when there is more", async () => {
     withReports(ledgerResponse([ledgerRow()], { total: 120, nextCursor: "50" }));
-    renderWithAuth(<LedgerPage />, { permissions: ["details-report.view"] });
+    renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
 
     expect(await screen.findByRole("button", { name: "Previous" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
@@ -182,7 +182,7 @@ describe("the ledger and balances screen", () => {
   it("says a sales entry has no site group rather than drawing an empty column", async () => {
     const user = userEvent.setup();
     withReports(ledgerResponse([ledgerRow({ siteGroupName: null })]));
-    renderWithAuth(<LedgerPage />, { permissions: ["details-report.view"] });
+    renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
 
     await screen.findByText("BB/154");
     await user.click(screen.getByRole("button", { name: "Sales" }));
@@ -192,7 +192,7 @@ describe("the ledger and balances screen", () => {
 
   it("renders an empty state rather than an empty grid", async () => {
     withReports(ledgerResponse([], { totalCredit: "0.00", totalDebit: "0.00", closingBalance: "0.00" }));
-    renderWithAuth(<LedgerPage />, { permissions: ["details-report.view"] });
+    renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
 
     expect(await screen.findByText("No entries")).toBeInTheDocument();
   });
@@ -204,7 +204,7 @@ describe("the ledger and balances screen", () => {
       [/\/suppliers/, EMPTY],
       [/\/companies/, EMPTY],
     ]);
-    renderWithAuth(<LedgerPage />, { permissions: ["details-report.view"] });
+    renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
 
     expect(await screen.findByText(/ledger could not be loaded/)).toBeInTheDocument();
     expect(screen.queryByText("No entries")).not.toBeInTheDocument();
@@ -219,7 +219,7 @@ describe("the ledger and balances screen", () => {
   it("does not re-query until Search is pressed", async () => {
     const user = userEvent.setup();
     withReports(ledgerResponse([ledgerRow()]));
-    renderWithAuth(<LedgerPage />, { permissions: ["details-report.view"] });
+    renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
 
     await screen.findByText("BB/154");
     const before = vi.mocked(globalThis.fetch).mock.calls.length;
