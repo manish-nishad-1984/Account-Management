@@ -63,9 +63,11 @@ export const units = pgTable(
  *    key after the entity rather than the reference, and `state`/`city` as column
  *    names read as if they held the name, not the id.
  *  - Geography stays `integer` with NO foreign key, exactly as on `companies`
- *    and `sites`: the lookup tables have not been extracted and the orphan volume
- *    is unmeasured, so a real FK would refuse rows the ETL must still carry.
- *    These become FKs once the census in `Migration-Assessment/tools/` has run.
+ *    and `sites` — but the reason has changed. The lookup tables HAVE now been
+ *    extracted (see `geography.ts`) and the census found zero orphans: all 205
+ *    live suppliers resolve to a real city and state. What still blocks the
+ *    foreign key is the development seed, which invents geography ids that no
+ *    lookup row backs, so the constraint would fail the seed and its tests.
  *  - `city_id` and `state_id` are NULLABLE here though the source declares them
  *    NOT NULL, for the same reason: a NOT NULL on an unvalidated reference turns
  *    a data-quality problem into a migration failure. The write API requires them.

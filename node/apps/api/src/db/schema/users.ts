@@ -43,10 +43,12 @@ import {
  *  - `Iffccode` is `ifsc_code`. The source name is a typo for the Indian bank
  *    routing code IFSC; nothing reads it by name outside the repository layer.
  *  - `city_id`, `state_id` and `country_id` are integers with NO foreign key yet.
- *    The source has 3 orphan geography references on this table and the lookup
- *    tables have not been extracted, so a real FK would refuse rows the ETL must
- *    still carry. They become FKs once the census in Migration-Assessment/tools/
- *    has run and the orphans have an agreed disposition.
+ *    THE CENSUS HAS NOW RUN — see `geography.ts` — and against the client's live
+ *    data this table has ZERO orphan geography references, not the 3 recorded
+ *    here from the older local copy. All 8 companies resolve. The lookup tables
+ *    exist and are populated, so the only thing still standing between these and
+ *    a real foreign key is the development seed, which invents geography ids
+ *    that no lookup row backs.
  *
  * There is no `is_active`: the source table has no such column. A company is
  * either present or soft-deleted.
@@ -99,8 +101,9 @@ export const companies = pgTable(
  * Deliberate departures:
  *  - `ContectPersonName` / `ContectPersonPhoneNo` are spelled correctly here.
  *    Both are misspellings in the source (assessment 04 §`Site`).
- *  - Geography stays integer-without-FK for now: this table alone carries 6
- *    orphan geography references, the largest single block of them.
+ *  - Geography stays integer-without-FK for now, but NOT because of orphans: the
+ *    live census found none on this table, billing and shipping alike, against
+ *    the 6 recorded here from the older local copy. See `geography.ts`.
  *
  * `company_id` is NOT in the source schema. There is no Company↔Site relationship
  * in SQL Server at all — the two are associated only indirectly, through the CSV
