@@ -56,6 +56,14 @@ async function send(
       ...(init.body ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
+    /**
+     * So the refresh-token cookie is sent. `fetch` omits cookies by default on
+     * a cross-origin request and, historically, needed asking even same-origin —
+     * and without this `/auth/refresh` sees no cookie and every page load lands
+     * on the login screen. The cookie is scoped to `/api/v1/auth`, so this
+     * attaches nothing to the other requests.
+     */
+    credentials: "same-origin",
     body: init.body ? JSON.stringify(init.body) : undefined,
     signal: init.signal,
   });

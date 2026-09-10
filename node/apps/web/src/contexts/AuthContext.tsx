@@ -12,6 +12,7 @@ import {
   loginResponseSchema,
   type AuthenticatedUser,
   type LoginRequest,
+  type LoginResponse,
 } from "@accountmanagement/contracts";
 import { apiRequest, setAccessTokenProvider } from "../lib/api-client";
 import { z } from "zod";
@@ -19,6 +20,12 @@ import { z } from "zod";
 interface AuthState {
   user: AuthenticatedUser | null;
   isAuthenticated: boolean;
+  /**
+   * True until the one-off attempt to restore a session from the refresh cookie
+   * has finished. Guards against showing the login page to someone who IS signed
+   * in, for the fraction of a second before the answer comes back.
+   */
+  isRestoring: boolean;
   login: (credentials: LoginRequest) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -35,20 +42,90 @@ interface AuthState {
 export const AuthContext = createContext<AuthState | null>(null);
 
 /**
- * Holds the access token IN MEMORY only.
+ * SINGLE-FLIGHT, and this is not optional.
  *
- * The .NET app wrote the user's cleartext password to a non-HttpOnly, non-Secure
- * cookie for 7 days when "Remember me" was ticked. Nothing here is persisted: a
- * refresh loses the session, which is the correct trade until refresh tokens move
- * to an HttpOnly cookie set by the API.
+ * `/auth/refresh` ROTATES: the presented token is spent the moment it is
+ * accepted. React StrictMode mounts every effect twice in development, so a
+ * plain `useEffect` fires two refreshes — the first spends the cookie, the
+ * second presents the same now-revoked value, gets a 401, and the server clears
+ * the cookie. The result is being signed out on every reload, which is the exact
+ * bug this whole change exists to remove.
+ *
+ * The promise is module-level rather than a ref because StrictMode's second
+ * mount is a NEW component instance: a ref would be freshly null and would not
+ * dedupe anything.
+ */
+let restoreInFlight: Promise<LoginResponse | null> | null = null;
+
+/**
+ * The non-secret companion cookie the API sets beside the real one.
+ *
+ * The refresh cookie is HttpOnly, so this code cannot see it and cannot tell a
+ * returning user from a first-time visitor. Without this hint the app would POST
+ * `/auth/refresh` on every page load — including every visit to the login page
+ * by someone with no session — and take a 401 for it each time.
+ *
+ * It is only a hint: the server still decides, and being wrong costs one request.
+ */
+function hasSessionHint(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.cookie.split("; ").some((c) => c.startsWith("ab_session="));
+}
+
+function restoreSession(): Promise<LoginResponse | null> {
+  if (!hasSessionHint()) return Promise.resolve(null);
+  restoreInFlight ??= apiRequest("/auth/refresh", {
+    method: "POST",
+    // No body: the browser presents the HttpOnly cookie. A 401 here is the
+    // ordinary answer for someone who is simply not signed in.
+    body: {},
+    schema: loginResponseSchema,
+  })
+    .catch(() => null)
+    .finally(() => {
+      restoreInFlight = null;
+    });
+  return restoreInFlight;
+}
+
+/** Test-only: drops a cached in-flight restore between cases. */
+export function __resetRestoreForTests(): void {
+  restoreInFlight = null;
+}
+
+/**
+ * Holds the access token IN MEMORY only; the refresh token is never held here
+ * at all.
+ *
+ * The .NET app wrote the user's cleartext password to a non-HttpOnly,
+ * non-Secure cookie for 7 days when "Remember me" was ticked. The refresh token
+ * now lives in an HttpOnly, SameSite cookie the API sets, scoped to the auth
+ * routes — so script on the page cannot read it, and a page reload no longer
+ * loses the session: the cookie survives and `restoreSession` trades it for a
+ * fresh access token on load.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
+  const [isRestoring, setIsRestoring] = useState(true);
   const accessToken = useRef<string | null>(null);
-  const refreshToken = useRef<string | null>(null);
 
   useEffect(() => {
     setAccessTokenProvider(() => accessToken.current);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void restoreSession().then((result) => {
+      if (cancelled) return;
+      if (result) {
+        accessToken.current = result.accessToken;
+        setUser(result.user);
+      }
+      setIsRestoring(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = useCallback(async (credentials: LoginRequest) => {
@@ -58,27 +135,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       schema: loginResponseSchema,
     });
     accessToken.current = result.accessToken;
-    refreshToken.current = result.refreshToken;
     setUser(result.user);
   }, []);
 
   const logout = useCallback(async () => {
-    const token = refreshToken.current;
     accessToken.current = null;
-    refreshToken.current = null;
     setUser(null);
-    if (token) {
-      await apiRequest("/auth/logout", {
-        method: "POST",
-        body: { refreshToken: token },
-        schema: z.undefined(),
-      }).catch(() => undefined);
-    }
+    // No body: the server reads the cookie and clears it. Sent even if it fails,
+    // because the local session is already gone either way.
+    await apiRequest("/auth/logout", {
+      method: "POST",
+      body: {},
+      schema: z.undefined(),
+    }).catch(() => undefined);
   }, []);
 
   const value = useMemo<AuthState>(
-    () => ({ user, isAuthenticated: user !== null, login, logout }),
-    [user, login, logout],
+    () => ({ user, isAuthenticated: user !== null, isRestoring, login, logout }),
+    [user, isRestoring, login, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -15,8 +15,13 @@ export const loginRequestSchema = z.object({
 });
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 
+/**
+ * The refresh token travels in an HttpOnly cookie, not in a body, so this is
+ * optional: `/auth/refresh` and `/auth/logout` read the cookie, and fall back to
+ * the body only for a caller that is not a browser.
+ */
 export const refreshRequestSchema = z.object({
-  refreshToken: z.string().min(1),
+  refreshToken: z.string().min(1).optional(),
 });
 export type RefreshRequest = z.infer<typeof refreshRequestSchema>;
 
@@ -27,9 +32,20 @@ export const authenticatedUserSchema = z.object({
 });
 export type AuthenticatedUser = z.infer<typeof authenticatedUserSchema>;
 
+/**
+ * THE REFRESH TOKEN IS NOT IN HERE, deliberately.
+ *
+ * It used to be, and the browser held it in a JavaScript variable alongside the
+ * access token. That had two consequences: script running on the page could read
+ * a 30-day credential, and nothing survived a page reload, so every refresh
+ * dropped the user back at the login screen.
+ *
+ * It now travels only in an HttpOnly, SameSite cookie scoped to the auth routes,
+ * which JavaScript cannot read and the browser keeps across reloads. Putting it
+ * in this body as well would give the cookie's protection away.
+ */
 export const loginResponseSchema = z.object({
   accessToken: z.string(),
-  refreshToken: z.string(),
   user: authenticatedUserSchema,
 });
 export type LoginResponse = z.infer<typeof loginResponseSchema>;

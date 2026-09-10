@@ -52,6 +52,9 @@ export function renderWithAuth(
         value={{
           user,
           isAuthenticated: true,
+          // A test renders a screen that is already signed in; the restore from
+          // the refresh cookie is over before any of this matters.
+          isRestoring: false,
           login: vi.fn(),
           logout: vi.fn(),
         }}

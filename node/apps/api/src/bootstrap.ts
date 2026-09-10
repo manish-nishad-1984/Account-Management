@@ -1,3 +1,4 @@
+import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
 import { ATTACHMENT_MAX_BYTES, ATTACHMENT_MAX_FILES } from "@accountmanagement/contracts";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -11,6 +12,20 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
  * production, and the failure only visible by uploading a file.
  */
 export async function configureApp(app: NestFastifyApplication): Promise<void> {
+  /**
+   * Cookie parsing, for the refresh-token cookie and nothing else.
+   *
+   * Registered here rather than in `main.ts` for the same reason as multipart:
+   * a test that boots the real module graph must get the same server production
+   * gets, or the cookie path is only exercised in production.
+   *
+   * NOT signed. The cookie carries an opaque 256-bit random token that the
+   * server looks up by hash in `refresh_tokens`; a forged value fails that
+   * lookup. A signing secret would add a second thing to keep safe and rotate
+   * without making an unguessable token harder to guess.
+   */
+  await app.register(cookie);
+
   /**
    * Multipart, with limits set HERE rather than trusted to the route.
    *
