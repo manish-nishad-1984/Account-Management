@@ -19,7 +19,12 @@ import postgres from "postgres";
  *
  *   node apply-snapshot.mjs <file.json> [--dry-run]
  *
- * with PGURL in the environment.
+ * with PGURL in the environment — or DATABASE_URL, which is the name the
+ * release's own `.env` on the server already uses, so this can be run there as
+ *
+ *   node --env-file=<release>/api/.env apply-snapshot.mjs <file.json>
+ *
+ * without anyone retyping the database password or editing that file.
  *
  * EVERYTHING IS ONE TRANSACTION. The truncate and every insert commit together
  * or not at all, so a failure halfway leaves the database exactly as it was
@@ -28,10 +33,11 @@ import postgres from "postgres";
 
 const FILE = process.argv[2];
 const DRY_RUN = process.argv.includes("--dry-run");
-const PGURL = process.env.PGURL;
+const PGURL = process.env.PGURL ?? process.env.DATABASE_URL;
 
 if (!FILE || !PGURL) {
   console.error("Usage: PGURL=postgres://... node apply-snapshot.mjs <file.json> [--dry-run]");
+  console.error("       DATABASE_URL is accepted in place of PGURL.");
   process.exit(1);
 }
 
