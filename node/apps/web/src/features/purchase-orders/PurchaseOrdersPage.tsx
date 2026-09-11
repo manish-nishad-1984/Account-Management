@@ -127,6 +127,30 @@ export function PurchaseOrdersPage() {
         ),
       },
       {
+        id: "subtotal",
+        header: "Subtotal",
+        meta: { defaultHidden: true },
+        cell: ({ row }) =>
+          row.original.subtotal ? (
+            <span className="tabular block text-right text-slate-700">
+              {formatMoney(row.original.subtotal)}
+            </span>
+          ) : (
+            <span className="block text-right text-slate-300">—</span>
+          ),
+      },
+      {
+        id: "createdAt",
+        header: "Created",
+        meta: { defaultHidden: true },
+        cell: ({ row }) =>
+          row.original.createdAt ? (
+            <span className="tabular text-slate-600">{formatDate(row.original.createdAt)}</span>
+          ) : (
+            <span className="text-slate-300">—</span>
+          ),
+      },
+      {
         id: "actions",
         header: "",
         cell: ({ row }) => (
@@ -198,6 +222,7 @@ export function PurchaseOrdersPage() {
       </div>
 
       <DataGrid<PurchaseOrderRow>
+        gridKey="purchase-orders"
         columns={columns}
         searchPlaceholder="Search order number, buyer's reference or supplier"
         sortableFields={PURCHASE_ORDER_SORT_FIELDS}

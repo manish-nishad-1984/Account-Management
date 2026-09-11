@@ -74,7 +74,7 @@ describe("restoring a session on page load", () => {
 
   it("keeps the reader on the page they reloaded", async () => {
     giveSessionHint();
-    vi.mocked(globalThis.fetch).mockResolvedValue(json(LOGIN_RESULT));
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(json(LOGIN_RESULT)));
 
     renderApp();
 
@@ -108,7 +108,7 @@ describe("restoring a session on page load", () => {
 
   it("sends the reader to the login page when the cookie is no longer good", async () => {
     giveSessionHint();
-    vi.mocked(globalThis.fetch).mockResolvedValue(json({ message: "Invalid" }, 401));
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(json({ message: "Invalid" }, 401)));
 
     renderApp();
 
@@ -120,7 +120,7 @@ describe("restoring a session on page load", () => {
    * ask the server about and the login page should render immediately.
    */
   it("asks the server nothing when there is no session hint", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(json(LOGIN_RESULT));
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(json(LOGIN_RESULT)));
 
     renderApp();
 
@@ -135,7 +135,7 @@ describe("restoring a session on page load", () => {
    */
   it("refreshes once even when the effect runs twice", async () => {
     giveSessionHint();
-    vi.mocked(globalThis.fetch).mockResolvedValue(json(LOGIN_RESULT));
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(json(LOGIN_RESULT)));
 
     const { unmount } = renderApp();
     unmount();
@@ -167,7 +167,7 @@ describe("signing out", () => {
       auth = useAuth();
       return null;
     }
-    vi.mocked(globalThis.fetch).mockResolvedValue(new Response(null, { status: 204 }));
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(new Response(null, { status: 204 })));
 
     render(
       <AuthProvider>

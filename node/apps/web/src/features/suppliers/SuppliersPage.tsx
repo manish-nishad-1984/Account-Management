@@ -127,6 +127,7 @@ export function SuppliersPage() {
       />
 
       <DataGrid<SupplierRow>
+        gridKey="suppliers"
         columns={columns}
         searchPlaceholder="Search name, GST, mobile or email"
         sortableFields={SUPPLIER_SORT_FIELDS}

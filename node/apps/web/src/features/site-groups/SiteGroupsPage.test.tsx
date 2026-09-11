@@ -45,9 +45,9 @@ describe("SiteGroupsPage", () => {
   });
 
   it("requests a bounded page from the site-groups endpoint", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("North Gujarat")], nextCursor: null, total: 1 }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("North Gujarat");
@@ -60,13 +60,13 @@ describe("SiteGroupsPage", () => {
    * sites and 3 addresses reads as 12 of something. The grid must show 4 and 3.
    */
   it("shows site and address counts as two separate numbers, not their product", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({
         rows: [row("North Gujarat", { siteCount: 4, addressCount: 3 })],
         nextCursor: null,
         total: 1,
       }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("North Gujarat");
@@ -77,7 +77,7 @@ describe("SiteGroupsPage", () => {
   });
 
   it("names the first few member sites and counts the rest", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({
         rows: [
           row("North Gujarat", {
@@ -88,7 +88,7 @@ describe("SiteGroupsPage", () => {
         nextCursor: null,
         total: 1,
       }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("North Gujarat");
@@ -97,13 +97,13 @@ describe("SiteGroupsPage", () => {
   });
 
   it("does not claim there are more sites when the preview is complete", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({
         rows: [row("Small Group", { siteCount: 2, siteNames: ["Site 00", "Site 01"] })],
         nextCursor: null,
         total: 1,
       }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("Small Group");
@@ -115,9 +115,9 @@ describe("SiteGroupsPage", () => {
    * say that plainly rather than showing buttons that nobody can be granted.
    */
   it("explains that groups are read-only, and offers no write actions", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("North Gujarat")], nextCursor: null, total: 1 }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("North Gujarat");
@@ -130,9 +130,9 @@ describe("SiteGroupsPage", () => {
   });
 
   it("shows an empty state rather than a blank table", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [], nextCursor: null, total: 0 }),
-    );
+    ));
     renderPage();
 
     expect(await screen.findByText("No site groups match this search")).toBeInTheDocument();

@@ -5,13 +5,40 @@ import {
   type ColumnDef,
 } from "@tanstack/react-table";
 import clsx from "clsx";
-import type { MouseEvent, ReactNode } from "react";
-import type { SortDirection } from "@accountmanagement/contracts";
-import { ChevronLeft, ChevronRight, Inbox, Search } from "lucide-react";
+import { useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import type { GridColumnDefault, SortDirection } from "@accountmanagement/contracts";
+import { ChevronLeft, ChevronRight, Columns3, Inbox, Search } from "lucide-react";
 import { Button, EmptyState } from "../ui";
+import { CustomizeColumns } from "./CustomizeColumns";
+import { useGridPreferences } from "../../lib/grid-preferences";
+
+/**
+ * What to call a column in the customise panel.
+ *
+ * A header is usually a plain string and that is the answer. Two cases are not:
+ * the row-actions column heads itself with an empty string, because a heading
+ * over two icon buttons is noise — which listed it in the panel as "actions",
+ * the raw id. And a header rendered as a component has no text at all. Both fall
+ * back to the id, turned into words.
+ */
+function columnLabel(header: unknown, id: string): string {
+  if (typeof header === "string" && header.trim() !== "") return header;
+  const words = id.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
 
 export interface DataGridProps<T> {
   columns: ColumnDef<T, unknown>[];
+
+  /**
+   * Turns on per-person column choice for this grid, stored under this key.
+   *
+   * OPTIONAL, so a grid that has not opted in behaves exactly as it did before:
+   * no button, no request, no stored state. The key is the screen slug and must
+   * not change once people have saved layouts, because a layout is addressed by
+   * it and a renamed key silently loses everyone their setup.
+   */
+  gridKey?: string;
   rows: T[];
   total: number | null;
   isLoading: boolean;
@@ -95,6 +122,7 @@ function handleRowActivate<T>(
 
 export function DataGrid<T>({
   columns,
+  gridKey,
   rows,
   total,
   isLoading,
@@ -116,9 +144,65 @@ export function DataGrid<T>({
   onRowClick,
   selectedRowId = null,
 }: DataGridProps<T>) {
+  /**
+   * What the customise panel lists, derived from the column definitions the
+   * screen already passes rather than from a second list to keep in step.
+   *
+   * TWO COLUMNS ARE LOCKED: the first, because it says which row you are looking
+   * at, and any column called "actions", because hiding Edit and Delete leaves a
+   * grid you can read and cannot use. The reference design locks its first
+   * column for the same reason.
+   *
+   * A header that is a render function has no text to show, so the id stands in.
+   * Every grid here heads its columns with a plain string.
+   */
+  const defaults = useMemo<GridColumnDefault[]>(
+    () =>
+      columns.map((column, index) => {
+        const id = String(column.id ?? "");
+        /**
+         * A column may declare itself hidden until asked for:
+         * `meta: { defaultHidden: true }`.
+         *
+         * That is how a field already on the wire gets offered without changing
+         * any grid the day it ships. Adding a column that everyone suddenly sees
+         * is a change to everyone's screen; adding one they can switch on is not.
+         */
+        const meta = column.meta as { defaultHidden?: boolean } | undefined;
+        return {
+          id,
+          label: columnLabel(column.header, id),
+          visible: meta?.defaultHidden !== true,
+          locked: index === 0 || id === "actions",
+        };
+      }),
+    [columns],
+  );
+
+  const preferences = useGridPreferences(gridKey ?? "", defaults);
+  const [customising, setCustomising] = useState(false);
+
+  /**
+   * The columns actually rendered: the chosen order, minus what was hidden.
+   *
+   * Done here rather than through the table's own `columnVisibility` and
+   * `columnOrder` state because the footer row and the loading skeleton below
+   * both iterate `columns` directly. Handing the table a list that already
+   * matches what is on screen keeps all three in agreement; two sources would
+   * eventually disagree by one column and nobody could tell which was right.
+   */
+  const effectiveColumns = useMemo(() => {
+    if (!gridKey) return columns;
+    const byId = new Map(columns.map((column) => [String(column.id ?? ""), column]));
+    return preferences.columns
+      .filter((column) => column.visible)
+      .map((column) => byId.get(column.id))
+      .filter((column): column is ColumnDef<T, unknown> => column !== undefined);
+  }, [columns, gridKey, preferences.columns]);
+
   const table = useReactTable({
     data: rows,
-    columns,
+    columns: effectiveColumns,
     getCoreRowModel: getCoreRowModel(),
     manualPagination: true,
     manualSorting: true,
@@ -138,13 +222,41 @@ export function DataGrid<T>({
           />
           <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
         </div>
+        <div className="flex items-center gap-3">
+        {gridKey && (
+          <Button
+            type="button"
+            variant="secondary"
+            icon={Columns3}
+            className="px-2.5 py-2 text-xs lg:py-1.5"
+            onClick={() => setCustomising(true)}
+          >
+            Columns
+          </Button>
+        )}
         {total !== null && (
           <span data-testid="record-count" className="text-sm text-slate-500">
             <span className="tabular font-medium text-slate-700">{total}</span>{" "}
             {total === 1 ? "record" : "records"}
           </span>
         )}
+        </div>
       </div>
+
+      {gridKey && (
+        <CustomizeColumns
+          open={customising}
+          columns={preferences.columns}
+          isSaving={preferences.isSaving}
+          onCancel={() => setCustomising(false)}
+          onSave={(next) => {
+            void preferences.save(next).finally(() => setCustomising(false));
+          }}
+          onReset={() => {
+            void preferences.reset().finally(() => setCustomising(false));
+          }}
+        />
+      )}
 
       {error && (
         <div role="alert" className="border-b border-rose-200 bg-rose-50 px-4 py-2.5 text-sm text-rose-700">
@@ -205,7 +317,7 @@ export function DataGrid<T>({
             {isLoading ? (
               Array.from({ length: 6 }, (_, rowIndex) => (
                 <tr key={rowIndex}>
-                  {columns.map((_, cellIndex) => (
+                  {effectiveColumns.map((_, cellIndex) => (
                     <td key={cellIndex} className="px-4 py-3">
                       <div className="h-3 w-24 animate-pulse rounded bg-slate-100" />
                     </td>
@@ -214,7 +326,7 @@ export function DataGrid<T>({
               ))
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={columns.length}>
+                <td colSpan={effectiveColumns.length}>
                   <EmptyState icon={Inbox} title={emptyMessage} />
                 </td>
               </tr>
@@ -270,7 +382,7 @@ export function DataGrid<T>({
           {footer && !isLoading && (
             <tfoot className="border-t-2 border-slate-200 bg-slate-50/80">
               <tr>
-                {columns.map((column, index) => (
+                {effectiveColumns.map((column, index) => (
                   <td
                     key={column.id ?? index}
                     className="whitespace-nowrap px-4 py-3 text-sm font-semibold text-slate-800"

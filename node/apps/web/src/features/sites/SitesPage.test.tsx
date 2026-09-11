@@ -50,9 +50,9 @@ describe("SitesPage", () => {
   });
 
   it("requests a bounded page from the sites endpoint", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("Ahmedabad Riverfront")], nextCursor: null, total: 1 }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("Ahmedabad Riverfront");
@@ -63,13 +63,13 @@ describe("SitesPage", () => {
   it("shows the user and group counts as separate numbers", async () => {
     // The source stores group membership as a cross product; two counts that are
     // actually independent must render as two independent numbers.
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({
         rows: [row("Site A", { userCount: 3, groupCount: 2 })],
         nextCursor: null,
         total: 1,
       }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("Site A");
@@ -79,13 +79,13 @@ describe("SitesPage", () => {
   });
 
   it("marks an inactive site rather than hiding it", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({
         rows: [row("Live Site"), row("Closed Site", { isActive: false })],
         nextCursor: null,
         total: 2,
       }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("Closed Site");
@@ -94,13 +94,13 @@ describe("SitesPage", () => {
   });
 
   it("says so when no contact person is recorded", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({
         rows: [row("Site A", { contactPersonName: null, contactPersonPhoneNo: null })],
         nextCursor: null,
         total: 1,
       }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("Site A");
@@ -108,9 +108,9 @@ describe("SitesPage", () => {
   });
 
   it("searches on the server and resets paging", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("Site A")], nextCursor: null, total: 1 }),
-    );
+    ));
     renderPage();
     await screen.findByText("Site A");
 
@@ -123,9 +123,9 @@ describe("SitesPage", () => {
   });
 
   it("never shows a company column — the source schema has no such relationship", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("Site A")], nextCursor: null, total: 1 }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("Site A");
@@ -135,9 +135,9 @@ describe("SitesPage", () => {
   });
 
   it("shows an empty state rather than a blank table", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [], nextCursor: null, total: 0 }),
-    );
+    ));
     renderPage();
 
     expect(await screen.findByText("No sites match this search")).toBeInTheDocument();

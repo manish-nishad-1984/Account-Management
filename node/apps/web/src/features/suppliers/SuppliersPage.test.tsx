@@ -57,9 +57,9 @@ describe("SuppliersPage", () => {
   });
 
   it("requests a keyset-paginated page from the suppliers endpoint", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("Ambica Steel Traders")], nextCursor: null, total: 1 }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("Ambica Steel Traders");
@@ -76,22 +76,22 @@ describe("SuppliersPage", () => {
    * is misread at a glance by the people who use this daily.
    */
   it("formats the opening balance with Indian digit grouping", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({
         rows: [row("Big Balance Co", { openingBalance: "1234567.89" })],
         nextCursor: null,
         total: 1,
       }),
-    );
+    ));
     renderPage();
 
     expect(await screen.findByText("12,34,567.89")).toBeInTheDocument();
   });
 
   it("shows the approval flag as recorded, not as a gate", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("Unapproved Co", { isApproved: false })], nextCursor: null, total: 1 }),
-    );
+    ));
     renderPage();
 
     expect(await screen.findByText("Not approved")).toBeInTheDocument();
@@ -118,7 +118,7 @@ describe("SuppliersPage", () => {
     vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce(json({ rows: [row("Gone Co")], nextCursor: null, total: 1 }))
       .mockResolvedValueOnce(noContent())
-      .mockResolvedValue(json({ rows: [], nextCursor: null, total: 0 }));
+      .mockImplementation(() => Promise.resolve(json({ rows: [], nextCursor: null, total: 0 })));
     renderPage();
 
     await screen.findByText("Gone Co");
@@ -137,7 +137,7 @@ describe("SuppliersPage", () => {
    * knows whether a right is row-dependent.
    */
   it("hides row actions the server did not grant", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({
         rows: [
           row("Read Only Co", {
@@ -147,7 +147,7 @@ describe("SuppliersPage", () => {
         nextCursor: null,
         total: 1,
       }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("Read Only Co");
@@ -159,7 +159,7 @@ describe("SuppliersPage", () => {
     vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce(json({ rows: [row("Alpha")], nextCursor: "CURSOR_1", total: 2 }))
       .mockResolvedValueOnce(json({ rows: [row("Beta")], nextCursor: null, total: 2 }))
-      .mockResolvedValue(json({ rows: [], nextCursor: null, total: 0 }));
+      .mockImplementation(() => Promise.resolve(json({ rows: [], nextCursor: null, total: 0 })));
     renderPage();
 
     await screen.findByText("Alpha");

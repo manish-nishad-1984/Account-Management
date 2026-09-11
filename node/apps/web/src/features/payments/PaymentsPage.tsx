@@ -99,6 +99,28 @@ export function PaymentsPage() {
         ),
       },
       {
+        id: "siteGroupName",
+        header: "Site group",
+        meta: { defaultHidden: true },
+        cell: ({ row }) =>
+          row.original.siteGroupName ? (
+            <span className="text-slate-600">{row.original.siteGroupName}</span>
+          ) : (
+            <span className="text-slate-300">—</span>
+          ),
+      },
+      {
+        id: "createdAt",
+        header: "Created",
+        meta: { defaultHidden: true },
+        cell: ({ row }) =>
+          row.original.createdAt ? (
+            <span className="tabular text-slate-600">{formatDate(row.original.createdAt)}</span>
+          ) : (
+            <span className="text-slate-300">—</span>
+          ),
+      },
+      {
         id: "actions",
         header: "",
         cell: ({ row }) => (
@@ -156,6 +178,7 @@ export function PaymentsPage() {
       />
 
       <DataGrid<PaymentRow>
+        gridKey="payments"
         columns={columns}
         searchPlaceholder="Search party, description or reference"
         sortableFields={PAYMENT_SORT_FIELDS}

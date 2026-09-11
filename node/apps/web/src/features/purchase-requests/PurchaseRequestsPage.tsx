@@ -97,6 +97,28 @@ export function PurchaseRequestsPage() {
         ),
       },
       {
+        id: "siteAddress",
+        header: "Site address",
+        meta: { defaultHidden: true },
+        cell: ({ row }) =>
+          row.original.siteAddress ? (
+            <span className="text-slate-600">{row.original.siteAddress}</span>
+          ) : (
+            <span className="text-slate-300">—</span>
+          ),
+      },
+      {
+        id: "createdAt",
+        header: "Created",
+        meta: { defaultHidden: true },
+        cell: ({ row }) =>
+          row.original.createdAt ? (
+            <span className="tabular text-slate-600">{formatDate(row.original.createdAt)}</span>
+          ) : (
+            <span className="text-slate-300">—</span>
+          ),
+      },
+      {
         id: "actions",
         header: "",
         cell: ({ row }) => (
@@ -160,6 +182,7 @@ export function PurchaseRequestsPage() {
       </div>
 
       <DataGrid<PurchaseRequestRow>
+        gridKey="purchase-requests"
         columns={columns}
         searchPlaceholder="Search request number or item"
         sortableFields={PURCHASE_REQUEST_SORT_FIELDS}

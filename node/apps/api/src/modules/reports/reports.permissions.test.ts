@@ -25,8 +25,10 @@ import { PaymentsController } from "../payments/payments.controller";
  * and only a real login against real permission data showed it.
  */
 
-const permissionsOf = (controller: object, method: string): string[] =>
-  Reflect.getMetadata("permissions", (controller as Record<string, never>)[method]) ?? [];
+const permissionsOf = (controller: object, method: string): string[] => {
+  const handler = (controller as Record<string, unknown>)[method];
+  return (Reflect.getMetadata("permissions", handler as object) as string[] | undefined) ?? [];
+};
 
 const REPORT_ROUTES = [
   "ledger",

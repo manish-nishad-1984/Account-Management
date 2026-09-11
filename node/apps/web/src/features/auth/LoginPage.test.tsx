@@ -56,12 +56,12 @@ describe("login", () => {
   });
 
   it("signs in and lands on the page the visitor originally wanted", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       new Response(JSON.stringify(LOGIN_RESPONSE), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),
-    );
+    ));
 
     renderApp();
     await userEvent.type(await screen.findByLabelText(/username/i), "manish");
@@ -72,12 +72,12 @@ describe("login", () => {
   });
 
   it("sends the credentials to the API as JSON", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       new Response(JSON.stringify(LOGIN_RESPONSE), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),
-    );
+    ));
 
     renderApp();
     await userEvent.type(await screen.findByLabelText(/username/i), "manish");
@@ -94,12 +94,12 @@ describe("login", () => {
   });
 
   it("shows the server's message on a rejected login", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       new Response(JSON.stringify({ message: "Invalid username or password" }), {
         status: 401,
         headers: { "Content-Type": "application/json" },
       }),
-    );
+    ));
 
     renderApp();
     await userEvent.type(await screen.findByLabelText(/username/i), "manish");
@@ -113,12 +113,12 @@ describe("login", () => {
   });
 
   it("never writes the token to localStorage or sessionStorage", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       new Response(JSON.stringify(LOGIN_RESPONSE), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),
-    );
+    ));
 
     renderApp();
     await userEvent.type(await screen.findByLabelText(/username/i), "manish");

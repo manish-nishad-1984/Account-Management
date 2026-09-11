@@ -23,6 +23,7 @@ import { InventoryInwardModule } from "./modules/inventory-inward/inventory-inwa
 import { PaymentsModule } from "./modules/payments/payments.module";
 import { ReportsModule } from "./modules/reports/reports.module";
 import { InwardChallansModule } from "./modules/inward-challans/inward-challans.module";
+import { GridPreferencesModule } from "./modules/grid-preferences/grid-preferences.module";
 
 const env = loadEnv();
 
@@ -57,6 +58,7 @@ const env = loadEnv();
     InwardChallansModule,
     PaymentsModule,
     ReportsModule,
+    GridPreferencesModule,
   ],
   providers: [
     // Order matters: authenticate, then authorise.

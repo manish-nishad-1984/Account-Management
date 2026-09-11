@@ -50,9 +50,9 @@ describe("UsersPage", () => {
   });
 
   it("requests a bounded page — never the whole table", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("alice")], nextCursor: null, total: 1 }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("alice");
@@ -60,9 +60,9 @@ describe("UsersPage", () => {
   });
 
   it("renders rows and the total from the server", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("alice"), row("bob")], nextCursor: null, total: 2 }),
-    );
+    ));
     renderPage();
 
     expect(await screen.findByText("alice")).toBeInTheDocument();
@@ -85,9 +85,9 @@ describe("UsersPage", () => {
   });
 
   it("disables Next on the last page", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("alice")], nextCursor: null, total: 1 }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("alice");
@@ -96,9 +96,9 @@ describe("UsersPage", () => {
   });
 
   it("sorts on the SERVER, and resets paging when the sort changes", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("alice")], nextCursor: "CURSOR_1", total: 9 }),
-    );
+    ));
     renderPage();
     await screen.findByText("alice");
 
@@ -116,9 +116,9 @@ describe("UsersPage", () => {
   });
 
   it("searches on the server and resets paging", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("alice")], nextCursor: null, total: 1 }),
-    );
+    ));
     renderPage();
     await screen.findByText("alice");
 
@@ -131,13 +131,13 @@ describe("UsersPage", () => {
   });
 
   it("flags users still holding a legacy plaintext password", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({
         rows: [row("alice", { passwordIsLegacy: true }), row("bob")],
         nextCursor: null,
         total: 2,
       }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("alice");
@@ -145,27 +145,27 @@ describe("UsersPage", () => {
   });
 
   it("shows the server's message when the list is refused", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ message: "Missing permission: user.view" }, 403),
-    );
+    ));
     renderPage();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Missing permission: user.view");
   });
 
   it("shows an empty state rather than a blank table", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [], nextCursor: null, total: 0 }),
-    );
+    ));
     renderPage();
 
     expect(await screen.findByText("No users match this search")).toBeInTheDocument();
   });
 
   it("renders the site count from the server, one row per user", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("alice", { siteCount: 3 })], nextCursor: null, total: 1 }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("alice");

@@ -122,6 +122,7 @@ export function CompaniesPage() {
       />
 
       <DataGrid<CompanyRow>
+        gridKey="companies"
         columns={columns}
         searchPlaceholder="Search name, GST or PAN"
         sortableFields={COMPANY_SORT_FIELDS}

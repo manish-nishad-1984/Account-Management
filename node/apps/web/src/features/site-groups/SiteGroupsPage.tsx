@@ -124,6 +124,7 @@ export function SiteGroupsPage() {
       </div>
 
       <DataGrid<SiteGroupRow>
+        gridKey="site-groups"
         columns={columns}
         rows={query.data?.rows ?? []}
         total={query.data?.total ?? null}

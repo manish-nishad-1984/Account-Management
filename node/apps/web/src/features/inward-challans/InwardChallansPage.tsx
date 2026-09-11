@@ -151,6 +151,39 @@ export function InwardChallansPage() {
         ),
       },
       {
+        id: "siteName",
+        header: "Site",
+        meta: { defaultHidden: true },
+        cell: ({ row }) =>
+          row.original.siteName ? (
+            <span className="text-slate-600">{row.original.siteName}</span>
+          ) : (
+            <span className="text-slate-300">—</span>
+          ),
+      },
+      {
+        id: "vehicleNumber",
+        header: "Vehicle number",
+        meta: { defaultHidden: true },
+        cell: ({ row }) =>
+          row.original.vehicleNumber ? (
+            <span className="text-slate-600">{row.original.vehicleNumber}</span>
+          ) : (
+            <span className="text-slate-300">—</span>
+          ),
+      },
+      {
+        id: "createdAt",
+        header: "Created",
+        meta: { defaultHidden: true },
+        cell: ({ row }) =>
+          row.original.createdAt ? (
+            <span className="tabular text-slate-600">{formatDate(row.original.createdAt)}</span>
+          ) : (
+            <span className="text-slate-300">—</span>
+          ),
+      },
+      {
         id: "actions",
         header: "",
         cell: ({ row }) => (
@@ -271,6 +304,7 @@ export function InwardChallansPage() {
       </form>
 
       <DataGrid<InwardChallanRow>
+        gridKey="inward-challans"
         columns={columns}
         searchPlaceholder="Search item, supplier, invoice or vehicle"
         sortableFields={INWARD_CHALLAN_SORT_FIELDS}

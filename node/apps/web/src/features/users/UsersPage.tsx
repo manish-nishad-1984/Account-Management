@@ -102,6 +102,7 @@ export function UsersPage() {
       />
 
       <DataGrid<UserRow>
+        gridKey="users"
         columns={columns}
         searchPlaceholder="Search name, username or email"
         sortableFields={USER_SORT_FIELDS}

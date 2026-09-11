@@ -103,6 +103,17 @@ export function InventoryPage() {
         ),
       },
       {
+        id: "createdAt",
+        header: "Created",
+        meta: { defaultHidden: true },
+        cell: ({ row }) =>
+          row.original.createdAt ? (
+            <span className="tabular text-slate-600">{formatDate(row.original.createdAt)}</span>
+          ) : (
+            <span className="text-slate-300">—</span>
+          ),
+      },
+      {
         id: "actions",
         header: "",
         cell: ({ row }) => (
@@ -181,6 +192,7 @@ export function InventoryPage() {
       </div>
 
       <DataGrid<InventoryInwardRow>
+        gridKey="inventory"
         columns={columns}
         searchPlaceholder="Search item, unit or details"
         sortableFields={INVENTORY_INWARD_SORT_FIELDS}

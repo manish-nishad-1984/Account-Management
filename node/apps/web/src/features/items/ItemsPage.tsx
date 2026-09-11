@@ -210,6 +210,7 @@ export function ItemsPage() {
       )}
 
       <DataGrid<ItemRow>
+        gridKey="items"
         columns={columns}
         searchPlaceholder="Search item name or HSN code"
         sortableFields={ITEM_SORT_FIELDS}

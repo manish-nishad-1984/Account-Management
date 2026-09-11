@@ -120,6 +120,7 @@ export function SitesPage() {
       />
 
       <DataGrid<SiteRow>
+        gridKey="sites"
         columns={columns}
         searchPlaceholder="Search site, area or contact"
         sortableFields={SITE_SORT_FIELDS}

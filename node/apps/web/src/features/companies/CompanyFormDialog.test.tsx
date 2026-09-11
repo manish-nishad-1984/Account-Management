@@ -58,7 +58,7 @@ describe("CompanyFormDialog", () => {
   });
 
   it("posts a new company to the companies endpoint", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(json(detail));
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(json(detail)));
     renderDialog(null);
 
     await userEvent.type(screen.getByLabelText(/company name/i), "New Company");
@@ -78,7 +78,7 @@ describe("CompanyFormDialog", () => {
    * would submit them blank and wipe them.
    */
   it("loads the bank details that the list withholds", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(json(detail));
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(json(detail)));
     renderDialog("company-1");
 
     await waitFor(() =>
@@ -88,7 +88,7 @@ describe("CompanyFormDialog", () => {
   });
 
   it("sends a PATCH, not a POST, when editing", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(json(detail));
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(json(detail)));
     renderDialog("company-1");
 
     await waitFor(() => expect(screen.getByLabelText(/company name/i)).toHaveValue("D H Infra"));
@@ -114,7 +114,7 @@ describe("CompanyFormDialog", () => {
    * malformed GST number never reaches the network.
    */
   it("refuses a malformed GST number without calling the API", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(json(detail));
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(json(detail)));
     renderDialog(null);
 
     await userEvent.type(screen.getByLabelText(/company name/i), "Bad GST Co");
@@ -126,7 +126,7 @@ describe("CompanyFormDialog", () => {
   });
 
   it("requires a name", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(json(detail));
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(json(detail)));
     renderDialog(null);
 
     await userEvent.click(screen.getByRole("button", { name: /create company/i }));
@@ -141,7 +141,7 @@ describe("CompanyFormDialog", () => {
    * field rather than in a generic banner.
    */
   it("attaches a server conflict to the field that caused it", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json(
         {
           message: "Another company is already registered with this GST number",
@@ -154,7 +154,7 @@ describe("CompanyFormDialog", () => {
         },
         409,
       ),
-    );
+    ));
     renderDialog(null);
 
     await userEvent.type(screen.getByLabelText(/company name/i), "Duplicate Co");
@@ -165,7 +165,7 @@ describe("CompanyFormDialog", () => {
   });
 
   it("closes only after the save succeeds", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(json({ message: "Nope" }, 500));
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(json({ message: "Nope" }, 500)));
     const { onClose } = renderDialog(null);
 
     await userEvent.type(screen.getByLabelText(/company name/i), "Doomed Co");

@@ -50,9 +50,9 @@ describe("CompaniesPage", () => {
   });
 
   it("requests a bounded page from the companies endpoint", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("D H Infra")], nextCursor: null, total: 1 }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("D H Infra");
@@ -75,9 +75,9 @@ describe("CompaniesPage", () => {
   });
 
   it("searches on the server and resets paging", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("Alpha")], nextCursor: null, total: 1 }),
-    );
+    ));
     renderPage();
     await screen.findByText("Alpha");
 
@@ -90,9 +90,9 @@ describe("CompaniesPage", () => {
   });
 
   it("shows the GST number, which is what people look a company up by", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("Alpha")], nextCursor: null, total: 1 }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("Alpha");
@@ -100,9 +100,9 @@ describe("CompaniesPage", () => {
   });
 
   it("says a missing GST number is missing rather than rendering a blank cell", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("Alpha", { gstNo: null, panNo: null })], nextCursor: null, total: 1 }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("Alpha");
@@ -110,9 +110,9 @@ describe("CompaniesPage", () => {
   });
 
   it("renders the user count once per company", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("Alpha", { userCount: 7 })], nextCursor: null, total: 1 }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("Alpha");
@@ -122,9 +122,9 @@ describe("CompaniesPage", () => {
   });
 
   it("shows the server's message when the list is refused", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ message: "Missing permission: company.view" }, 403),
-    );
+    ));
     renderPage();
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -133,13 +133,13 @@ describe("CompaniesPage", () => {
   });
 
   it("hides the delete action when the server says this caller cannot delete", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({
         rows: [row("Alpha", { capabilities: { canEdit: true, canDelete: false, canApprove: false } })],
         nextCursor: null,
         total: 1,
       }),
-    );
+    ));
     renderPage();
 
     await screen.findByText("Alpha");

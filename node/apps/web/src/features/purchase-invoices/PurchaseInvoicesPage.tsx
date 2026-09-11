@@ -151,6 +151,76 @@ export function PurchaseInvoicesPage() {
         ),
       },
       {
+        id: "subtotal",
+        header: "Subtotal",
+        meta: { defaultHidden: true },
+        cell: ({ row }) =>
+          row.original.subtotal ? (
+            <span className="tabular block text-right text-slate-700">
+              {formatMoney(row.original.subtotal)}
+            </span>
+          ) : (
+            <span className="block text-right text-slate-300">—</span>
+          ),
+      },
+      {
+        id: "totalDiscount",
+        header: "Total discount",
+        meta: { defaultHidden: true },
+        cell: ({ row }) =>
+          row.original.totalDiscount ? (
+            <span className="tabular block text-right text-slate-700">
+              {formatMoney(row.original.totalDiscount)}
+            </span>
+          ) : (
+            <span className="block text-right text-slate-300">—</span>
+          ),
+      },
+      {
+        id: "roundOff",
+        header: "Round off",
+        meta: { defaultHidden: true },
+        cell: ({ row }) =>
+          row.original.roundOff ? (
+            <span className="tabular block text-right text-slate-700">
+              {formatMoney(row.original.roundOff)}
+            </span>
+          ) : (
+            <span className="block text-right text-slate-300">—</span>
+          ),
+      },
+      {
+        id: "lineCount",
+        header: "Lines",
+        meta: { defaultHidden: true },
+        cell: ({ row }) => (
+          <span className="tabular block text-right text-slate-600">
+            {row.original.lineCount}
+          </span>
+        ),
+      },
+      {
+        id: "isPaidOut",
+        header: "Paid out",
+        meta: { defaultHidden: true },
+        cell: ({ row }) => (
+          <span className="text-xs text-slate-600">
+            {row.original.isPaidOut ? "Paid out" : "Not paid out"}
+          </span>
+        ),
+      },
+      {
+        id: "createdAt",
+        header: "Created",
+        meta: { defaultHidden: true },
+        cell: ({ row }) =>
+          row.original.createdAt ? (
+            <span className="tabular text-slate-600">{formatDate(row.original.createdAt)}</span>
+          ) : (
+            <span className="text-slate-300">—</span>
+          ),
+      },
+      {
         id: "actions",
         header: "",
         cell: ({ row }) => (
@@ -235,6 +305,7 @@ export function PurchaseInvoicesPage() {
       </div>
 
       <DataGrid<PurchaseInvoiceRow>
+        gridKey="purchase-invoices"
         columns={columns}
         searchPlaceholder="Search invoice number, challan number or supplier"
         sortableFields={PURCHASE_INVOICE_SORT_FIELDS}

@@ -6,6 +6,7 @@ import { RequireAuth } from "./components/RequireAuth";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { SiteScopeProvider } from "./contexts/SiteScopeContext";
 import { RecordLayoutProvider } from "./contexts/RecordLayoutContext";
+import { GridPreferencesProvider } from "./contexts/GridPreferencesContext";
 import { LoginPage } from "./features/auth/LoginPage";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { UsersPage } from "./features/users/UsersPage";
@@ -75,7 +76,14 @@ function ScopedShell({ children }: { children: React.ReactNode }) {
         view should not change how it opens for the next person to sign in.
       */}
       <RecordLayoutProvider key={user?.id ?? "anonymous"} userId={user?.id ?? null}>
-        <AppShell>{children}</AppShell>
+        {/*
+          Column layouts are fetched once here, not once per grid. The `key`
+          remounts them when the signed-in person changes, so one person's
+          layouts never show up for the next person at a shared keyboard.
+        */}
+        <GridPreferencesProvider key={user?.id ?? "anonymous"}>
+          <AppShell>{children}</AppShell>
+        </GridPreferencesProvider>
       </RecordLayoutProvider>
     </SiteScopeProvider>
   );
