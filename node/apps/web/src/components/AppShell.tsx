@@ -1,7 +1,7 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import clsx from "clsx";
-import { CalendarDays, LogOut, Menu, X } from "lucide-react";
+import { CalendarDays, LogOut, Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { financialYear } from "@accountmanagement/domain";
 import { hasPermission } from "@accountmanagement/contracts";
 import { useAuth } from "../contexts/AuthContext";
@@ -11,17 +11,62 @@ import { RecordLayoutPicker } from "./RecordLayoutPicker";
 import { useRecordLayout } from "../contexts/RecordLayoutContext";
 
 /**
- * Account Book panel shell: a fixed module rail, a slim top bar, and the routed
- * page on a soft surface.
+ * Account Book panel shell: a module rail that collapses to icons, a slim top
+ * bar, and the routed page on a soft surface.
  *
  * Screens not yet migrated stay visible but dimmed and marked, so the panel
  * doubles as a readable record of migration progress rather than hiding work.
  */
+
+const collapseKey = (userId: string | null) =>
+  `accountbook.sidebarCollapsed.${userId ?? "anonymous"}`;
+
+/** Storage can throw — a private window, or a browser set to block site data. */
+function readCollapsed(userId: string | null): boolean {
+  try {
+    return window.localStorage.getItem(collapseKey(userId)) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function writeCollapsed(userId: string | null, collapsed: boolean): void {
+  try {
+    window.localStorage.setItem(collapseKey(userId), String(collapsed));
+  } catch {
+    // A preference that cannot be remembered is not a reason to fail a render.
+  }
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { paneOpen } = useRecordLayout();
+
+  /**
+   * COLLAPSING IS A DESKTOP IDEA, and every class that acts on it is an `lg:`
+   * one.
+   *
+   * On a phone the rail is already off-canvas, and full width when open, so a
+   * "collapsed" drawer would be a 64px column of icons laid over the page —
+   * strictly worse than the drawer, and reachable only by someone who collapsed
+   * it at a desk and then picked up their phone. The stored preference is
+   * carried on both; only the wide layout acts on it.
+   *
+   * It is kept per person, in local storage rather than on the server, because
+   * it describes this screen rather than this user: the same person wants the
+   * rail open on a laptop and out of the way on a 13-inch display, and a
+   * server-side preference would follow them between the two.
+   */
+  const [collapsed, setCollapsed] = useState(() => readCollapsed(user?.id ?? null));
+
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((current) => {
+      writeCollapsed(user?.id ?? null, !current);
+      return !current;
+    });
+  }, [user?.id]);
 
   const initials = (user?.userName ?? "?").slice(0, 2).toUpperCase();
   const fy = financialYear.format(financialYear.currentAsProduced(new Date()));
@@ -64,18 +109,25 @@ export function AppShell({ children }: { children: ReactNode }) {
       )}
 
       <aside
+        id="app-sidebar"
         className={clsx(
           "fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col",
-          "bg-shell-900 transition-transform duration-200 ease-out",
+          "bg-shell-900 transition-[transform,width] duration-200 ease-out",
           "lg:static lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
+          collapsed && "lg:w-16",
         )}
       >
-        <div className="flex h-16 items-center gap-3 border-b border-white/10 px-5">
+        <div
+          className={clsx(
+            "flex h-16 items-center gap-3 border-b border-white/10 px-5",
+            collapsed && "lg:justify-center lg:px-0",
+          )}
+        >
           <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white shadow-lg">
             AB
           </div>
-          <div className="min-w-0 leading-tight">
+          <div className={clsx("min-w-0 leading-tight", collapsed && "lg:hidden")}>
             <div className="truncate text-sm font-semibold text-white">Account Book</div>
             <div className="truncate text-[11px] text-slate-400">D H Infra</div>
           </div>
@@ -93,10 +145,31 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
 
-        <nav className="scroll-subtle flex-1 overflow-y-auto px-3 py-4" aria-label="Main">
-          {nav.map((section) => (
+        <nav
+          className={clsx(
+            "scroll-subtle flex-1 overflow-y-auto px-3 py-4",
+            collapsed && "lg:px-2",
+          )}
+          aria-label="Main"
+        >
+          {nav.map((section, sectionIndex) => (
             <div key={section.title} className="mb-6 last:mb-2">
-              <div className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+              {/*
+                Collapsed, the heading has nowhere to go: "MASTERS" does not fit
+                in 64px, and truncating it to "MAS…" says less than nothing. A
+                hairline keeps the grouping visible instead. It is skipped above
+                the first section, where the brand block's own border already
+                draws that line.
+              */}
+              {collapsed && sectionIndex > 0 && (
+                <div aria-hidden className="mx-2 mb-3 hidden h-px bg-white/10 lg:block" />
+              )}
+              <div
+                className={clsx(
+                  "mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500",
+                  collapsed && "lg:hidden",
+                )}
+              >
                 {section.title}
               </div>
               <ul className="space-y-0.5">
@@ -109,10 +182,27 @@ export function AppShell({ children }: { children: ReactNode }) {
                         to={item.to}
                         end={item.to === "/"}
                         onClick={() => setSidebarOpen(false)}
+                        /*
+                         * The label is hidden with `lg:hidden` rather than dropped
+                         * from the tree, so the drawer on a phone still reads
+                         * normally. Hidden text carries no accessible name, though,
+                         * so the collapsed rail names each link itself — and says
+                         * out loud which screens are not built yet, since those
+                         * lose their "soon" badge to the narrower column.
+                         */
+                        aria-label={collapsed ? item.label : undefined}
+                        title={
+                          collapsed
+                            ? planned
+                              ? `${item.label} — not migrated yet`
+                              : item.label
+                            : undefined
+                        }
                         className={({ isActive }) =>
                           clsx(
                             "group relative flex items-center gap-2.5 rounded-lg px-3 py-2",
                             "text-sm transition-colors duration-150",
+                            collapsed && "lg:justify-center lg:px-0",
                             isActive
                               ? "bg-white/10 font-medium text-white"
                               : planned
@@ -130,11 +220,16 @@ export function AppShell({ children }: { children: ReactNode }) {
                               />
                             )}
                             <Icon aria-hidden className="size-4 shrink-0" />
-                            <span className="truncate">{item.label}</span>
+                            <span className={clsx("truncate", collapsed && "lg:hidden")}>
+                              {item.label}
+                            </span>
                             {planned && (
                               <span
                                 title="Not migrated yet"
-                                className="ml-auto rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-600 ring-1 ring-inset ring-slate-700"
+                                className={clsx(
+                                  "ml-auto rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-600 ring-1 ring-inset ring-slate-700",
+                                  collapsed && "lg:hidden",
+                                )}
                               >
                                 soon
                               </span>
@@ -151,11 +246,19 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="border-t border-white/10 p-3">
-          <div className="flex items-center gap-2.5 rounded-lg px-2 py-2">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-600 text-[11px] font-semibold text-white">
+          <div
+            className={clsx(
+              "flex items-center gap-2.5 rounded-lg px-2 py-2",
+              collapsed && "lg:flex-col lg:gap-1 lg:px-0",
+            )}
+          >
+            <div
+              title={collapsed ? user?.userName : undefined}
+              className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-600 text-[11px] font-semibold text-white"
+            >
               {initials}
             </div>
-            <div className="min-w-0 flex-1 leading-tight">
+            <div className={clsx("min-w-0 flex-1 leading-tight", collapsed && "lg:hidden")}>
               <div className="truncate text-sm font-medium text-white">{user?.userName}</div>
               <div className="truncate text-[11px] text-slate-400">
                 {user?.permissions.length ?? 0} permissions
@@ -196,6 +299,31 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <Menu className="size-5" />
             </button>
+
+            {/*
+              THE COLLAPSE CONTROL SITS WHERE THE HAMBURGER SITS, one breakpoint
+              apart, so the same corner works the navigation at every width.
+
+              Putting it inside the rail was the other option and is the worse
+              one: collapsed, the rail is 64px of destinations with no room for a
+              control that is not one, and a toggle tucked under the sign-out
+              button is somewhere nobody looks.
+            */}
+            <button
+              onClick={toggleCollapsed}
+              aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+              aria-expanded={!collapsed}
+              aria-controls="app-sidebar"
+              title={collapsed ? "Expand navigation" : "Collapse navigation"}
+              className="-ml-1 hidden shrink-0 rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 lg:inline-flex"
+            >
+              {collapsed ? (
+                <PanelLeftOpen aria-hidden className="size-5" />
+              ) : (
+                <PanelLeftClose aria-hidden className="size-5" />
+              )}
+            </button>
+
             <Breadcrumb pathname={location.pathname} />
           </div>
 
