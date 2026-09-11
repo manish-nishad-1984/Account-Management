@@ -28,7 +28,7 @@ export function SuppliersPage() {
         cell: ({ row }) => (
           <div>
             <div className="font-medium text-slate-900">{row.original.name}</div>
-            <div className="text-xs text-slate-500">
+            <div className="break-token text-xs text-slate-500">
               {row.original.email ?? "No email recorded"}
             </div>
           </div>

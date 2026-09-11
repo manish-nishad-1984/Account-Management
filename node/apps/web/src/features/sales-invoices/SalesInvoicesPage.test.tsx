@@ -166,7 +166,7 @@ describe("SalesInvoicesPage", () => {
     renderWithAuth(<SalesInvoicesPage />, { permissions: ALL_RIGHTS });
     await screen.findByText("DHP/26-27/001");
 
-    await user.click(screen.getByRole("button", { name: /^approve$/i }));
+    await user.click(screen.getByRole("button", { name: /^approve /i }));
 
     await waitFor(() => {
       const call = vi
@@ -196,7 +196,7 @@ describe("SalesInvoicesPage", () => {
     renderWithAuth(<SalesInvoicesPage />, { permissions: ["sales-invoice.view"] });
     await screen.findByText("DHP/26-27/001");
 
-    expect(screen.queryByRole("button", { name: /^approve$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^approve /i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /new invoice/i })).not.toBeInTheDocument();
   });
 
@@ -212,7 +212,7 @@ describe("SalesInvoicesPage", () => {
     });
     await screen.findByText("DHP/26-27/001");
 
-    expect(screen.getByRole("button", { name: /^approve$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^approve /i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^edit/i })).not.toBeInTheDocument();
   });
 });

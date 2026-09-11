@@ -193,7 +193,7 @@ describe("PurchaseInvoicesPage", () => {
     renderWithAuth(<PurchaseInvoicesPage />, { permissions: ALL_RIGHTS });
     await screen.findByText("BB/154");
 
-    await user.click(screen.getByRole("button", { name: /^approve$/i }));
+    await user.click(screen.getByRole("button", { name: /^approve /i }));
 
     await waitFor(() => {
       const call = vi
@@ -209,7 +209,7 @@ describe("PurchaseInvoicesPage", () => {
     renderWithAuth(<PurchaseInvoicesPage />, { permissions: ["purchase-invoice.view"] });
     await screen.findByText("BB/154");
 
-    expect(screen.queryByRole("button", { name: /^approve$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^approve /i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /new invoice/i })).not.toBeInTheDocument();
   });
 

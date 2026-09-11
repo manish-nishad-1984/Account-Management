@@ -5,7 +5,7 @@ import {
   type ColumnDef,
 } from "@tanstack/react-table";
 import clsx from "clsx";
-import { useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import type { GridColumnDefault, SortDirection } from "@accountmanagement/contracts";
 import { ChevronLeft, ChevronRight, Columns3, Inbox, Search } from "lucide-react";
 import { Button, EmptyState } from "../ui";
@@ -209,6 +209,49 @@ export function DataGrid<T>({
     manualFiltering: true,
   });
 
+  /**
+   * THE ROW ACTIONS ARE PINNED TO THE RIGHT EDGE while the table scrolls, and
+   * the shadow that separates them appears only while there is something left
+   * to scroll to.
+   *
+   * A grid that fits needs no floating column and no shadow over nothing; one
+   * that does not fit must never push Edit and Delete off the screen, which is
+   * what made the sideways scrolling worth reporting rather than merely
+   * untidy. `scrollLeft` is watched rather than assumed: the same grid fits or
+   * does not depending on the window, the sidebar and which columns the reader
+   * chose to show.
+   *
+   * A resize listener, not a ResizeObserver: the container only changes width
+   * when the window does or when the columns change, and the latter re-runs
+   * this effect anyway.
+   */
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [scrollAtEnd, setScrollAtEnd] = useState(true);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const update = () =>
+      setScrollAtEnd(el.scrollWidth - el.clientWidth - el.scrollLeft <= 1);
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      el.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [effectiveColumns.length, rows.length, isLoading]);
+
+  /** The last column, when it is the row actions, is the one that floats. */
+  const stickyColumnId =
+    effectiveColumns.at(-1)?.id === "actions" ? "actions" : null;
+  const stickyCell = (isSticky: boolean, background: string) =>
+    isSticky && [
+      "sticky right-0 z-10",
+      background,
+      !scrollAtEnd && "shadow-[-6px_0_10px_-6px_rgba(15,23,42,0.18)]",
+    ];
+
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-card">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 px-4 py-3">
@@ -264,9 +307,9 @@ export function DataGrid<T>({
         </div>
       )}
 
-      <div className="overflow-x-auto">
+      <div ref={scrollerRef} className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-200/80 text-sm">
-          <thead className="bg-slate-50/80">
+          <thead className="bg-slate-50">
             {table.getHeaderGroups().map((group) => (
               <tr key={group.id}>
                 {group.headers.map((header) => {
@@ -279,7 +322,10 @@ export function DataGrid<T>({
                     <th
                       key={header.id}
                       scope="col"
-                      className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-500"
+                      className={clsx(
+                        "px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-500",
+                        stickyCell(field === stickyColumnId, "bg-slate-50"),
+                      )}
                     >
                       {sortable ? (
                         <button
@@ -358,16 +404,32 @@ export function DataGrid<T>({
                           }
                         : undefined
                     }
+                    /*
+                      SOLID TINTS, not the 80% and 70% these were. The row
+                      actions float above the scrolling cells and must paint
+                      their own background; a translucent one there blends
+                      with what passes underneath and leaves a visible seam
+                      down the edge of the table.
+                    */
                     className={clsx(
-                      "transition-colors",
+                      "group transition-colors",
                       onRowClick && "cursor-pointer focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-brand-500",
-                      selected
-                        ? "bg-brand-50/80 hover:bg-brand-50"
-                        : "hover:bg-slate-50/70",
+                      selected ? "bg-brand-50 hover:bg-brand-50" : "hover:bg-slate-50",
                     )}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      <td
+                        key={cell.id}
+                        className={clsx(
+                          "px-4 py-3 text-slate-600",
+                          stickyCell(
+                            cell.column.id === stickyColumnId,
+                            selected
+                              ? "bg-brand-50"
+                              : "bg-white group-hover:bg-slate-50",
+                          ),
+                        )}
+                      >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}
@@ -380,12 +442,15 @@ export function DataGrid<T>({
           {/* Shown even when the page is empty: a total of zero is the answer
               to "did my filter work", and the source loses it precisely then. */}
           {footer && !isLoading && (
-            <tfoot className="border-t-2 border-slate-200 bg-slate-50/80">
+            <tfoot className="border-t-2 border-slate-200 bg-slate-50">
               <tr>
                 {effectiveColumns.map((column, index) => (
                   <td
                     key={column.id ?? index}
-                    className="whitespace-nowrap px-4 py-3 text-sm font-semibold text-slate-800"
+                    className={clsx(
+                      "whitespace-nowrap px-4 py-3 text-sm font-semibold text-slate-800",
+                      stickyCell(column.id === stickyColumnId, "bg-slate-50"),
+                    )}
                   >
                     {column.id ? footer[column.id] : null}
                   </td>

@@ -178,7 +178,7 @@ describe("InventoryPage", () => {
       routes([row({ isApproved: true })]);
       renderWithAuth(<InventoryPage />, { permissions: ALL_RIGHTS });
 
-      await userEvent.click(await screen.findByRole("button", { name: /unapprove/i }));
+      await userEvent.click(await screen.findByRole("button", { name: /withdraw approval/i }));
 
       await waitFor(() => {
         const call = vi

@@ -37,7 +37,14 @@ export function UsersPage() {
           </div>
         ),
       },
-      { id: "email", header: "Email", accessorKey: "email" },
+      {
+        id: "email",
+        header: "Email",
+        accessorKey: "email",
+        // See `.break-token`: an address is one unbreakable word, and it was
+        // holding this column wider than the address itself needs.
+        cell: ({ row }) => <span className="break-token">{row.original.email}</span>,
+      },
       {
         id: "phoneNo",
         header: "Phone",

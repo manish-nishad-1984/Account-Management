@@ -227,9 +227,7 @@ export function SalesInvoicesPage() {
                     isApproved: !row.original.isApproved,
                   })
                 }
-              >
-                {row.original.isApproved ? "Unapprove" : "Approve"}
-              </Button>
+              />
             )}
             <RowActions
               capabilities={row.original.capabilities}

@@ -134,7 +134,7 @@ describe("PurchaseRequestsPage", () => {
       renderWithAuth(<PurchaseRequestsPage />, { permissions: ["purchase-request.view"] });
 
       await screen.findByText("PR/26-27/001");
-      expect(screen.queryByRole("button", { name: /^approve$/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^approve /i })).not.toBeInTheDocument();
     });
 
     /**
@@ -146,7 +146,7 @@ describe("PurchaseRequestsPage", () => {
       routes([row({ isApproved: false })]);
       renderWithAuth(<PurchaseRequestsPage />, { permissions: ALL_RIGHTS });
 
-      await userEvent.click(await screen.findByRole("button", { name: /^approve$/i }));
+      await userEvent.click(await screen.findByRole("button", { name: /^approve /i }));
 
       await waitFor(() => {
         const call = vi
@@ -162,7 +162,7 @@ describe("PurchaseRequestsPage", () => {
       routes([row({ isApproved: true })]);
       renderWithAuth(<PurchaseRequestsPage />, { permissions: ALL_RIGHTS });
 
-      await userEvent.click(await screen.findByRole("button", { name: /unapprove/i }));
+      await userEvent.click(await screen.findByRole("button", { name: /withdraw approval/i }));
 
       await waitFor(() => {
         const call = vi

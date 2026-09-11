@@ -167,7 +167,7 @@ describe("PurchaseOrdersPage", () => {
     await screen.findByText("DHP/PO/24-25/049");
     // The accessible name is the button's TEXT ("Approve"), not its `title` —
     // visible content wins over the title attribute in the name computation.
-    await user.click(screen.getByRole("button", { name: /^approve$/i }));
+    await user.click(screen.getByRole("button", { name: /^approve /i }));
 
     await waitFor(() => {
       const call = vi

@@ -43,9 +43,36 @@ body {
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
-/* Money, quantities and identifiers must align digit-for-digit down a column. */
+/*
+ * Money, quantities and identifiers must align digit-for-digit down a column,
+ * and must never be broken across two lines.
+ *
+ * The nowrap became load-bearing when grid cells started wrapping: an invoice
+ * number is one thing to read and to copy, and the browser will happily split
+ * "DHI/26-27/001" after the hyphen to save four pixels. Prose in the same cell
+ * still wraps, which is the point of the change.
+ */
 .tabular {
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/*
+ * An address, a URL, anything that is one long token with no space in it.
+ *
+ * `hariom.construction.chemicals@example.com` is 41 unbreakable characters, and
+ * in a table that is not a style problem but a layout one: a cell that cannot
+ * wrap sets a floor under its column, and the supplier grid was still scrolling
+ * sideways for that reason alone after every other column had been made to fit.
+ *
+ * `anywhere`, not `break-word`: only the former lowers the column’s own
+ * minimum width, which is the whole point. It is applied to the few cells that
+ * hold such tokens rather than to every cell, because applied broadly it also
+ * lets the browser split ordinary words — “Navrangpura” across two lines, in a
+ * column with room to spare, measured on the supplier list.
+ */
+.break-token {
+  overflow-wrap: anywhere;
 }
 
 /* Headings carry slightly tighter tracking; body text stays at default. */

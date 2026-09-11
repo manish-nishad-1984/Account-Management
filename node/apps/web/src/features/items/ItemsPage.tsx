@@ -136,12 +136,11 @@ export function ItemsPage() {
               variant="ghost"
               icon={Clock}
               /* Matches RowActions beside it: taller on touch, unchanged with a mouse. */
-              className="px-2 py-2 text-xs lg:py-1"
+              className="px-2 py-2 lg:py-1.5"
               aria-label={`Price history for ${row.original.name}`}
+              title={`Price history for ${row.original.name}`}
               onClick={() => setHistoryRow(row.original)}
-            >
-              History
-            </Button>
+            />
             <RowActions
               capabilities={row.original.capabilities}
               label={row.original.name}
