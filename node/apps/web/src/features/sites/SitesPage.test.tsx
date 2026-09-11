@@ -107,6 +107,45 @@ describe("SitesPage", () => {
     expect(screen.getByText("No contact recorded")).toBeInTheDocument();
   });
 
+  /**
+   * The legacy field holds SEVERAL numbers in one string, comma separated —
+   * `9624972802,7567501707,98982598555` is a real row on the live site. A phone
+   * number is `.tabular`, which is `nowrap`, so run together they were 33
+   * unbreakable characters holding this grid 321px wide and scrolling sideways.
+   */
+  it("puts each of several phone numbers on its own line", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(() =>
+      Promise.resolve(
+        json({
+          rows: [
+            row("Site A", {
+              contactPersonPhoneNo: "9624972802,7567501707, 98982598555",
+            }),
+          ],
+          nextCursor: null,
+          total: 1,
+        }),
+      ),
+    );
+    renderPage();
+
+    await screen.findByText("Site A");
+    expect(screen.getByText("9624972802")).toBeInTheDocument();
+    expect(screen.getByText("7567501707")).toBeInTheDocument();
+    // Trimmed: the source separates with ", " as often as with ",".
+    expect(screen.getByText("98982598555")).toBeInTheDocument();
+  });
+
+  it("leaves a single number exactly as it is", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(() =>
+      Promise.resolve(json({ rows: [row("Site A")], nextCursor: null, total: 1 })),
+    );
+    renderPage();
+
+    await screen.findByText("Site A");
+    expect(screen.getByText("9720000000")).toBeInTheDocument();
+  });
+
   it("searches on the server and resets paging", async () => {
     vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("Site A")], nextCursor: null, total: 1 }),

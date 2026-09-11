@@ -36,12 +36,32 @@ export function SitesPage() {
       {
         id: "contactPersonPhoneNo",
         header: "Contact",
-        cell: ({ row }) =>
-          row.original.contactPersonPhoneNo ? (
-            <span className="tabular text-slate-600">{row.original.contactPersonPhoneNo}</span>
-          ) : (
-            <Absent />
-          ),
+        /*
+          ONE NUMBER PER LINE, because the legacy field holds several.
+
+          Live data has rows like `9624972802,7567501707,98982598555` in this
+          one column — 33 characters that cannot wrap, since a phone number is
+          `.tabular` and so `nowrap`. That single cell held the site list 321px
+          wide and was the last grid still scrolling sideways on the live site.
+          Split, it is three short lines, each still unbreakable in itself, and
+          easier to read besides.
+        */
+        cell: ({ row }) => {
+          const numbers = (row.original.contactPersonPhoneNo ?? "")
+            .split(",")
+            .map((number) => number.trim())
+            .filter((number) => number !== "");
+
+          if (numbers.length === 0) return <Absent />;
+          return (
+            <div className="tabular text-slate-600">
+              {/* Indexed: the same number twice in one field is untidy data, not a crash. */}
+              {numbers.map((number, index) => (
+                <div key={`${number}-${index}`}>{number}</div>
+              ))}
+            </div>
+          );
+        },
       },
       {
         id: "area",
