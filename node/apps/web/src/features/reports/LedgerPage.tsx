@@ -36,9 +36,16 @@ export function LedgerPage() {
   const [draft, setDraft] = useState<FilterState>(EMPTY_FILTERS);
   const [applied, setApplied] = useState<FilterState>(EMPTY_FILTERS);
   const [offset, setOffset] = useState(0);
+  /**
+   * The ledger loads nothing until Search is pressed (client request, 14 Sep
+   * 2026). Unfiltered, it pages through every document and payment in the
+   * system, which is slow and is not what anyone opens the screen to read. The
+   * summary above it still loads straight away.
+   */
+  const [ledgerSearched, setLedgerSearched] = useState(false);
 
   const query = { ...toQuery(applied), direction, limit: PAGE, offset };
-  const ledger = useLedger(query);
+  const ledger = useLedger(query, ledgerSearched);
   const balances = useBalances({ ...toQuery(applied), direction, show: "all", limit: PAGE });
 
   const apply = () => {
@@ -46,12 +53,14 @@ export function LedgerPage() {
     // A cursor carried across a filter change seeks into a set that no longer
     // exists — §5j found the same thing on inward challans.
     setOffset(0);
+    setLedgerSearched(true);
   };
 
   const reset = () => {
     setDraft(EMPTY_FILTERS);
     setApplied(EMPTY_FILTERS);
     setOffset(0);
+    setLedgerSearched(false);
   };
 
   const partyLabel = direction === "out" ? "Supplier" : "Customer";
@@ -177,20 +186,29 @@ export function LedgerPage() {
       <section>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h2 className="heading text-sm">Ledger</h2>
-          <ExportButtons kind="ledger" withByParty query={{ ...toQuery(applied), direction }} />
+          {/* Hidden until a search, so a download is never of a set nobody asked for. */}
+          {ledgerSearched && (
+            <ExportButtons kind="ledger" withByParty query={{ ...toQuery(applied), direction }} />
+          )}
         </div>
-        {ledger.isError && (
+        {!ledgerSearched && (
+          <EmptyState
+            title="Search to see the ledger"
+            description="Choose the filters above and press Search. Nothing is loaded until then."
+          />
+        )}
+        {ledgerSearched && ledger.isError && (
           <Alert icon={AlertTriangle}>{describeLoadError(ledger.error, "the ledger")}</Alert>
         )}
-        {ledger.isPending && (
+        {ledgerSearched && ledger.isPending && (
           <div className="flex items-center gap-2 py-6 text-sm text-slate-500">
             <Loader2 aria-hidden className="size-4 animate-spin" /> Loading ledger
           </div>
         )}
-        {ledger.data && ledger.data.rows.length === 0 && (
+        {ledgerSearched && ledger.data && ledger.data.rows.length === 0 && (
           <EmptyState title="No entries" description="No documents match these filters." />
         )}
-        {ledger.data && ledger.data.rows.length > 0 && (
+        {ledgerSearched && ledger.data && ledger.data.rows.length > 0 && (
           <>
             <div className="overflow-x-auto rounded-xl ring-1 ring-slate-200">
               <table className="w-full min-w-[56rem] border-collapse text-sm">

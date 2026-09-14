@@ -60,6 +60,10 @@ const withReports = (
     [/\/companies/, EMPTY],
   ]);
 
+/** The ledger loads nothing until Search is pressed, so every ledger test starts there. */
+const search = async () =>
+  userEvent.click(await screen.findByRole("button", { name: "Search" }));
+
 const ledgerResponse = (rows: unknown[], overrides: Record<string, unknown> = {}) => ({
   rows,
   total: rows.length,
@@ -108,6 +112,7 @@ describe("the ledger and balances screen", () => {
       ]),
     );
     renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
+    await search();
 
     const table = await screen.findByRole("table", { name: "" }).catch(() => null);
     expect(table ?? (await screen.findAllByRole("table"))[0]).toBeTruthy();
@@ -131,6 +136,7 @@ describe("the ledger and balances screen", () => {
       ]),
     );
     renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
+    await search();
 
     // The row is a debit, so the credit cell is blank rather than showing 0.00.
     expect(await screen.findByText("2,500.00")).toBeInTheDocument();
@@ -164,6 +170,7 @@ describe("the ledger and balances screen", () => {
       }),
     );
     renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
+    await search();
 
     expect(await screen.findByText(/Total over every entry/)).toBeInTheDocument();
     // Indian digit grouping — 4,00,000.00, not 400,000.00. See `groupIndian`.
@@ -174,6 +181,7 @@ describe("the ledger and balances screen", () => {
   it("disables Previous on the first page and offers Next when there is more", async () => {
     withReports(ledgerResponse([ledgerRow()], { total: 120, nextCursor: "50" }));
     renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
+    await search();
 
     expect(await screen.findByRole("button", { name: "Previous" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
@@ -183,6 +191,7 @@ describe("the ledger and balances screen", () => {
     const user = userEvent.setup();
     withReports(ledgerResponse([ledgerRow({ siteGroupName: null })]));
     renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
+    await search();
 
     await screen.findByText("BB/154");
     await user.click(screen.getByRole("button", { name: "Sales" }));
@@ -193,6 +202,7 @@ describe("the ledger and balances screen", () => {
   it("renders an empty state rather than an empty grid", async () => {
     withReports(ledgerResponse([], { totalCredit: "0.00", totalDebit: "0.00", closingBalance: "0.00" }));
     renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
+    await search();
 
     expect(await screen.findByText("No entries")).toBeInTheDocument();
   });
@@ -205,6 +215,7 @@ describe("the ledger and balances screen", () => {
       [/\/companies/, EMPTY],
     ]);
     renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
+    await search();
 
     expect(await screen.findByText(/ledger could not be loaded/)).toBeInTheDocument();
     expect(screen.queryByText("No entries")).not.toBeInTheDocument();
@@ -220,6 +231,7 @@ describe("the ledger and balances screen", () => {
     const user = userEvent.setup();
     withReports(ledgerResponse([ledgerRow()]));
     renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
+    await search();
 
     await screen.findByText("BB/154");
     const before = vi.mocked(globalThis.fetch).mock.calls.length;
@@ -231,5 +243,41 @@ describe("the ledger and balances screen", () => {
     await waitFor(() =>
       expect(vi.mocked(globalThis.fetch).mock.calls.length).toBeGreaterThan(before),
     );
+  });
+
+  const ledgerRequests = () =>
+    vi
+      .mocked(globalThis.fetch)
+      .mock.calls.filter((call) =>
+        new URL(String(call[0]), "http://localhost").pathname.endsWith("/reports/ledger"),
+      ).length;
+
+  /** Client request, 14 Sep 2026: nothing is loaded into the ledger by default. */
+  it("loads no ledger until Search is pressed, while the summary loads at once", async () => {
+    withReports(ledgerResponse([ledgerRow()]), balancesResponse([balanceRow()]));
+    renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
+
+    expect(await screen.findAllByText("8,000.00")).not.toHaveLength(0);
+    expect(screen.getByText("Search to see the ledger")).toBeInTheDocument();
+    expect(screen.queryByText("BB/154")).not.toBeInTheDocument();
+    expect(ledgerRequests()).toBe(0);
+
+    await search();
+
+    expect(await screen.findByText("BB/154")).toBeInTheDocument();
+    expect(screen.queryByText("Search to see the ledger")).not.toBeInTheDocument();
+    expect(ledgerRequests()).toBe(1);
+  });
+
+  it("goes back to an empty ledger on Reset", async () => {
+    withReports(ledgerResponse([ledgerRow()]));
+    renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
+    await search();
+    await screen.findByText("BB/154");
+
+    await userEvent.click(screen.getByRole("button", { name: "Reset" }));
+
+    expect(await screen.findByText("Search to see the ledger")).toBeInTheDocument();
+    expect(screen.queryByText("BB/154")).not.toBeInTheDocument();
   });
 });

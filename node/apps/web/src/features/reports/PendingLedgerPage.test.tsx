@@ -79,6 +79,12 @@ const requested = (path: string) =>
     .mock.calls.map((call) => new URL(String(call[0]), "http://localhost"))
     .filter((url) => url.pathname.endsWith(path));
 
+/** The ledger loads nothing until its own Search is pressed. */
+const searchLedger = async () =>
+  userEvent.click(
+    within(await screen.findByRole("form", { name: "Ledger filters" })).getByRole("button", { name: "Search" }),
+  );
+
 describe("the pending ledger screen", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
@@ -128,6 +134,7 @@ describe("the pending ledger screen", () => {
       ]),
     );
     renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
+    await searchLedger();
 
     const ledger = await screen.findByRole("table", { name: "Pending invoices" });
     const rows = within(ledger).getAllByRole("row");
@@ -145,6 +152,7 @@ describe("the pending ledger screen", () => {
   it("says nothing is pending rather than showing an empty table", async () => {
     withReports(pendingResponse([], { totalAmount: "0.00", totalPending: "0.00" }));
     renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
+    await searchLedger();
 
     expect(await screen.findByText("Nothing pending")).toBeInTheDocument();
     expect(screen.queryByRole("table", { name: "Pending invoices" })).not.toBeInTheDocument();
@@ -154,9 +162,7 @@ describe("the pending ledger screen", () => {
     withReports(pendingResponse([pendingRow()]));
     renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
 
-    await screen.findByRole("table", { name: "Pending invoices" });
-
-    const ledgerFilters = screen.getByRole("form", { name: "Ledger filters" });
+    const ledgerFilters = await screen.findByRole("form", { name: "Ledger filters" });
     expect(screen.getByRole("form", { name: "Balance summary filters" })).toBeInTheDocument();
 
     await userEvent.type(within(ledgerFilters).getByLabelText("From"), "2026-04-01");
@@ -180,5 +186,40 @@ describe("the pending ledger screen", () => {
     const ledgerFrom = within(screen.getByRole("form", { name: "Ledger filters" })).getByLabelText("From");
     expect(summaryFrom).not.toBe(ledgerFrom);
     expect(summaryFrom.id).not.toBe(ledgerFrom.id);
+  });
+
+  /** Client request, 14 Sep 2026: nothing is loaded into the ledger by default. */
+  it("loads no pending invoices until the ledger's Search is pressed", async () => {
+    withReports(pendingResponse([pendingRow()]));
+    renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
+
+    await screen.findByRole("table", { name: "Balance summary" });
+    expect(screen.getByText("Search to see pending invoices")).toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "Pending invoices" })).not.toBeInTheDocument();
+    expect(requested("/reports/pending-ledger")).toHaveLength(0);
+
+    // The summary's own Search does not load the ledger either.
+    await userEvent.click(
+      within(screen.getByRole("form", { name: "Balance summary filters" })).getByRole("button", { name: "Search" }),
+    );
+    expect(requested("/reports/pending-ledger")).toHaveLength(0);
+
+    await searchLedger();
+    expect(await screen.findByRole("table", { name: "Pending invoices" })).toBeInTheDocument();
+    expect(requested("/reports/pending-ledger")).toHaveLength(1);
+  });
+
+  it("goes back to an empty ledger when the ledger's Reset is pressed", async () => {
+    withReports(pendingResponse([pendingRow()]));
+    renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
+    await searchLedger();
+    await screen.findByRole("table", { name: "Pending invoices" });
+
+    await userEvent.click(
+      within(screen.getByRole("form", { name: "Ledger filters" })).getByRole("button", { name: "Reset" }),
+    );
+
+    expect(await screen.findByText("Search to see pending invoices")).toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "Pending invoices" })).not.toBeInTheDocument();
   });
 });

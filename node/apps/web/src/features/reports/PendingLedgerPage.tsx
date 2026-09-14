@@ -95,12 +95,18 @@ export function PendingLedgerPage() {
     limit: PAGE,
     offset: summaryOffset,
   });
-  const ledger = usePendingLedger({
-    ...toQuery(ledgerApplied),
-    direction,
-    limit: PAGE,
-    offset: ledgerOffset,
-  });
+  // The ledger loads nothing until its Search is pressed (client request, 14 Sep
+  // 2026). Its Reset goes back to that state. The summary still loads at once.
+  const [ledgerSearched, setLedgerSearched] = useState(false);
+  const ledger = usePendingLedger(
+    {
+      ...toQuery(ledgerApplied),
+      direction,
+      limit: PAGE,
+      offset: ledgerOffset,
+    },
+    ledgerSearched,
+  );
 
   const partyLabel = direction === "out" ? "Supplier" : "Customer";
 
@@ -232,30 +238,39 @@ export function PendingLedgerPage() {
           onApply={() => {
             setLedgerApplied(ledgerDraft);
             setLedgerOffset(0);
+            setLedgerSearched(true);
           }}
           onReset={() => {
             setLedgerDraft(EMPTY_FILTERS);
             setLedgerApplied(EMPTY_FILTERS);
             setLedgerOffset(0);
+            setLedgerSearched(false);
           }}
           partyLabel={partyLabel}
         />
 
-        {ledger.isError && (
+        {!ledgerSearched && (
+          <EmptyState
+            title="Search to see pending invoices"
+            description="Choose the ledger filters above and press Search. Nothing is loaded until then."
+          />
+        )}
+
+        {ledgerSearched && ledger.isError && (
           <Alert icon={AlertTriangle}>{describeLoadError(ledger.error, "the ledger")}</Alert>
         )}
-        {ledger.isPending && (
+        {ledgerSearched && ledger.isPending && (
           <div className="flex items-center gap-2 py-6 text-sm text-slate-500">
             <Loader2 aria-hidden className="size-4 animate-spin" /> Loading ledger
           </div>
         )}
-        {ledger.data && ledger.data.rows.length === 0 && (
+        {ledgerSearched && ledger.data && ledger.data.rows.length === 0 && (
           <EmptyState
             title="Nothing pending"
             description="Every invoice matching these filters has been paid."
           />
         )}
-        {ledger.data && ledger.data.rows.length > 0 && (
+        {ledgerSearched && ledger.data && ledger.data.rows.length > 0 && (
           <>
             <div className="overflow-x-auto rounded-xl ring-1 ring-slate-200">
               <table aria-label="Pending invoices" className="w-full border-collapse text-sm">
