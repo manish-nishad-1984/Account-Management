@@ -1,9 +1,9 @@
 import { AlertTriangle, Clock, Loader2 } from "lucide-react";
-import type { ItemPriceHistoryRow } from "@accountmanagement/contracts";
+import type { ItemPriceChangeRow, ItemPriceHistoryRow } from "@accountmanagement/contracts";
 import { Alert, Badge, EmptyState, Modal } from "../../components/ui";
-import { formatDate, formatMoney, formatPercent, formatQuantity } from "../../lib/format";
+import { formatDate, formatDateTime, formatMoney, formatPercent, formatQuantity } from "../../lib/format";
 import { describeLoadError } from "../../lib/load-error";
-import { useItemPriceHistory } from "./api";
+import { useItemPriceChanges, useItemPriceHistory } from "./api";
 
 /**
  * The clock icon's panel — what this item has actually cost.
@@ -53,6 +53,106 @@ function InvoiceCell({ row }: { row: ItemPriceHistoryRow }) {
   );
 }
 
+const CHANGE_LABEL: Record<ItemPriceChangeRow["source"], string> = {
+  baseline: "On record",
+  created: "Item created",
+  edited: "Edited",
+  imported: "Imported",
+};
+
+/**
+ * THE ITEM MASTER'S OWN PRICE OVER TIME (client request, 14 Sep 2026).
+ *
+ * The invoice table above is what was paid. This is what the Item Master said,
+ * which used to be overwritten on every edit with nothing kept.
+ */
+function MasterPriceChanges({ itemId }: { itemId: string | null }) {
+  const query = useItemPriceChanges(itemId);
+  const changes = query.data;
+
+  return (
+    <section className="mt-6" aria-labelledby="item-price-changes-heading">
+      <h3 id="item-price-changes-heading" className="heading mb-2 text-sm">
+        Item master price changes
+      </h3>
+
+      {query.isError && (
+        <Alert icon={AlertTriangle}>{describeLoadError(query.error, "the price changes")}</Alert>
+      )}
+      {query.isPending && (
+        <div className="flex items-center gap-2 py-4 text-sm text-slate-500">
+          <Loader2 aria-hidden className="size-4 animate-spin" /> Loading price changes
+        </div>
+      )}
+      {changes && changes.rows.length === 0 && (
+        <p className="text-sm text-slate-500">No price changes recorded for this item yet.</p>
+      )}
+      {changes && changes.rows.length > 0 && (
+        <>
+          <div className="max-h-64 overflow-auto rounded-lg ring-1 ring-slate-200">
+            <table
+              aria-label="Item master price changes"
+              className="w-full min-w-[40rem] border-collapse text-sm"
+            >
+              <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-500">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium">When</th>
+                  <th className="px-3 py-2 text-left font-medium">Change</th>
+                  <th className="px-3 py-2 text-right font-medium">Old price</th>
+                  <th className="px-3 py-2 text-right font-medium">New price</th>
+                  <th className="px-3 py-2 text-right font-medium">GST</th>
+                  <th className="px-3 py-2 text-left font-medium">By</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {changes.rows.map((row) => (
+                  <tr key={row.id} className="hover:bg-slate-50/70">
+                    <td className="tabular px-3 py-2 text-slate-600">
+                      {formatDateTime(row.changedAt)}
+                    </td>
+                    <td className="px-3 py-2 text-slate-600">
+                      <Badge tone={row.source === "edited" ? "info" : "neutral"}>
+                        {CHANGE_LABEL[row.source]}
+                      </Badge>
+                    </td>
+                    <td className="tabular px-3 py-2 text-right text-slate-500">
+                      {row.oldPrice === null ? <Absent /> : formatMoney(row.oldPrice)}
+                    </td>
+                    <td className="tabular px-3 py-2 text-right font-medium text-slate-900">
+                      {formatMoney(row.newPrice)}
+                    </td>
+                    <td className="tabular px-3 py-2 text-right text-slate-600">
+                      {row.oldGstPercent !== row.newGstPercent && row.oldPrice !== null ? (
+                        <>
+                          {row.oldGstPercent ? formatPercent(row.oldGstPercent) : "none"} →{" "}
+                          {row.newGstPercent ? formatPercent(row.newGstPercent) : "none"}
+                        </>
+                      ) : row.newGstPercent ? (
+                        formatPercent(row.newGstPercent)
+                      ) : (
+                        <Absent />
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-slate-600">
+                      {row.changedByName ?? <Absent />}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            {changes.total > changes.rows.length
+              ? `Showing the ${changes.rows.length} most recent of ${changes.total} changes. `
+              : ""}
+            Kept from 14 Sep 2026. &quot;On record&quot; is the price the item already had then.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
 export function ItemHistoryDialog({
   open,
   itemId,
@@ -75,7 +175,7 @@ export function ItemHistoryDialog({
       open={open}
       onClose={onClose}
       title={itemName ? `Price history — ${itemName}` : "Price history"}
-      description="What this item has cost on purchase invoices, newest first"
+      description="What this item has cost on purchase invoices, and every change to its master price"
       size="xl"
     >
       {pricePerUnit !== null && (
@@ -194,6 +294,8 @@ export function ItemHistoryDialog({
           </p>
         </>
       )}
+
+      <MasterPriceChanges itemId={open ? itemId : null} />
     </Modal>
   );
 }

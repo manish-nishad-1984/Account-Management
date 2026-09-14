@@ -19,6 +19,7 @@ import {
 import { applyServerErrors, unshownValidationMessage } from "../../lib/crud";
 import { text } from "../../lib/form-values";
 import { formatMoney } from "../../lib/format";
+import { useLatestPriceFill } from "../invoices/useLatestPriceFill";
 import { InvoiceLineGrid, previewNumber } from "../invoices/InvoiceLineGrid";
 import { useAllUnits } from "../items/api";
 import { useItemOptions } from "../purchase-requests/api";
@@ -151,9 +152,10 @@ export function SalesInvoiceFormDialog({
     reset,
     setError,
     setValue,
+    getValues,
     watch,
     control,
-    formState: { errors },
+    formState: { errors, isSubmitted },
   } = useForm<FormValues, unknown, Submitted>({
     resolver: zodResolver(createSalesInvoiceSchema),
     defaultValues: EMPTY,
@@ -226,6 +228,19 @@ export function SalesInvoiceFormDialog({
   const itemTotal = itemOptions.data?.total ?? 0;
   const itemsTruncated = itemTotal > items.length;
   const itemChoices = items.map((item) => ({ value: item.id, label: item.name }));
+
+  // Choosing an item fills its price, unit and GST from the latest sales invoice
+  // for it, or from the item master (client request, 14 Sep 2026).
+  const latestPrice = useLatestPriceFill({
+    direction: "in",
+    currentItemId: (index) => getValues(`items.${index}.itemId`),
+    fill: (index, price) => {
+      const options = { shouldDirty: true, shouldValidate: isSubmitted };
+      setValue(`items.${index}.unitPrice`, price.unitPrice, options);
+      setValue(`items.${index}.unitId`, price.unitId, options);
+      setValue(`items.${index}.gstPercent`, price.gstPercent ?? "", options);
+    },
+  });
 
   const chosenCompanyId = watch("companyId");
   // Watched, so the address picker follows the chosen site.
@@ -328,7 +343,11 @@ export function SalesInvoiceFormDialog({
               lineError={(index, field) => errors.items?.[index]?.[field]?.message}
               onAdd={() => append(EMPTY_LINE)}
               onRemove={remove}
-              onItemChosen={(index) => setValue(`items.${index}.itemName`, "")}
+              onItemChosen={(index, itemId) => {
+                setValue(`items.${index}.itemName`, "");
+                latestPrice.onItemChosen(index, itemId);
+              }}
+              priceHint={(index) => latestPrice.hintFor(lines?.[index]?.itemId)}
               footerNote={
                 itemsTruncated && (
                   <Alert tone="info">

@@ -187,3 +187,70 @@ export type ItemPriceHistoryQuery = z.infer<typeof itemPriceHistoryQuerySchema>;
  * this filter is what keeps them out of a price history.
  */
 export const PAYOUT_INVOICE_NO = "PayOut";
+
+/**
+ * THE LATEST PRICE, for filling an invoice line the moment an item is chosen.
+ *
+ * Added 14 Sep 2026 at the client's request. The price comes from the most
+ * recent invoice line for the item in the same direction: purchase invoices for
+ * a purchase, sales invoices for a sale. Returns and credit notes are skipped,
+ * because a returned amount is not a price anyone paid or charged. An item never
+ * invoiced in that direction falls back to its Item Master price.
+ *
+ * Unit and GST come from the same source row, so a line is filled from one
+ * document rather than a price from one place and a rate from another.
+ */
+export const ITEM_LATEST_PRICE_SOURCES = ["purchase-invoice", "sales-invoice", "item-master"] as const;
+export type ItemLatestPriceSource = (typeof ITEM_LATEST_PRICE_SOURCES)[number];
+
+export const itemLatestPriceQuerySchema = z.object({
+  direction: z.enum(["out", "in"]).default("out"),
+});
+export type ItemLatestPriceQuery = z.infer<typeof itemLatestPriceQuerySchema>;
+
+export const itemLatestPriceSchema = z.object({
+  itemId: z.string(),
+  source: z.enum(ITEM_LATEST_PRICE_SOURCES),
+  /** Per unit, before discount and GST — what the invoice line's Price box holds. */
+  unitPrice: z.string(),
+  unitId: z.number().int(),
+  gstPercent: z.string().nullable(),
+  /** The invoice it came from. All null when the source is the item master. */
+  documentDate: z.string().nullable(),
+  displayNo: z.string().nullable(),
+  partyName: z.string().nullable(),
+});
+export type ItemLatestPrice = z.infer<typeof itemLatestPriceSchema>;
+
+/**
+ * EVERY CHANGE TO AN ITEM'S MASTER PRICE, kept from 14 Sep 2026.
+ *
+ * The purchase-invoice history above records what was paid. It cannot record
+ * what the Item Master said: editing an item overwrote the old price, and
+ * nothing kept it. These rows do. One is written whenever an item is created,
+ * imported, or saved with a different price or GST rate.
+ *
+ * `baseline` is the price each existing item already had when tracking began.
+ * It is not a claim about when that price was set, which nothing recorded.
+ */
+export const ITEM_PRICE_CHANGE_SOURCES = ["baseline", "created", "edited", "imported"] as const;
+export type ItemPriceChangeSource = (typeof ITEM_PRICE_CHANGE_SOURCES)[number];
+
+export const itemPriceChangeRowSchema = z.object({
+  id: z.string(),
+  source: z.enum(ITEM_PRICE_CHANGE_SOURCES),
+  /** Null on the first row for an item. */
+  oldPrice: z.string().nullable(),
+  newPrice: z.string(),
+  oldGstPercent: z.string().nullable(),
+  newGstPercent: z.string().nullable(),
+  changedByName: z.string().nullable(),
+  changedAt: z.string(),
+});
+export type ItemPriceChangeRow = z.infer<typeof itemPriceChangeRowSchema>;
+
+export const itemPriceChangesSchema = z.object({
+  rows: z.array(itemPriceChangeRowSchema),
+  total: z.number().int().nonnegative(),
+});
+export type ItemPriceChanges = z.infer<typeof itemPriceChangesSchema>;

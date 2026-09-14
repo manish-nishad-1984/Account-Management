@@ -6,6 +6,7 @@ import {
   optionalMoney,
   optionalPercent,
   money as moneySchema,
+  normalizeItemName,
   requiredText,
   type ItemSheetColumn,
   type ItemSheetError,
@@ -155,7 +156,13 @@ export function parseRows(sheet: SheetData, index: Map<ItemSheetKey, number>): P
       return undefined;
     };
 
-    const name = check("name", requiredText("Item name", 200), at(row.cells, "name"));
+    // Normalised exactly as the item form normalises it, so a sheet cannot add
+    // "OPC  Cement" beside "OPC Cement" either.
+    const name = check(
+      "name",
+      requiredText("Item name", 200).transform(normalizeItemName),
+      at(row.cells, "name"),
+    );
 
     const unitName = at(row.cells, "unitName");
     if (unitName === "") {

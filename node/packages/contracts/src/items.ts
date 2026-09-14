@@ -29,6 +29,17 @@ export const itemDetailSchema = itemRowSchema.omit({ capabilities: true, unitNam
 export type ItemDetail = z.infer<typeof itemDetailSchema>;
 
 /**
+ * An item name as it is stored and compared: trimmed, with any run of spaces
+ * collapsed to one.
+ *
+ * The unique index is on `lower(name)`, so "OPC Cement" and "opc cement" were
+ * already refused. "OPC  Cement", with two spaces, was not — it looks identical
+ * in every list and dropdown, and it is the duplicate people actually create.
+ * Normalising on the way in closes that without a migration.
+ */
+export const normalizeItemName = (name: string): string => name.trim().replace(/\s+/g, " ");
+
+/**
  * GST is STORED, not computed.
  *
  * `gstAmount` is derivable from `pricePerUnit` and `gstPercent`, which means it
@@ -43,7 +54,7 @@ export type ItemDetail = z.infer<typeof itemDetailSchema>;
  */
 export const createItemSchema = z
   .object({
-    name: requiredText("Item name", 200),
+    name: requiredText("Item name", 200).transform(normalizeItemName),
     unitId: z.coerce.number().int().positive("Choose a unit"),
     pricePerUnit: money("Price per unit"),
     isWithGst: z.boolean().default(false),
@@ -102,3 +113,33 @@ export const updateUnitSchema = createUnitSchema.partial();
 export type UpdateUnit = z.infer<typeof updateUnitSchema>;
 
 export const UNIT_SORT_FIELDS = ["name", "createdAt"] as const;
+
+/**
+ * THE NAME CHECK, run as the name is typed in the item form.
+ *
+ * Added 14 Sep 2026 at the client's request: show items with the same or a
+ * similar name while typing, and refuse the same name outright.
+ *
+ * `exact` is an item whose name matches after `normalizeItemName` and ignoring
+ * case — the one that blocks saving. `similar` holds items containing every
+ * word typed, in any order, so "cement opc" finds "OPC Cement 53 Grade".
+ * `excludeId` is the item being edited, which must not match itself.
+ */
+export const itemNameCheckQuerySchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  excludeId: z.string().uuid().optional(),
+});
+export type ItemNameCheckQuery = z.infer<typeof itemNameCheckQuerySchema>;
+
+export const ITEM_NAME_CHECK_LIMIT = 8;
+
+const itemNameMatchSchema = z.object({ id: z.string(), name: z.string() });
+
+export const itemNameCheckSchema = z.object({
+  exact: itemNameMatchSchema.nullable(),
+  similar: z.array(itemNameMatchSchema),
+});
+export type ItemNameCheck = z.infer<typeof itemNameCheckSchema>;
+
+export const duplicateItemNameMessage = (existing: string) =>
+  `An item named "${existing}" already exists`;

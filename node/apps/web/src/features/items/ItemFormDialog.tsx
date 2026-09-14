@@ -2,7 +2,12 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
-import { createItemSchema, type ItemDetail } from "@accountmanagement/contracts";
+import {
+  createItemSchema,
+  duplicateItemNameMessage,
+  normalizeItemName,
+  type ItemDetail,
+} from "@accountmanagement/contracts";
 import {
   Alert,
   CheckboxField,
@@ -13,7 +18,8 @@ import {
 } from "../../components/ui";
 import { applyServerErrors, unshownValidationMessage } from "../../lib/crud";
 import { text } from "../../lib/form-values";
-import { useAllUnits, useCreateItem, useItem, useUpdateItem } from "./api";
+import { useDebouncedValue } from "../../lib/use-debounced-value";
+import { useAllUnits, useCreateItem, useItem, useItemNameCheck, useUpdateItem } from "./api";
 
 /**
  * The item form.
@@ -67,6 +73,26 @@ export function ItemFormDialog({
 
   const isWithGst = watch("isWithGst");
 
+  /**
+   * THE NAME CHECK WHILE TYPING (client request, 14 Sep 2026).
+   *
+   * Asked once typing pauses, and its answer is used only while it still
+   * describes what is in the box. Otherwise "Cement" matching an existing item
+   * would keep showing "already exists" for a moment after the person typed on
+   * to "Cement 53 Grade".
+   *
+   * The server refuses the same name whatever this shows, so a person who saves
+   * faster than the check answers still gets the message, from the save.
+   */
+  const typedName = String(watch("name") ?? "");
+  const settledName = useDebouncedValue(typedName, 300);
+  const nameCheck = useItemNameCheck(open ? settledName : "", itemId);
+  const checkIsCurrent =
+    normalizeItemName(settledName).toLowerCase() === normalizeItemName(typedName).toLowerCase();
+  const sameName = checkIsCurrent ? (nameCheck.data?.exact ?? null) : null;
+  const similarNames = checkIsCurrent ? (nameCheck.data?.similar ?? []) : [];
+  const checking = typedName.trim().length >= 2 && (!checkIsCurrent || nameCheck.isFetching);
+
   useEffect(() => {
     if (!open) return;
     setFormError(null);
@@ -81,6 +107,10 @@ export function ItemFormDialog({
 
   const onSubmit = handleSubmit(async (values) => {
     setFormError(null);
+    if (sameName) {
+      setError("name", { message: duplicateItemNameMessage(sameName.name) });
+      return;
+    }
     try {
       if (isEdit) {
         await update.mutateAsync({ id: itemId, body: values });
@@ -114,13 +144,40 @@ export function ItemFormDialog({
       ) : (
         <>
           <FormSection title="Item">
-            <TextField
-              label="Item name"
-              required
-              autoFocus
-              error={errors.name?.message}
-              {...register("name")}
-            />
+            <div>
+              <TextField
+                label="Item name"
+                required
+                autoFocus
+                autoComplete="off"
+                error={
+                  sameName ? duplicateItemNameMessage(sameName.name) : errors.name?.message
+                }
+                {...register("name")}
+              />
+              {checking && !sameName && (
+                <p className="mt-1 text-[11px] leading-4 text-slate-400" aria-live="polite">
+                  Checking existing items…
+                </p>
+              )}
+              {!checking && similarNames.length > 0 && (
+                <div
+                  className="mt-1.5 rounded-md bg-amber-50 px-2.5 py-2 ring-1 ring-inset ring-amber-200"
+                  aria-live="polite"
+                >
+                  <p className="text-[11px] font-medium leading-4 text-amber-800">
+                    Items with a similar name already exist
+                  </p>
+                  <ul aria-label="Items with a similar name" className="mt-1 space-y-0.5">
+                    {similarNames.map((match) => (
+                      <li key={match.id} className="truncate text-xs text-amber-900">
+                        {match.name}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
             <SelectField
               label="Unit"
               required

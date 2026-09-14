@@ -227,3 +227,32 @@ export const items = pgTable(
     index("items_unit_id_idx").on(table.unitId),
   ],
 );
+
+/**
+ * Every change to an item's master price or GST rate. New on 14 Sep 2026, with
+ * no source equivalent: `ItemMaster` kept one price and overwrote it.
+ *
+ * Written by the repository in the same transaction as the item change it
+ * records, so a price cannot change without a row here. Append-only: nothing
+ * updates or deletes these rows, and they stay when an item is soft-deleted.
+ *
+ * `changed_by` is a plain uuid, not a foreign key, like every `created_by` in
+ * this schema. See `contracts/item-price-history.ts` for `source`.
+ */
+export const itemPriceChanges = pgTable(
+  "item_price_changes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => items.id),
+    source: text("source").notNull(),
+    oldPrice: numeric("old_price", { precision: 18, scale: 2 }),
+    newPrice: numeric("new_price", { precision: 18, scale: 2 }).notNull(),
+    oldGstPercent: numeric("old_gst_percent", { precision: 5, scale: 2 }),
+    newGstPercent: numeric("new_gst_percent", { precision: 5, scale: 2 }),
+    changedBy: uuid("changed_by"),
+    changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("item_price_changes_item_changed_idx").on(table.itemId, table.changedAt)],
+);

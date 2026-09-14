@@ -56,9 +56,12 @@ const line = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-const withHistory = (history: unknown) =>
+const NO_CHANGES = { rows: [], total: 0 };
+
+const withHistory = (history: unknown, changes: unknown = NO_CHANGES) =>
   routeFetch([
     [/\/items\/[^/]+\/price-history$/, history],
+    [/\/items\/[^/]+\/price-changes$/, changes],
     [/\/units/, UNITS],
     [/\/items$/, ITEMS],
   ]);
@@ -182,6 +185,7 @@ describe("the item price history panel", () => {
   it("reports a failed load rather than an empty history", async () => {
     routeFetch([
       [/\/items\/[^/]+\/price-history$/, new Response("nope", { status: 500 })],
+      [/\/items\/[^/]+\/price-changes$/, NO_CHANGES],
       [/\/units/, UNITS],
       [/\/items$/, ITEMS],
     ]);
@@ -198,6 +202,50 @@ describe("the item price history panel", () => {
    * `item.view`, the right that drew the screen at all — so it is present for a
    * reader who can do nothing else.
    */
+  /** Client request, 14 Sep 2026: the item master's own price is kept over time too. */
+  it("lists every change to the item master price, with the old and new price and who made it", async () => {
+    withHistory(
+      { rows: [line()], total: 1 },
+      {
+        rows: [
+          {
+            id: "c2",
+            source: "edited",
+            oldPrice: "395.00",
+            newPrice: "425.50",
+            oldGstPercent: "18.00",
+            newGstPercent: "28.00",
+            changedByName: "Chintan Kalathiya",
+            changedAt: "2026-09-14T10:30:00.000Z",
+          },
+          {
+            id: "c1",
+            source: "baseline",
+            oldPrice: null,
+            newPrice: "395.00",
+            oldGstPercent: null,
+            newGstPercent: "18.00",
+            changedByName: null,
+            changedAt: "2026-09-14T09:00:00.000Z",
+          },
+        ],
+        total: 2,
+      },
+    );
+    renderWithAuth(<ItemsPage />, { permissions: ["item.view"] });
+    await openHistory();
+
+    const changes = await screen.findByRole("table", { name: "Item master price changes" });
+    const rows = within(changes).getAllByRole("row");
+    expect(rows).toHaveLength(3);
+    expect(within(rows[1]!).getByText("Edited")).toBeInTheDocument();
+    expect(within(rows[1]!).getByText("425.50")).toBeInTheDocument();
+    expect(within(rows[1]!).getByText("395.00")).toBeInTheDocument();
+    expect(within(rows[1]!).getByText(/18% → 28%/)).toBeInTheDocument();
+    expect(within(rows[1]!).getByText("Chintan Kalathiya")).toBeInTheDocument();
+    expect(within(rows[2]!).getByText("On record")).toBeInTheDocument();
+  });
+
   it("offers history to a read-only viewer", async () => {
     withHistory({ rows: [line()], total: 1 });
     renderWithAuth(<ItemsPage />, { permissions: ["item.view"] });

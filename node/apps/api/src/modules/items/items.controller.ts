@@ -22,6 +22,8 @@ import {
   createItemSchema,
   createUnitSchema,
   hasPermission,
+  itemLatestPriceQuerySchema,
+  itemNameCheckQuerySchema,
   itemPriceHistoryQuerySchema,
   itemSheetFileName,
   listQuerySchema,
@@ -33,6 +35,11 @@ import {
   type CreateItem,
   type CreateUnit,
   type ItemDetail,
+  type ItemLatestPrice,
+  type ItemLatestPriceQuery,
+  type ItemNameCheck,
+  type ItemNameCheckQuery,
+  type ItemPriceChanges,
   type ItemPriceHistory,
   type ItemPriceHistoryQuery,
   type ItemRow,
@@ -193,10 +200,49 @@ export class ItemsController {
     }
   }
 
+  /**
+   * The item form's live name check: the same name, and similar ones, as the
+   * name is typed. `item.view`, like the list it is a narrower search of.
+   * Declared before `:id`, for the reason `export` is.
+   */
+  @Get("name-check")
+  @Permissions("item.view")
+  nameCheck(
+    @Query(new ZodValidationPipe(itemNameCheckQuerySchema)) query: ItemNameCheckQuery,
+  ): Promise<ItemNameCheck> {
+    return this.items.nameCheck(query.name, query.excludeId ?? null);
+  }
+
   @Get(":id")
   @Permissions("item.view")
   findOne(@Param("id", ParseUUIDPipe) id: string): Promise<ItemDetail> {
     return this.items.findById(id);
+  }
+
+  /**
+   * The price an invoice line is filled with when this item is chosen.
+   *
+   * `item.view`, the right the invoice forms already need to list items at all.
+   * It reveals one price for one item, which is less than the history panel
+   * beside it shows under the same right.
+   */
+  @Get(":id/latest-price")
+  @Permissions("item.view")
+  latestPrice(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Query(new ZodValidationPipe(itemLatestPriceQuerySchema)) query: ItemLatestPriceQuery,
+  ): Promise<ItemLatestPrice> {
+    return this.history.latest(id, query.direction);
+  }
+
+  /** Every recorded change to the item master's price, newest first. */
+  @Get(":id/price-changes")
+  @Permissions("item.view")
+  priceChanges(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Query(new ZodValidationPipe(itemPriceHistoryQuerySchema)) query: ItemPriceHistoryQuery,
+  ): Promise<ItemPriceChanges> {
+    return this.history.changes(id, query.limit);
   }
 
   /**

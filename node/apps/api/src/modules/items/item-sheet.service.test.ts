@@ -187,6 +187,38 @@ describe("ItemSheetService (real PostgreSQL)", () => {
   });
 
   describe("names that already exist", () => {
+    /** Client request, 14 Sep 2026: the same name must not be allowed, spacing included. */
+    it("refuses a row that differs from a live item only in spacing", async () => {
+      const bag = await unitId(h.db, "Bag");
+      await h.items.create(
+        createItemSchema.parse({ name: "OPC Cement", unitId: bag, pricePerUnit: "1.00" }),
+        ACTOR,
+      );
+
+      const bytes = await ourSheet([["OPC   Cement ", "Bag", "999.00", "", "", ""]]);
+      const error = (await h.sheets
+        .import(bytes, ACTOR)
+        .catch((e: unknown) => e)) as ItemSheetRejected;
+
+      expect(error.result.errors[0]!.message).toMatch(/"OPC Cement" already exists/);
+    });
+
+    it("starts the price history of every item it imports", async () => {
+      const bytes = await ourSheet([
+        ["Cement", "Bag", "395.00", "", "", ""],
+        ["River Sand", "Ton", "1800.00", "5", "", ""],
+      ]);
+      await h.sheets.import(bytes, ACTOR);
+
+      const rows = await h.db
+        .select({ source: schema.itemPriceChanges.source, newPrice: schema.itemPriceChanges.newPrice })
+        .from(schema.itemPriceChanges);
+      expect(rows.map((row) => [row.source, row.newPrice]).sort()).toEqual([
+        ["imported", "1800.00"],
+        ["imported", "395.00"],
+      ]);
+    });
+
     it("refuses a row matching a live item, and says where to change it", async () => {
       const bag = await unitId(h.db, "Bag");
       await h.items.create(

@@ -111,6 +111,7 @@ export function InvoiceLineGrid({
   onAdd,
   onRemove,
   onItemChosen,
+  priceHint,
   footerNote,
 }: {
   /** `useFieldArray`'s fields — only the key is used here. */
@@ -134,8 +135,13 @@ export function InvoiceLineGrid({
   lineError: (index: number, field: InvoiceLineField) => string | undefined;
   onAdd: () => void;
   onRemove: (index: number) => void;
-  /** Clear that line's free-text name — the caller owns `setValue`. */
-  onItemChosen?: (index: number) => void;
+  /**
+   * An item was picked on that line. The caller clears the free-text name and
+   * fills the latest price — it owns `setValue`.
+   */
+  onItemChosen?: (index: number, itemId: string) => void;
+  /** A note under the line's Price box: where a filled-in price came from. */
+  priceHint?: (index: number) => ReactNode;
   footerNote?: ReactNode;
 }) {
   return (
@@ -175,7 +181,7 @@ export function InvoiceLineGrid({
                       // this a name typed before an item was picked would be
                       // submitted beside it and contradict the item the line
                       // actually references.
-                      if (event.target.value) onItemChosen?.(index);
+                      if (event.target.value) onItemChosen?.(index, event.target.value);
                     }}
                   />
                   {/*
@@ -230,6 +236,7 @@ export function InvoiceLineGrid({
                     error={lineError(index, "unitPrice")}
                     {...register(`items.${index}.unitPrice`)}
                   />
+                  {priceHint?.(index)}
                 </td>
                 <td className="py-2 pr-2">
                   <TextField

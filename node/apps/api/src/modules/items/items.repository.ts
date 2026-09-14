@@ -1,14 +1,19 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { and, asc, count, eq, ilike, inArray, or, sql } from "drizzle-orm";
-import type {
-  CreateItem,
-  ItemDetail,
-  ListQuery,
-  SortDirection,
-  UpdateItem,
+import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { and, asc, count, eq, ilike, inArray, ne, or, sql, type SQL } from "drizzle-orm";
+import {
+  ITEM_NAME_CHECK_LIMIT,
+  duplicateItemNameMessage,
+  normalizeItemName,
+  type CreateItem,
+  type ItemDetail,
+  type ItemNameCheck,
+  type ItemPriceChangeSource,
+  type ListQuery,
+  type SortDirection,
+  type UpdateItem,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
-import { items, units } from "../../db/schema";
+import { itemPriceChanges, items, units } from "../../db/schema";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
@@ -49,6 +54,26 @@ const DETAIL_COLUMNS = {
   hsnCode: items.hsnCode,
   isApproved: items.isApproved,
 } as const;
+
+/**
+ * An item's name as `normalizeItemName` would write it, lower-cased, in SQL.
+ *
+ * The pattern goes in as a PARAMETER. Written inline, the backslash has to
+ * survive a JavaScript template literal and then SQL string rules, and a lost
+ * backslash turns it into the letter s — which matches every name containing
+ * one.
+ */
+const WHITESPACE_RUN = "\\s+";
+const NORMALIZED_NAME = sql`lower(regexp_replace(btrim(${items.name}), ${WHITESPACE_RUN}, ' ', 'g'))`;
+
+/** A typed fragment for LIKE, with its own wildcards made literal. */
+const likeFragment = (value: string) => `%${value.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+
+/** The two columns a price history row records, either side of a save. */
+interface PriceState {
+  pricePerUnit: string;
+  gstPercent: string | null;
+}
 
 @Injectable()
 export class ItemsRepository extends BaseRepository {
@@ -205,28 +230,152 @@ export class ItemsRepository extends BaseRepository {
    * in the middle; the constraint has no gap.
    */
   async create(input: CreateItem, actorId: string): Promise<ItemDetail> {
-    const [row] = await writing(() =>
-      this.db
-        .insert(items)
-        .values({ ...input, ...createdBy(actorId) })
-        .returning(DETAIL_COLUMNS),
+    const name = normalizeItemName(input.name);
+    await this.refuseDuplicateName(name, null);
+
+    return writing(() =>
+      this.db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(items)
+          .values({ ...input, name, ...createdBy(actorId) })
+          .returning(DETAIL_COLUMNS);
+
+        await this.recordPriceChange(tx as unknown as Database, row!.id, "created", null, row!, actorId);
+        return row!;
+      }),
     );
-    return row!;
   }
 
+  /**
+   * A save that changes the price or the GST rate writes a history row, in the
+   * same transaction. The current row is read `FOR UPDATE` first, so two people
+   * saving at once each record the price they actually replaced.
+   */
   async update(id: string, input: UpdateItem, actorId: string): Promise<ItemDetail> {
-    const [row] = await writing(() =>
-      this.db
-        .update(items)
-        .set({ ...input, ...updatedBy(actorId) })
-        .where(and(eq(items.id, id), eq(items.isDeleted, false)))
-        .returning(DETAIL_COLUMNS),
-    );
-
-    if (!row) {
-      throw new NotFoundException("Item not found");
+    const values =
+      input.name === undefined ? input : { ...input, name: normalizeItemName(input.name) };
+    if (values.name !== undefined) {
+      await this.refuseDuplicateName(values.name, id);
     }
-    return row;
+
+    return writing(() =>
+      this.db.transaction(async (tx) => {
+        const [before] = await tx
+          .select({ pricePerUnit: items.pricePerUnit, gstPercent: items.gstPercent })
+          .from(items)
+          .where(and(eq(items.id, id), eq(items.isDeleted, false)))
+          .for("update");
+
+        if (!before) {
+          throw new NotFoundException("Item not found");
+        }
+
+        const [row] = await tx
+          .update(items)
+          .set({ ...values, ...updatedBy(actorId) })
+          .where(eq(items.id, id))
+          .returning(DETAIL_COLUMNS);
+
+        await this.recordPriceChange(tx as unknown as Database, id, "edited", before, row!, actorId);
+        return row!;
+      }),
+    );
+  }
+
+  /**
+   * THE DUPLICATE CHECK, ahead of the unique index.
+   *
+   * The index on `lower(name)` stays the guarantee under concurrency. This check
+   * exists for what the index cannot see — two names that differ only in
+   * spacing — and to name the item that is already there, which a constraint
+   * violation cannot.
+   */
+  private async refuseDuplicateName(name: string, excludeId: string | null): Promise<void> {
+    const existing = await this.exactNameMatch(name, excludeId);
+    if (existing) {
+      const message = duplicateItemNameMessage(existing.name);
+      throw new ConflictException({ message, issues: [{ path: "name", message }] });
+    }
+  }
+
+  private async exactNameMatch(name: string, excludeId: string | null) {
+    const filters: SQL[] = [
+      eq(items.isDeleted, false),
+      sql`${NORMALIZED_NAME} = lower(${normalizeItemName(name)})`,
+    ];
+    if (excludeId) filters.push(ne(items.id, excludeId));
+
+    const [row] = await this.db
+      .select({ id: items.id, name: items.name })
+      .from(items)
+      .where(and(...filters))
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * What the item form shows under the name box as it is typed.
+   *
+   * `similar` matches items containing EVERY word typed, anywhere in the name,
+   * so word order does not hide a near-duplicate. The exact match is reported
+   * once, as `exact`, and left out of `similar`.
+   */
+  async nameCheck(name: string, excludeId: string | null): Promise<ItemNameCheck> {
+    const normalized = normalizeItemName(name);
+    const exact = await this.exactNameMatch(normalized, excludeId);
+
+    const words = normalized.split(" ").filter(Boolean).slice(0, 6);
+    const filters: SQL[] = [eq(items.isDeleted, false)];
+    for (const word of words) {
+      filters.push(ilike(items.name, likeFragment(word)));
+    }
+    if (excludeId) filters.push(ne(items.id, excludeId));
+    if (exact) filters.push(ne(items.id, exact.id));
+
+    const similar = await this.db
+      .select({ id: items.id, name: items.name })
+      .from(items)
+      .where(and(...filters))
+      .orderBy(asc(items.name))
+      .limit(ITEM_NAME_CHECK_LIMIT);
+
+    return { exact, similar };
+  }
+
+  /**
+   * One history row, or none when neither the price nor the GST rate moved.
+   *
+   * Compared by value, not as strings: `numeric` hands back "18.00" where a form
+   * may send "18", and those are the same rate.
+   */
+  private async recordPriceChange(
+    tx: Database,
+    itemId: string,
+    source: ItemPriceChangeSource,
+    before: PriceState | null,
+    after: PriceState,
+    actorId: string,
+  ): Promise<void> {
+    const same = (a: string | null, b: string | null) =>
+      a === null || b === null ? a === b : Number(a) === Number(b);
+
+    if (
+      before &&
+      same(before.pricePerUnit, after.pricePerUnit) &&
+      same(before.gstPercent, after.gstPercent)
+    ) {
+      return;
+    }
+
+    await tx.insert(itemPriceChanges).values({
+      itemId,
+      source,
+      oldPrice: before?.pricePerUnit ?? null,
+      newPrice: after.pricePerUnit,
+      oldGstPercent: before?.gstPercent ?? null,
+      newGstPercent: after.gstPercent,
+      changedBy: actorId,
+    });
   }
 
   /**
@@ -282,13 +431,23 @@ export class ItemsRepository extends BaseRepository {
   ): Promise<Map<string, { id: string; isDeleted: boolean; name: string }>> {
     if (names.length === 0) return new Map();
 
-    const lowered = [...new Set(names.map((name) => name.toLowerCase()))];
+    // Keyed and matched on the NORMALISED name, the same rule the item form uses,
+    // so "OPC  Cement" in a sheet finds the "OPC Cement" already in the catalogue.
+    const key = (name: string) => normalizeItemName(name).toLowerCase();
+    const lowered = [...new Set(names.map(key))];
     const rows = await this.db
       .select({ id: items.id, name: items.name, isDeleted: items.isDeleted })
       .from(items)
-      .where(inArray(sql`lower(${items.name})`, lowered));
+      .where(inArray(NORMALIZED_NAME, lowered));
 
-    return new Map(rows.map((row) => [row.name.toLowerCase(), row]));
+    // A live item wins over a deleted one with the same name, so the import
+    // reports the duplicate rather than reviving the deleted row beside it.
+    const found = new Map<string, { id: string; isDeleted: boolean; name: string }>();
+    for (const row of rows) {
+      const current = found.get(key(row.name));
+      if (!current || (current.isDeleted && !row.isDeleted)) found.set(key(row.name), row);
+    }
+    return found;
   }
 
   /**
@@ -309,13 +468,39 @@ export class ItemsRepository extends BaseRepository {
     await writing(() =>
       this.db.transaction(async (tx) => {
         if (creates.length > 0) {
-          await tx.insert(items).values(creates.map((row) => ({ ...row, ...createdBy(actorId) })));
+          const made = await tx
+            .insert(items)
+            .values(creates.map((row) => ({ ...row, ...createdBy(actorId) })))
+            .returning({ id: items.id, pricePerUnit: items.pricePerUnit, gstPercent: items.gstPercent });
+          // Every imported item's first price goes into its history too.
+          await tx.insert(itemPriceChanges).values(
+            made.map((row) => ({
+              itemId: row.id,
+              source: "imported",
+              newPrice: row.pricePerUnit,
+              newGstPercent: row.gstPercent,
+              changedBy: actorId,
+            })),
+          );
         }
         for (const revive of revives) {
-          await tx
+          const [before] = await tx
+            .select({ pricePerUnit: items.pricePerUnit, gstPercent: items.gstPercent })
+            .from(items)
+            .where(eq(items.id, revive.id));
+          const [after] = await tx
             .update(items)
             .set({ ...revive.values, isDeleted: false, ...updatedBy(actorId) })
-            .where(eq(items.id, revive.id));
+            .where(eq(items.id, revive.id))
+            .returning({ pricePerUnit: items.pricePerUnit, gstPercent: items.gstPercent });
+          await this.recordPriceChange(
+            tx as unknown as Database,
+            revive.id,
+            "imported",
+            before ?? null,
+            after!,
+            actorId,
+          );
         }
       }),
     );

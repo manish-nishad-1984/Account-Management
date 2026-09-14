@@ -32,3 +32,17 @@ export function formatDate(value: string | null): string {
     year: "numeric",
   });
 }
+
+/** A date with the time of day, for audit rows where two changes can share a date. */
+export function formatDateTime(value: string | null): string {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}

@@ -1,19 +1,26 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { and, count, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, isNull, ne, notInArray, or, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   PAYOUT_INVOICE_NO,
+  type ItemLatestPrice,
+  type ItemPriceChangeRow,
+  type ItemPriceChanges,
   type ItemPriceHistory,
   type ItemPriceHistoryRow,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
 import {
   companies,
+  itemPriceChanges,
   items,
   purchaseInvoiceItems,
   purchaseInvoices,
+  salesInvoiceItems,
+  salesInvoices,
   sites,
   suppliers,
+  users,
 } from "../../db/schema";
 import { BaseRepository } from "../../common/base.repository";
 
@@ -50,6 +57,15 @@ const perUnit = (amount: AnyPgColumn) => sql<string>`case
   when ${purchaseInvoiceItems.quantity} = 0 then '0.00'
   else round(${amount} / ${purchaseInvoiceItems.quantity}, 2)::text
 end`;
+
+/**
+ * Returns and credit notes carry an amount given back, not a price. They are
+ * shown in the history panel, marked, but never used as "the latest price".
+ */
+const NOT_A_PRICE = ["Purchase Return", "Credit Note", "Sales Return"];
+
+const iso = (value: Date | string | null): string | null =>
+  value === null ? null : value instanceof Date ? value.toISOString() : String(value);
 
 @Injectable()
 export class ItemPriceHistoryRepository extends BaseRepository {
@@ -163,6 +179,154 @@ export class ItemPriceHistoryRepository extends BaseRepository {
                 : row.documentDate,
           createdAt:
             row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
+        }),
+      ),
+      total: tally?.value ?? 0,
+    };
+  }
+
+  private async requireItem(itemId: string) {
+    const [item] = await this.db
+      .select({
+        id: items.id,
+        pricePerUnit: items.pricePerUnit,
+        unitId: items.unitId,
+        gstPercent: items.gstPercent,
+      })
+      .from(items)
+      .where(and(eq(items.id, itemId), eq(items.isDeleted, false)))
+      .limit(1);
+
+    if (!item) {
+      throw new NotFoundException("Item not found");
+    }
+    return item;
+  }
+
+  /**
+   * THE PRICE TO FILL AN INVOICE LINE WITH when this item is chosen.
+   *
+   * The newest invoice line for the item in the same direction, ordered as the
+   * history panel orders it, so the figure filled in is the top row of that
+   * panel. Returns and credit notes are skipped. Unapproved invoices count: the
+   * latest price someone agreed to is still the latest price, and waiting for
+   * approval would fill in a figure a buyer already knows is out of date.
+   *
+   * Across every site and supplier, for the reason the history panel is.
+   */
+  async latest(itemId: string, direction: "out" | "in"): Promise<ItemLatestPrice> {
+    const item = await this.requireItem(itemId);
+
+    if (direction === "out") {
+      const [line] = await this.db
+        .select({
+          unitPrice: purchaseInvoiceItems.unitPrice,
+          unitId: purchaseInvoiceItems.unitId,
+          gstPercent: purchaseInvoiceItems.gstPercent,
+          documentDate: purchaseInvoices.documentDate,
+          displayNo: DISPLAY_NO,
+          partyName: suppliers.name,
+        })
+        .from(purchaseInvoiceItems)
+        .innerJoin(purchaseInvoices, eq(purchaseInvoiceItems.purchaseInvoiceId, purchaseInvoices.id))
+        .innerJoin(suppliers, eq(purchaseInvoices.supplierId, suppliers.id))
+        .where(
+          and(
+            this.matching(itemId),
+            notInArray(purchaseInvoices.invoiceType, NOT_A_PRICE),
+          ),
+        )
+        .orderBy(
+          sql`${purchaseInvoices.documentDate} desc nulls last`,
+          desc(purchaseInvoices.createdAt),
+          desc(purchaseInvoiceItems.lineNumber),
+        )
+        .limit(1);
+
+      if (line) {
+        return { itemId, source: "purchase-invoice", ...line, documentDate: iso(line.documentDate) };
+      }
+    } else {
+      const [line] = await this.db
+        .select({
+          unitPrice: salesInvoiceItems.unitPrice,
+          unitId: salesInvoiceItems.unitId,
+          gstPercent: salesInvoiceItems.gstPercent,
+          documentDate: salesInvoices.documentDate,
+          displayNo: salesInvoices.salesInvoiceNo,
+          partyName: suppliers.name,
+        })
+        .from(salesInvoiceItems)
+        .innerJoin(salesInvoices, eq(salesInvoiceItems.salesInvoiceId, salesInvoices.id))
+        .innerJoin(suppliers, eq(salesInvoices.customerId, suppliers.id))
+        .where(
+          and(
+            eq(salesInvoiceItems.itemId, itemId),
+            notInArray(salesInvoices.invoiceType, NOT_A_PRICE),
+          ),
+        )
+        .orderBy(
+          sql`${salesInvoices.documentDate} desc nulls last`,
+          desc(salesInvoices.createdAt),
+          desc(salesInvoiceItems.lineNumber),
+        )
+        .limit(1);
+
+      if (line) {
+        return { itemId, source: "sales-invoice", ...line, documentDate: iso(line.documentDate) };
+      }
+    }
+
+    return {
+      itemId,
+      source: "item-master",
+      unitPrice: item.pricePerUnit,
+      unitId: item.unitId,
+      gstPercent: item.gstPercent,
+      documentDate: null,
+      displayNo: null,
+      partyName: null,
+    };
+  }
+
+  /** Every recorded change to the item master's price, newest first. */
+  async changes(itemId: string, limit: number): Promise<ItemPriceChanges> {
+    await this.requireItem(itemId);
+
+    const [tally] = await this.db
+      .select({ value: count() })
+      .from(itemPriceChanges)
+      .where(eq(itemPriceChanges.itemId, itemId));
+
+    const rows = await this.db
+      .select({
+        id: itemPriceChanges.id,
+        source: itemPriceChanges.source,
+        oldPrice: itemPriceChanges.oldPrice,
+        newPrice: itemPriceChanges.newPrice,
+        oldGstPercent: itemPriceChanges.oldGstPercent,
+        newGstPercent: itemPriceChanges.newGstPercent,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        userName: users.userName,
+        changedAt: itemPriceChanges.changedAt,
+      })
+      .from(itemPriceChanges)
+      .leftJoin(users, eq(itemPriceChanges.changedBy, users.id))
+      .where(eq(itemPriceChanges.itemId, itemId))
+      .orderBy(desc(itemPriceChanges.changedAt), desc(itemPriceChanges.id))
+      .limit(limit);
+
+    return {
+      rows: rows.map(
+        ({ firstName, lastName, userName, ...row }): ItemPriceChangeRow => ({
+          ...row,
+          source: row.source as ItemPriceChangeRow["source"],
+          changedByName:
+            userName === null
+              ? null
+              : `${firstName ?? ""} ${lastName ?? ""}`.trim() || userName,
+          changedAt: iso(row.changedAt)!,
         }),
       ),
       total: tally?.value ?? 0,

@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   itemDetailSchema,
+  itemLatestPriceSchema,
+  itemNameCheckSchema,
+  itemPriceChangesSchema,
   itemPriceHistorySchema,
   itemRowSchema,
   itemSheetFileName,
@@ -10,6 +13,9 @@ import {
   type CreateItem,
   type CreateUnit,
   type ItemDetail,
+  type ItemLatestPrice,
+  type ItemNameCheck,
+  type ItemPriceChanges,
   type ItemPriceHistory,
   type ItemRow,
   type ItemSheetImportResult,
@@ -141,3 +147,50 @@ export const useItemPriceHistory = (id: string | null) =>
         signal,
       }),
   });
+
+/**
+ * The item form's live name check. Pass the DEBOUNCED name: this runs once per
+ * pause in typing, not once per key. Nothing is asked for under two characters,
+ * where every item in the catalogue is "similar".
+ */
+export const useItemNameCheck = (name: string, excludeId: string | null) => {
+  const trimmed = name.trim();
+  return useQuery({
+    queryKey: [RESOURCE, "name-check", trimmed.toLowerCase(), excludeId],
+    enabled: trimmed.length >= 2,
+    staleTime: 10_000,
+    queryFn: ({ signal }) => {
+      const params = new URLSearchParams({ name: trimmed });
+      if (excludeId) params.set("excludeId", excludeId);
+      return apiRequest<ItemNameCheck>(`/${RESOURCE}/name-check?${params.toString()}`, {
+        schema: itemNameCheckSchema,
+        signal,
+      });
+    },
+  });
+};
+
+/** Every recorded change to the item master's price, for the history dialog. */
+export const useItemPriceChanges = (id: string | null) =>
+  useQuery({
+    queryKey: [RESOURCE, "price-changes", id],
+    enabled: id !== null,
+    queryFn: ({ signal }) =>
+      apiRequest<ItemPriceChanges>(`/${RESOURCE}/${id}/price-changes`, {
+        schema: itemPriceChangesSchema,
+        signal,
+      }),
+  });
+
+/** The query an invoice line uses to fill itself when an item is chosen. */
+export const latestPriceQuery = (id: string, direction: "out" | "in") => ({
+  queryKey: [RESOURCE, "latest-price", id, direction],
+  // Fresh each time an item is chosen, give or take a double click: a price
+  // cached from an hour ago is exactly the stale figure this exists to replace.
+  staleTime: 5_000,
+  queryFn: ({ signal }: { signal: AbortSignal }) =>
+    apiRequest<ItemLatestPrice>(`/${RESOURCE}/${id}/latest-price?direction=${direction}`, {
+      schema: itemLatestPriceSchema,
+      signal,
+    }),
+});
