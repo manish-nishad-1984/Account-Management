@@ -1,9 +1,30 @@
-import { Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { and, count, eq, ilike, sql } from "drizzle-orm";
-import type { ListQuery, SortDirection } from "@accountmanagement/contracts";
+import type {
+  CreateSiteGroup,
+  ListQuery,
+  SiteGroupDetail,
+  SortDirection,
+  UpdateSiteGroup,
+} from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
-import { siteGroupAddresses, siteGroupSites, siteGroups, sites } from "../../db/schema";
+import {
+  purchaseInvoices,
+  purchaseOrders,
+  siteGroupAddresses,
+  siteGroupSites,
+  siteGroups,
+  sites,
+} from "../../db/schema";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
+import { createdBy, updatedBy } from "../../common/base.repository";
+import { writing } from "../../common/db-errors";
 
 const SORTABLE = {
   name: siteGroups.name,
@@ -130,5 +151,169 @@ export class SiteGroupsRepository {
     }
     const [row] = await this.db.select({ value: count() }).from(siteGroups).where(and(...filters));
     return row?.value ?? 0;
+  }
+
+  /**
+   * One group, with its members and addresses.
+   *
+   * Three queries rather than a join: a join across both child tables is the
+   * cross product the source stores and this schema exists to undo — 4 sites and
+   * 3 addresses would come back as 12 rows to be grouped again in JavaScript.
+   */
+  async findById(id: string): Promise<SiteGroupDetail> {
+    const [group] = await this.db
+      .select({ id: siteGroups.id, name: siteGroups.name })
+      .from(siteGroups)
+      .where(and(eq(siteGroups.id, id), eq(siteGroups.isDeleted, false)))
+      .limit(1);
+
+    if (!group) {
+      throw new NotFoundException("Site group not found");
+    }
+
+    const [members, addresses] = await Promise.all([
+      this.db
+        .select({ siteId: siteGroupSites.siteId })
+        .from(siteGroupSites)
+        .where(eq(siteGroupSites.groupId, id)),
+      this.db
+        .select({ id: siteGroupAddresses.id, address: siteGroupAddresses.address })
+        .from(siteGroupAddresses)
+        .where(eq(siteGroupAddresses.groupId, id))
+        .orderBy(siteGroupAddresses.address),
+    ]);
+
+    return {
+      ...group,
+      siteIds: members.map((row) => row.siteId),
+      addresses,
+    };
+  }
+
+  async create(input: CreateSiteGroup, actorId: string): Promise<SiteGroupDetail> {
+    const id = await writing(() =>
+      this.db.transaction(async (tx) => {
+        const [group] = await tx
+          .insert(siteGroups)
+          .values({ name: input.name, ...createdBy(actorId) })
+          .returning({ id: siteGroups.id });
+
+        await this.writeChildren(tx as unknown as Database, group!.id, input);
+        return group!.id;
+      }),
+    );
+
+    return this.findById(id);
+  }
+
+  /**
+   * A save REPLACES the members and the addresses it is given.
+   *
+   * Not a merge, and the difference is visible: the form sends the whole list it
+   * is showing, so a site the person removed has to disappear. A key left OUT of
+   * the payload is untouched, which is what makes a rename a rename.
+   */
+  async update(id: string, input: UpdateSiteGroup, actorId: string): Promise<SiteGroupDetail> {
+    await writing(() =>
+      this.db.transaction(async (tx) => {
+        if (input.name !== undefined) {
+          const [row] = await tx
+            .update(siteGroups)
+            .set({ name: input.name, ...updatedBy(actorId) })
+            .where(and(eq(siteGroups.id, id), eq(siteGroups.isDeleted, false)))
+            .returning({ id: siteGroups.id });
+          if (!row) {
+            throw new NotFoundException("Site group not found");
+          }
+        }
+
+        if (input.siteIds !== undefined) {
+          await tx.delete(siteGroupSites).where(eq(siteGroupSites.groupId, id));
+        }
+        if (input.addresses !== undefined) {
+          await tx.delete(siteGroupAddresses).where(eq(siteGroupAddresses.groupId, id));
+        }
+        await this.writeChildren(tx as unknown as Database, id, input);
+      }),
+    );
+
+    return this.findById(id);
+  }
+
+  /**
+   * Soft delete, REFUSED while a document still points at the group.
+   *
+   * `purchase_orders.site_group_id` and `purchase_invoices.site_group_id` are
+   * real foreign keys in this schema — the source matched on the group's NAME as
+   * a string, which is why renaming one there silently detached its documents.
+   * A soft delete fires no cascade, so those rows would keep a reference to a
+   * group that no list shows, and the order screen would render a blank where
+   * the group belongs.
+   */
+  async remove(id: string, actorId: string): Promise<void> {
+    const [orders, invoices] = await Promise.all([
+      this.db
+        .select({ value: count() })
+        .from(purchaseOrders)
+        .where(and(eq(purchaseOrders.siteGroupId, id), eq(purchaseOrders.isDeleted, false)))
+        .then((rows) => rows[0]?.value ?? 0),
+      this.db
+        .select({ value: count() })
+        .from(purchaseInvoices)
+        // No `is_deleted` on purchase invoices: the table has no soft delete, by
+        // design — see the schema. Deleting an invoice deletes it.
+        .where(eq(purchaseInvoices.siteGroupId, id))
+        .then((rows) => rows[0]?.value ?? 0),
+    ]);
+
+    const blockers: string[] = [];
+    if (orders > 0) blockers.push(`${orders} purchase ${orders === 1 ? "order" : "orders"}`);
+    if (invoices > 0) {
+      blockers.push(`${invoices} purchase ${invoices === 1 ? "invoice" : "invoices"}`);
+    }
+
+    if (blockers.length > 0) {
+      throw new ConflictException(
+        `This group is used by ${blockers.join(" and ")}. Change ${
+          blockers.length === 1 ? "it" : "them"
+        } before deleting the group.`,
+      );
+    }
+
+    const [row] = await this.db
+      .update(siteGroups)
+      .set({ isDeleted: true, ...updatedBy(actorId) })
+      .where(and(eq(siteGroups.id, id), eq(siteGroups.isDeleted, false)))
+      .returning({ id: siteGroups.id });
+
+    if (!row) {
+      throw new NotFoundException("Site group not found");
+    }
+  }
+
+  /**
+   * The members and addresses, written the same way by create and update.
+   *
+   * Both lists are de-duplicated first. `site_group_sites` has a composite
+   * primary key, so the same site twice is a constraint violation rather than a
+   * harmless repeat — and a multi-select that sends a duplicate is a bug in the
+   * browser, not something the person did wrong.
+   */
+  private async writeChildren(
+    tx: Database,
+    groupId: string,
+    input: { siteIds?: string[]; addresses?: string[] },
+  ): Promise<void> {
+    const siteIds = [...new Set(input.siteIds ?? [])];
+    if (siteIds.length > 0) {
+      await tx.insert(siteGroupSites).values(siteIds.map((siteId) => ({ groupId, siteId })));
+    }
+
+    const addresses = [...new Set((input.addresses ?? []).map((value) => value.trim()))].filter(
+      (value) => value !== "",
+    );
+    if (addresses.length > 0) {
+      await tx.insert(siteGroupAddresses).values(addresses.map((address) => ({ groupId, address })));
+    }
   }
 }

@@ -168,9 +168,9 @@ export function SitesPage() {
             </p>
             {/*
               Worth stating up front: this delete is refused outright while users
-              are assigned or the site belongs to a group, and site groups are
-              read-only in this app, so a group membership has to be cleared in
-              the database rather than on a screen.
+              are assigned or the site belongs to a group. Both are now fixable on
+              a screen — site groups became editable on 14 Sep 2026, so a
+              membership no longer has to be cleared in the database.
             */}
             <p className="mt-2 text-xs text-slate-500">
               The site is marked deleted and hidden from every list. It is refused

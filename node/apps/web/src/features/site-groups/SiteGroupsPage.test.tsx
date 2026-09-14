@@ -111,22 +111,56 @@ describe("SiteGroupsPage", () => {
   });
 
   /**
-   * `Group-View` is the only group permission in the .NET solution. The screen must
-   * say that plainly rather than showing buttons that nobody can be granted.
+   * NOT READ-ONLY ANY MORE, as of 14 Sep 2026 — but gated, which is the whole
+   * point. The screen carried a notice saying groups could not be changed,
+   * because the .NET solution defines `Group-View` and nothing else. The rights
+   * existed in the data all along: `user_form_permissions` has add, edit and
+   * delete flags per form, and the live rows grant all of them on this form.
+   *
+   * So what has to hold now is that the buttons follow the rights rather than
+   * appearing for everyone.
    */
-  it("explains that groups are read-only, and offers no write actions", async () => {
+  it("offers no write actions to someone without the rights", async () => {
     vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({ rows: [row("North Gujarat")], nextCursor: null, total: 1 }),
     ));
     renderPage();
 
     await screen.findByText("North Gujarat");
-    expect(screen.getByRole("alert")).toHaveTextContent(/read-only/i);
     expect(screen.queryByRole("button", { name: /add group/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /edit north gujarat/i })).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /delete north gujarat/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("no longer tells anyone the screen is read-only", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
+      json({ rows: [row("North Gujarat")], nextCursor: null, total: 1 }),
+    ));
+    renderPage();
+
+    await screen.findByText("North Gujarat");
+    expect(screen.queryByText(/read-only/i)).not.toBeInTheDocument();
+  });
+
+  it("offers Edit and Delete on a row the server says can be changed", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
+      json({
+        rows: [
+          row("North Gujarat", {
+            capabilities: { canEdit: true, canDelete: true, canApprove: false },
+          }),
+        ],
+        nextCursor: null,
+        total: 1,
+      }),
+    ));
+    renderPage();
+
+    await screen.findByText("North Gujarat");
+    expect(screen.getByRole("button", { name: "Edit North Gujarat" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete North Gujarat" })).toBeInTheDocument();
   });
 
   it("shows an empty state rather than a blank table", async () => {

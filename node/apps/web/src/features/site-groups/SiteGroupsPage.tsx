@@ -1,36 +1,35 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import {
-  DEFAULT_PAGE_SIZE,
-  SITE_GROUP_SORT_FIELDS,
-  type SiteGroupRow,
-  type SortDirection,
-} from "@accountmanagement/contracts";
-import { Info, Pencil, Plus, Trash2 } from "lucide-react";
-import { DataGrid } from "../../components/DataGrid";
-import { Alert, Button, PageHeader } from "../../components/ui";
-import { useSiteGroupList } from "./api";
-import { ApiError } from "../../lib/api-client";
+import { SITE_GROUP_SORT_FIELDS, type SiteGroupRow } from "@accountmanagement/contracts";
+import { Plus } from "lucide-react";
+import { DataGrid, RowActions } from "../../components/DataGrid";
+import { Button, ConfirmDialog, PageHeader } from "../../components/ui";
+import { useDeleteSiteGroup, useSiteGroupList } from "./api";
+import { SiteGroupFormDialog } from "./SiteGroupFormDialog";
 import { usePermission } from "../../lib/permissions";
+import { useMasterScreen } from "../../lib/use-master-screen";
 
+/**
+ * Site groups.
+ *
+ * READ-ONLY UNTIL 14 Sep 2026, and the screen said so in a notice: the .NET
+ * solution defines `Group-View` and no other group permission, so changing a
+ * group was unauthorised there — assessment finding C-6.
+ *
+ * The business asked for it, and the rights were already in the data.
+ * Permissions are rows in `user_form_permissions` with separate view, add, edit
+ * and delete flags, and the live rows grant all four on the Group form to two
+ * users. The old app simply never read three of those columns for this form. So
+ * the buttons below are gated on rights that already existed, and the server
+ * checks each of them again.
+ */
 export function SiteGroupsPage() {
-  const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<string>("name");
-  const [sortDir, setSortDir] = useState<SortDirection>("asc");
   const canAdd = usePermission("group", "add");
+  const screen = useMasterScreen<SiteGroupRow>({ defaultSortBy: "name" });
+  const query = useSiteGroupList(screen.listParams);
+  const remove = useDeleteSiteGroup();
 
-  const [cursors, setCursors] = useState<string[]>([]);
-  const cursor = cursors[cursors.length - 1];
-
-  const query = useSiteGroupList({
-    limit: DEFAULT_PAGE_SIZE,
-    cursor,
-    sortBy,
-    sortDir,
-    search: search.trim() || undefined,
-  });
-
-  const resetPaging = () => setCursors([]);
+  const { openEdit, askDelete } = screen;
 
   const columns = useMemo<ColumnDef<SiteGroupRow, unknown>[]>(
     () => [
@@ -71,30 +70,16 @@ export function SiteGroupsPage() {
         id: "actions",
         header: "",
         cell: ({ row }) => (
-          <div className="flex justify-end gap-1">
-            {row.original.capabilities.canEdit && (
-              <Button
-                variant="ghost"
-                icon={Pencil}
-                className="px-2 py-2 lg:py-1.5"
-                aria-label={`Edit ${row.original.name}`}
-                title={`Edit ${row.original.name}`}
-              />
-            )}
-            {row.original.capabilities.canDelete && (
-              <Button
-                variant="ghost"
-                icon={Trash2}
-                className="px-2 py-2 text-rose-600 hover:bg-rose-50 hover:text-rose-700 lg:py-1.5"
-                aria-label={`Delete ${row.original.name}`}
-                title={`Delete ${row.original.name}`}
-              />
-            )}
-          </div>
+          <RowActions
+            capabilities={row.original.capabilities}
+            label={row.original.name}
+            onEdit={() => openEdit(row.original.id)}
+            onDelete={() => askDelete(row.original)}
+          />
         ),
       },
     ],
-    [],
+    [openEdit, askDelete],
   );
 
   return (
@@ -102,61 +87,54 @@ export function SiteGroupsPage() {
       <PageHeader
         title="Site Groups"
         description="Named sets of sites, used to scope purchase orders and supplier invoices"
-        actions={canAdd ? <Button icon={Plus}>Add group</Button> : undefined}
+        actions={
+          canAdd ? (
+            <Button icon={Plus} onClick={screen.openCreate}>
+              Add group
+            </Button>
+          ) : undefined
+        }
       />
-
-      {/*
-       * Not a placeholder and not an error. `Group-View` is the only group
-       * permission that exists in the .NET solution — there is no Group-Add,
-       * Group-Edit or Group-Delete attribute anywhere — so nobody holds rights to
-       * change a group, and the row actions above render for nobody. Saying so is
-       * better than a grid that looks half-built.
-       */}
-      <div className="mb-4">
-        <Alert tone="info" icon={Info}>
-        Site groups are read-only. The existing application defines only a
-        &ldquo;Group-View&rdquo; permission — no add, edit or delete right exists for
-        groups, so creating and removing them is currently unauthorised. Confirm with
-        the business before write access is added.
-        </Alert>
-      </div>
 
       <DataGrid<SiteGroupRow>
         gridKey="site-groups"
         columns={columns}
-        rows={query.data?.rows ?? []}
-        total={query.data?.total ?? null}
-        isLoading={query.isLoading}
         searchPlaceholder="Search group name"
-        error={
-          query.error
-            ? query.error instanceof ApiError
-              ? query.error.message
-              : "Could not load site groups"
-            : null
-        }
-        search={search}
-        onSearchChange={(value) => {
-          setSearch(value);
-          resetPaging();
-        }}
-        sortBy={sortBy}
-        sortDir={sortDir}
         sortableFields={SITE_GROUP_SORT_FIELDS}
-        onSortChange={(field, direction) => {
-          setSortBy(field);
-          setSortDir(direction);
-          resetPaging();
-        }}
-        pageIndex={cursors.length}
-        canGoBack={cursors.length > 0}
-        canGoForward={Boolean(query.data?.nextCursor)}
-        onPrevious={() => setCursors((stack) => stack.slice(0, -1))}
-        onNext={() => {
-          const next = query.data?.nextCursor;
-          if (next) setCursors((stack) => [...stack, next]);
-        }}
         emptyMessage="No site groups match this search"
+        {...screen.gridProps(query)}
+      />
+
+      <SiteGroupFormDialog
+        open={screen.isFormOpen}
+        groupId={screen.editingId}
+        onClose={screen.closeForm}
+      />
+
+      <ConfirmDialog
+        open={screen.deleteTarget !== null}
+        onClose={screen.cancelDelete}
+        onConfirm={() => screen.runDelete(remove.mutateAsync)}
+        pending={remove.isPending}
+        error={screen.deleteError}
+        title="Delete site group"
+        body={
+          <>
+            <p>
+              Delete{" "}
+              <span className="font-medium text-slate-900">{screen.deleteTarget?.name}</span>?
+            </p>
+            {/*
+              Worth saying before the click: the group's own rows go with it, and
+              the delete is refused outright while a document still names it.
+            */}
+            <p className="mt-2 text-xs text-slate-500">
+              The group is marked deleted and hidden from every list. Its member sites
+              are not affected. It is refused while a purchase order or a purchase
+              invoice still uses the group.
+            </p>
+          </>
+        }
       />
     </>
   );

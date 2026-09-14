@@ -434,15 +434,20 @@ export class DevSeed implements OnModuleInit {
       { userId: admin.id, formId: 4, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
       { userId: admin.id, formId: 5, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
       /**
-       * Group gets VIEW ONLY, and that is not an oversight.
+       * Group gets ALL FOUR since 14 Sep 2026.
        *
-       * `Group-View` is the only group permission that exists anywhere in the .NET
-       * solution — there is no Group-Add, Group-Edit or Group-Delete attribute, so
-       * creating and deleting site groups is unauthorised in the app today
-       * (assessment finding C-6). Seeding rights that nobody can actually hold
-       * would paper over that, so the Site Groups grid shows no row actions.
+       * It was view-only, because `Group-View` is the only group permission that
+       * exists anywhere in the .NET solution — no Group-Add, Group-Edit or
+       * Group-Delete attribute — so the screen was read-only and said so
+       * (assessment finding C-6). The business asked for it to be editable.
+       *
+       * These are not invented rights. Permissions are rows with four flags per
+       * form, and the LIVE database already grants every one of them on the Group
+       * form to `ckalathiya` and `chintanauro`; the old app simply never read
+       * three of the columns. Seeding the same thing here is what makes the dev
+       * stack match production rather than paper over it.
        */
-      { userId: admin.id, formId: 6, isViewAllow: true },
+      { userId: admin.id, formId: 6, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
       /**
        * Supplier gets all four rights, though only `Supplier-View` and
        * `Supplier-Add` exist as attributes in the .NET code.
