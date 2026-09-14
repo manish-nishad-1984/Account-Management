@@ -43,6 +43,7 @@ const fromPurchase = (itemId: string, unitPrice: string, overrides: Record<strin
   unitPrice,
   unitId: 2,
   gstPercent: "28.00",
+  discountPerUnit: "15.00",
   documentDate: "2026-08-12T00:00:00.000Z",
   displayNo: "BB/171",
   partyName: "AL BURHAN PIPES",
@@ -112,7 +113,11 @@ describe("filling an invoice line with the item's latest price", () => {
     await waitFor(() => expect(screen.getByLabelText(/price on line 1/i)).toHaveValue("410.00"));
     expect(screen.getByLabelText(/^unit on line 1/i)).toHaveValue("2");
     expect(screen.getByLabelText(/gst percent on line 1/i)).toHaveValue("28.00");
-    expect(screen.getByText("Last purchase")).toBeInTheDocument();
+    expect(screen.getByLabelText(/quantity on line 1/i)).toHaveValue("1");
+    expect(screen.getByLabelText(/discount per unit on line 1/i)).toHaveValue("15.00");
+    expect(
+      screen.getByRole("img", { name: "Last purchase · 12 Aug 2026 · invoice BB/171 · AL BURHAN PIPES" }),
+    ).toBeInTheDocument();
     expect(latestRequests()[0]!.searchParams.get("direction")).toBe("out");
   });
 
@@ -123,6 +128,7 @@ describe("filling an invoice line with the item's latest price", () => {
         source: "item-master",
         unitId: 1,
         gstPercent: null,
+        discountPerUnit: null,
         documentDate: null,
         displayNo: null,
         partyName: null,
@@ -134,10 +140,11 @@ describe("filling an invoice line with the item's latest price", () => {
 
     await waitFor(() => expect(screen.getByLabelText(/price on line 1/i)).toHaveValue("395.00"));
     expect(screen.getByLabelText(/gst percent on line 1/i)).toHaveValue("");
-    expect(screen.getByText("Item master price")).toBeInTheDocument();
+    expect(screen.getByLabelText(/discount per unit on line 1/i)).toHaveValue("");
+    expect(screen.getByRole("img", { name: /^Item master price/ })).toBeInTheDocument();
   });
 
-  it("replaces a price typed before the item was chosen, and leaves quantity alone", async () => {
+  it("keeps a quantity already typed rather than resetting it to 1", async () => {
     const user = userEvent.setup();
     routes({ [CEMENT.id]: fromPurchase(CEMENT.id, "410.00") });
     openPurchase();
@@ -191,6 +198,6 @@ describe("filling an invoice line with the item's latest price", () => {
 
     await waitFor(() => expect(screen.getByLabelText(/price on line 1/i)).toHaveValue("450.00"));
     expect(latestRequests()[0]!.searchParams.get("direction")).toBe("in");
-    expect(screen.getByText("Last sale")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /^Last sale/ })).toBeInTheDocument();
   });
 });

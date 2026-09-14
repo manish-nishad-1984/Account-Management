@@ -164,7 +164,7 @@ export function PurchaseInvoiceFormDialog({
     defaultValues: EMPTY,
   });
 
-  const { fields, append, remove } = useFieldArray({ control, name: "items" });
+  const { fields, insert, remove } = useFieldArray({ control, name: "items" });
 
   useEffect(() => {
     if (!open) return;
@@ -251,6 +251,9 @@ export function PurchaseInvoiceFormDialog({
       setValue(`items.${index}.unitPrice`, price.unitPrice, options);
       setValue(`items.${index}.unitId`, price.unitId, options);
       setValue(`items.${index}.gstPercent`, price.gstPercent ?? "", options);
+      // "0.00" is how an undiscounted line is stored; an empty box reads better.
+      const discount = price.discountPerUnit && Number(price.discountPerUnit) !== 0 ? price.discountPerUnit : "";
+      setValue(`items.${index}.discountPerUnit`, discount, options);
     },
   });
 
@@ -380,10 +383,15 @@ export function PurchaseInvoiceFormDialog({
               unitOptions={unitOptions}
               register={register as unknown as (name: string) => ReturnType<typeof register>}
               lineError={(index, field) => errors.items?.[index]?.[field]?.message}
-              onAdd={() => append(EMPTY_LINE)}
+              onInsert={(index) => insert(index + 1, EMPTY_LINE, { shouldFocus: false })}
               onRemove={remove}
               onItemChosen={(index, itemId) => {
                 setValue(`items.${index}.itemName`, "");
+                // Quantity 1 when the line has none yet (client request, 14 Sep
+                // 2026). A quantity already typed is the person's, and kept.
+                if (Number(previewNumber(getValues(`items.${index}.quantity`))) === 0) {
+                  setValue(`items.${index}.quantity`, "1", { shouldDirty: true });
+                }
                 latestPrice.onItemChosen(index, itemId);
               }}
               priceHint={(index) => latestPrice.hintFor(lines?.[index]?.itemId)}

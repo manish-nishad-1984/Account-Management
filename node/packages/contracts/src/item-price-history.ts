@@ -197,7 +197,7 @@ export const PAYOUT_INVOICE_NO = "PayOut";
  * because a returned amount is not a price anyone paid or charged. An item never
  * invoiced in that direction falls back to its Item Master price.
  *
- * Unit and GST come from the same source row, so a line is filled from one
+ * Unit, GST and discount come from the same source row, so a line is filled from one
  * document rather than a price from one place and a rate from another.
  */
 export const ITEM_LATEST_PRICE_SOURCES = ["purchase-invoice", "sales-invoice", "item-master"] as const;
@@ -215,6 +215,12 @@ export const itemLatestPriceSchema = z.object({
   unitPrice: z.string(),
   unitId: z.number().int(),
   gstPercent: z.string().nullable(),
+  /**
+   * Rupees off per unit on that invoice line, so the line is filled with
+   * everything the last invoice said (client request, 14 Sep 2026). Null from
+   * the item master, which has no discount.
+   */
+  discountPerUnit: z.string().nullable(),
   /** The invoice it came from. All null when the source is the item master. */
   documentDate: z.string().nullable(),
   displayNo: z.string().nullable(),

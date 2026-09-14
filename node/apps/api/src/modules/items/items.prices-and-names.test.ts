@@ -169,6 +169,7 @@ describe("item names, latest prices and price history (real PostgreSQL)", () => 
         unitPrice: "395.00",
         unitId,
         gstPercent: "28.00",
+        discountPerUnit: null,
         displayNo: null,
       });
     });
@@ -176,7 +177,12 @@ describe("item names, latest prices and price history (real PostgreSQL)", () => 
     it("uses the newest purchase invoice line, with that line's unit and GST", async () => {
       const created = await item();
       await purchase(created.id, "2026-01-01", { unitPrice: "380.00", gstPercent: "18" });
-      await purchase(created.id, "2026-03-01", { unitPrice: "410.00", unitId: otherUnitId, gstPercent: "28" });
+      await purchase(created.id, "2026-03-01", {
+        unitPrice: "410.00",
+        unitId: otherUnitId,
+        gstPercent: "28",
+        discountPerUnit: "10.00",
+      });
       await purchase(created.id, "2026-02-01", { unitPrice: "390.00" });
 
       const latest = await history.latest(created.id, "out");
@@ -185,6 +191,7 @@ describe("item names, latest prices and price history (real PostgreSQL)", () => 
         unitPrice: "410.00",
         unitId: otherUnitId,
         gstPercent: "28.00",
+        discountPerUnit: "10.00",
         displayNo: "INV-2026-03-01",
         partyName: "AL BURHAN PIPES",
       });

@@ -93,12 +93,18 @@ export const Button = forwardRef<
     icon?: LucideIcon;
   }
 >(function Button(
-  { variant = "primary", loading, icon: Icon, className, children, disabled, ...rest },
+  { variant = "primary", loading, icon: Icon, className, children, disabled, type = "button", ...rest },
   ref,
 ) {
   return (
     <button
       ref={ref}
+      // "button" UNLESS SAID OTHERWISE. HTML's default is "submit", so every
+      // Button inside a form without a type submitted it: the Add product and
+      // Remove line buttons on the invoice and order forms saved the document
+      // when it was valid, and jumped the cursor to the first error when it was
+      // not. Found 14 Sep 2026. Submit buttons pass type="submit", and all do.
+      type={type}
       disabled={disabled || loading}
       className={clsx(
         "inline-flex items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5",

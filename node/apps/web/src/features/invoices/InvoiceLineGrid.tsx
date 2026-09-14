@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { UseFormRegisterReturn } from "react-hook-form";
-import { Plus, Trash2 } from "lucide-react";
+import { List, Plus, Trash2 } from "lucide-react";
 import { money, type InvoiceTotal } from "@accountmanagement/domain";
 import { Button, SelectField, TextField } from "../../components/ui";
 import { formatMoney, formatQuantity } from "../../lib/format";
@@ -100,6 +100,35 @@ export const discountPercentOf = (line: InvoiceLineValues | undefined): string =
 export const totalQuantityOf = (lines: InvoiceLineValues[] | undefined): string =>
   (lines ?? []).reduce((sum, line) => sum + Number(previewNumber(line?.quantity)), 0).toFixed(2);
 
+/** The dropdown value that switches a line to a typed product name. */
+const TYPE_A_NAME = "__type-a-name__";
+
+/**
+ * A change event for a field this component only has `register` for.
+ *
+ * React Hook Form's `onChange` reads `target.name` and `target.value`, so an
+ * object with those is a change as far as it is concerned. It lets the grid
+ * clear a box it does not render at that moment without the caller handing
+ * over `setValue` for it.
+ */
+const changeOf = (name: string, value: string) => ({ target: { name, value }, type: "change" });
+
+/**
+ * EVERY LINE IS ONE ROW (client request, 14 Sep 2026).
+ *
+ * Three things used to make a line taller than one control, and each has moved
+ * into the row:
+ *
+ *  - The "…or type a name" box under the item dropdown is now an option inside
+ *    the dropdown, "Not in the list — type a name". Choosing it swaps the
+ *    dropdown for a text box, with a button to go back to the list.
+ *  - The note saying where a filled-in price came from is an icon inside the
+ *    Price box. Its full text is the icon's tooltip and accessible name.
+ *  - The discount percent sits inside the Disc/unit box, on the right.
+ *
+ * New lines come from the + at the end of each row, which adds one directly
+ * below that row. The separate Add product button under the grid is gone.
+ */
 export function InvoiceLineGrid({
   fields,
   lines,
@@ -108,7 +137,7 @@ export function InvoiceLineGrid({
   unitOptions,
   register,
   lineError,
-  onAdd,
+  onInsert,
   onRemove,
   onItemChosen,
   priceHint,
@@ -133,152 +162,219 @@ export function InvoiceLineGrid({
   register: (name: string) => UseFormRegisterReturn;
   /** The caller knows its own error type; the grid only needs the message. */
   lineError: (index: number, field: InvoiceLineField) => string | undefined;
-  onAdd: () => void;
+  /** Add an empty line directly after this one. */
+  onInsert: (index: number) => void;
   onRemove: (index: number) => void;
   /**
-   * An item was picked on that line. The caller clears the free-text name and
-   * fills the latest price — it owns `setValue`.
+   * An item was picked on that line. The caller clears the free-text name,
+   * sets the quantity and fills the latest price — it owns `setValue`.
    */
   onItemChosen?: (index: number, itemId: string) => void;
-  /** A note under the line's Price box: where a filled-in price came from. */
+  /** An icon inside the line's Price box: where a filled-in price came from. */
   priceHint?: (index: number) => ReactNode;
   footerNote?: ReactNode;
 }) {
+  /** Lines switched to a typed name, keyed by the field array's stable id. */
+  const [typing, setTyping] = useState<Record<string, boolean>>({});
+
+  /**
+   * The line a + just added, whose item dropdown takes the cursor once it has
+   * rendered — so adding a line and choosing its item needs no extra click.
+   * Done here rather than with `insert`'s `focusName`, which in a browser test
+   * left the cursor on the + button: the rows after the new one re-register
+   * under shifted names in the same render.
+   */
+  const focusLine = useRef<number | null>(null);
+  useEffect(() => {
+    if (focusLine.current === null) return;
+    document.getElementById(`field-item-on-line-${focusLine.current + 1}`)?.focus();
+    focusLine.current = null;
+  }, [fields]);
+
+  const choices = [
+    ...itemChoices,
+    { value: TYPE_A_NAME, label: "Not in the list — type a name" },
+  ];
+
   return (
     <>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[58rem] text-sm">
+        <table className="w-full min-w-[60rem] text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="w-8 py-2 pr-2">#</th>
               <th className="py-2 pr-2">Product</th>
               <th className="w-20 py-2 pr-2">Qty</th>
               <th className="w-24 py-2 pr-2">Unit</th>
-              <th className="w-24 py-2 pr-2">Price</th>
-              <th className="w-24 py-2 pr-2">Disc/unit</th>
+              <th className="w-28 py-2 pr-2">Price</th>
+              <th className="w-28 py-2 pr-2">Disc/unit</th>
               <th className="w-20 py-2 pr-2">GST %</th>
               <th className="w-24 py-2 pr-2 text-right">GST</th>
               <th className="w-28 py-2 pr-2 text-right">Amount</th>
-              <th className="w-10 py-2" />
+              <th className="w-20 py-2" />
             </tr>
           </thead>
           <tbody>
-            {fields.map((field, index) => (
-              <tr key={field.id} className="border-b border-slate-100 align-top">
-                <td className="py-2 pr-2 text-slate-400">{index + 1}</td>
-                <td className="py-2 pr-2">
-                  <SelectField
-                    label={`Item on line ${index + 1}`}
-                    labelHidden
-                    placeholder="Choose an item"
-                    options={itemChoices}
-                    error={lineError(index, "itemId")}
-                    {...register(`items.${index}.itemId`)}
-                    onChange={(event) => {
-                      void register(`items.${index}.itemId`).onChange(event);
-                      // Choosing a catalogue item clears the free text. React
-                      // Hook Form keeps an unmounted field's value, so without
-                      // this a name typed before an item was picked would be
-                      // submitted beside it and contradict the item the line
-                      // actually references.
-                      if (event.target.value) onItemChosen?.(index, event.target.value);
-                    }}
-                  />
-                  {/*
-                    THE FREE-TEXT NAME APPEARS ONLY WHEN NO ITEM IS CHOSEN,
-                    which is the only time it does anything.
+            {fields.map((field, index) => {
+              const line = lines?.[index];
+              const itemField = `items.${index}.itemId`;
+              const nameField = `items.${index}.itemName`;
+              // A saved line that names a product without a catalogue item opens
+              // in the typed-name state, or its name would be hidden.
+              const showName =
+                typing[field.id] === true ||
+                (!line?.itemId && String(line?.itemName ?? "").trim() !== "");
+              const percent = discountPercentOf(line);
 
-                    It used to sit under every row, so each line was two controls
-                    tall whether it needed one or not — and this grid carries
-                    eight columns, so that height is paid on the widest form in
-                    the application.
-                  */}
-                  {!lines?.[index]?.itemId && (
-                    <div className="mt-1">
-                      <TextField
-                        label={`Or name the product on line ${index + 1}`}
+              return (
+                <tr key={field.id} className="border-b border-slate-100 align-top">
+                  <td className="py-3.5 pr-2 text-slate-400">{index + 1}</td>
+                  <td className="py-2 pr-2">
+                    {showName ? (
+                      <div className="flex items-start gap-1">
+                        <TextField
+                          label={`Product name on line ${index + 1}`}
+                          labelHidden
+                          placeholder="Type the product name"
+                          className="min-w-0 flex-1"
+                          error={lineError(index, "itemName")}
+                          {...register(nameField)}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          icon={List}
+                          className="px-2 py-2"
+                          title="Choose from the item list instead"
+                          aria-label={`Choose an item from the list on line ${index + 1}`}
+                          onClick={() => {
+                            void register(nameField).onChange(changeOf(nameField, ""));
+                            setTyping((state) => ({ ...state, [field.id]: false }));
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <SelectField
+                        label={`Item on line ${index + 1}`}
                         labelHidden
-                        placeholder="…or type a name"
-                        error={lineError(index, "itemName")}
-                        {...register(`items.${index}.itemName`)}
+                        placeholder="Choose an item"
+                        options={choices}
+                        error={lineError(index, "itemId")}
+                        {...register(itemField)}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          if (value === TYPE_A_NAME) {
+                            // The special option is never stored as an item id.
+                            event.target.value = "";
+                            void register(itemField).onChange(changeOf(itemField, ""));
+                            setTyping((state) => ({ ...state, [field.id]: true }));
+                            return;
+                          }
+                          void register(itemField).onChange(event);
+                          if (value) onItemChosen?.(index, value);
+                        }}
+                      />
+                    )}
+                  </td>
+                  <td className="py-2 pr-2">
+                    <TextField
+                      label={`Quantity on line ${index + 1}`}
+                      labelHidden
+                      inputMode="decimal"
+                      error={lineError(index, "quantity")}
+                      {...register(`items.${index}.quantity`)}
+                    />
+                  </td>
+                  <td className="py-2 pr-2">
+                    <SelectField
+                      label={`Unit on line ${index + 1}`}
+                      labelHidden
+                      placeholder="Unit"
+                      options={unitOptions}
+                      error={lineError(index, "unitId")}
+                      {...register(`items.${index}.unitId`)}
+                    />
+                  </td>
+                  <td className="relative py-2 pr-2">
+                    {/*
+                      NEVER type="number" for money — it returns a float and this
+                      system holds money as a decimal string end to end.
+                    */}
+                    <TextField
+                      label={`Price on line ${index + 1}`}
+                      labelHidden
+                      inputMode="decimal"
+                      style={{ paddingRight: "1.75rem" }}
+                      error={lineError(index, "unitPrice")}
+                      {...register(`items.${index}.unitPrice`)}
+                    />
+                    <div className="absolute right-3.5 top-[0.95rem] flex">{priceHint?.(index)}</div>
+                  </td>
+                  <td className="relative py-2 pr-2">
+                    <TextField
+                      label={`Discount per unit on line ${index + 1}`}
+                      labelHidden
+                      inputMode="decimal"
+                      style={{ paddingRight: percent ? "3.25rem" : undefined }}
+                      error={lineError(index, "discountPerUnit")}
+                      {...register(`items.${index}.discountPerUnit`)}
+                    />
+                    {percent && (
+                      <span
+                        className="tabular pointer-events-none absolute right-4 top-[1.05rem] text-[10px] text-slate-400"
+                        title="The discount as a percent of the price"
+                      >
+                        {percent}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-2">
+                    <TextField
+                      label={`GST percent on line ${index + 1}`}
+                      labelHidden
+                      inputMode="decimal"
+                      error={lineError(index, "gstPercent")}
+                      {...register(`items.${index}.gstPercent`)}
+                    />
+                  </td>
+                  <td className="tabular py-3.5 pr-2 text-right text-slate-600">
+                    {formatMoney(totals.lines[index]?.gstAmount ?? "0")}
+                  </td>
+                  <td className="tabular py-3.5 pr-2 text-right font-medium text-slate-900">
+                    {formatMoney(totals.lines[index]?.total ?? "0")}
+                  </td>
+                  <td className="py-2">
+                    <div className="flex justify-end gap-0.5">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        icon={Plus}
+                        className="px-2 py-2 text-brand-600 hover:bg-brand-50 hover:text-brand-700"
+                        title={`Add a line after line ${index + 1}`}
+                        aria-label={`Add a line after line ${index + 1}`}
+                        onClick={() => {
+                          focusLine.current = index + 1;
+                          onInsert(index);
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        icon={Trash2}
+                        className="px-2 py-2"
+                        title={`Remove line ${index + 1}`}
+                        aria-label={`Remove line ${index + 1}`}
+                        // The last line is not removable: an invoice with no lines
+                        // has no total and the contract refuses it, so the button
+                        // would produce an error rather than a result.
+                        disabled={fields.length === 1}
+                        onClick={() => onRemove(index)}
                       />
                     </div>
-                  )}
-                </td>
-                <td className="py-2 pr-2">
-                  <TextField
-                    label={`Quantity on line ${index + 1}`}
-                    labelHidden
-                    inputMode="decimal"
-                    error={lineError(index, "quantity")}
-                    {...register(`items.${index}.quantity`)}
-                  />
-                </td>
-                <td className="py-2 pr-2">
-                  <SelectField
-                    label={`Unit on line ${index + 1}`}
-                    labelHidden
-                    placeholder="Unit"
-                    options={unitOptions}
-                    error={lineError(index, "unitId")}
-                    {...register(`items.${index}.unitId`)}
-                  />
-                </td>
-                <td className="py-2 pr-2">
-                  {/*
-                    NEVER type="number" for money — it returns a float and this
-                    system holds money as a decimal string end to end.
-                  */}
-                  <TextField
-                    label={`Price on line ${index + 1}`}
-                    labelHidden
-                    inputMode="decimal"
-                    error={lineError(index, "unitPrice")}
-                    {...register(`items.${index}.unitPrice`)}
-                  />
-                  {priceHint?.(index)}
-                </td>
-                <td className="py-2 pr-2">
-                  <TextField
-                    label={`Discount per unit on line ${index + 1}`}
-                    labelHidden
-                    inputMode="decimal"
-                    error={lineError(index, "discountPerUnit")}
-                    {...register(`items.${index}.discountPerUnit`)}
-                  />
-                  <div className="tabular mt-1 text-right text-xs text-slate-400">
-                    {discountPercentOf(lines?.[index])}
-                  </div>
-                </td>
-                <td className="py-2 pr-2">
-                  <TextField
-                    label={`GST percent on line ${index + 1}`}
-                    labelHidden
-                    inputMode="decimal"
-                    error={lineError(index, "gstPercent")}
-                    {...register(`items.${index}.gstPercent`)}
-                  />
-                </td>
-                <td className="tabular py-4 pr-2 text-right text-slate-600">
-                  {formatMoney(totals.lines[index]?.gstAmount ?? "0")}
-                </td>
-                <td className="tabular py-4 pr-2 text-right font-medium text-slate-900">
-                  {formatMoney(totals.lines[index]?.total ?? "0")}
-                </td>
-                <td className="py-3">
-                  <Button
-                    variant="ghost"
-                    icon={Trash2}
-                    title={`Remove line ${index + 1}`}
-                    // The last line is not removable: an invoice with no lines
-                    // has no total and the contract refuses it, so the button
-                    // would produce an error rather than a result.
-                    disabled={fields.length === 1}
-                    onClick={() => onRemove(index)}
-                  />
-                </td>
-              </tr>
-            ))}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
           <tfoot>
             <tr className="text-sm">
@@ -313,12 +409,6 @@ export function InvoiceLineGrid({
             </tr>
           </tfoot>
         </table>
-      </div>
-
-      <div>
-        <Button variant="secondary" icon={Plus} onClick={onAdd}>
-          Add product
-        </Button>
       </div>
 
       {footerNote}

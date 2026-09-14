@@ -1,4 +1,6 @@
 import { useCallback, useRef, useState } from "react";
+import clsx from "clsx";
+import { AlertTriangle, History, Loader2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ItemLatestPrice } from "@accountmanagement/contracts";
 import { formatDate } from "../../lib/format";
@@ -8,11 +10,11 @@ import { latestPriceQuery } from "../items/api";
  * FILLS AN INVOICE LINE WITH THE ITEM'S LATEST PRICE the moment the item is
  * chosen (client request, 14 Sep 2026).
  *
- * Price, unit and GST rate are all filled from ONE source row: the newest
+ * Price, unit, GST rate and discount are all filled from ONE source row: the newest
  * invoice line for that item in the same direction, or the item master when it
  * has never been invoiced. They are overwritten, because choosing a different
- * item makes the previous item's figures wrong. Quantity and discount are left
- * alone. Everything filled stays editable.
+ * item makes the previous item's figures wrong. The caller sets a blank quantity
+ * to 1. Everything filled stays editable.
  *
  * A slow answer for an item the person has since changed is thrown away, so a
  * quick second choice can never be overwritten by the first one's price.
@@ -22,7 +24,7 @@ import { latestPriceQuery } from "../items/api";
  */
 export interface LatestPriceFill {
   onItemChosen: (index: number, itemId: string) => void;
-  /** The small note under a line's Price box, or null. */
+  /** The icon inside a line's Price box saying where its price came from, or null. */
   hintFor: (itemId: unknown) => React.ReactNode;
 }
 
@@ -70,8 +72,8 @@ export function useLatestPriceFill({
     (itemId: unknown) => {
       const id = String(itemId ?? "");
       if (!id) return null;
-      if (pending[id]) return <PriceHint>Finding latest price…</PriceHint>;
-      if (failed[id]) return <PriceHint tone="warning">Latest price not found</PriceHint>;
+      if (pending[id]) return <PriceHint tone="pending" label="Finding the latest price" />;
+      if (failed[id]) return <PriceHint tone="failed" label="The latest price could not be found" />;
       const price = found[id];
       return price ? <LatestPriceHint price={price} /> : null;
     },
@@ -81,46 +83,50 @@ export function useLatestPriceFill({
   return { onItemChosen, hintFor };
 }
 
+/**
+ * A 14px icon inside the Price box, so the line stays one row tall. The full
+ * sentence is its tooltip and its accessible name, which is what a screen
+ * reader and the tests read.
+ */
 function PriceHint({
-  children,
-  title,
-  tone = "muted",
+  label,
+  tone,
 }: {
-  children: React.ReactNode;
-  title?: string;
-  tone?: "muted" | "warning";
+  label: string;
+  tone: "invoice" | "master" | "pending" | "failed";
 }) {
+  const Icon = tone === "pending" ? Loader2 : tone === "failed" ? AlertTriangle : History;
   return (
-    <div
-      title={title}
-      className={`mt-1 text-[10px] leading-3 ${tone === "warning" ? "text-amber-700" : "text-slate-400"}`}
-    >
-      {children}
-    </div>
+    <span role="img" aria-label={label} title={label} className="inline-flex">
+      <Icon
+        aria-hidden
+        className={clsx(
+          "size-3.5",
+          tone === "invoice" && "text-brand-600",
+          tone === "master" && "text-slate-400",
+          tone === "pending" && "animate-spin text-slate-400",
+          tone === "failed" && "text-amber-600",
+        )}
+      />
+    </span>
   );
 }
 
-/** Where the filled price came from, short enough for the narrow Price column. */
+/** Where the filled price came from, as the icon's tooltip. */
 export function LatestPriceHint({ price }: { price: ItemLatestPrice }) {
   if (price.source === "item-master") {
-    return <PriceHint title="Never invoiced yet, so the Item Master price was used">Item master price</PriceHint>;
+    return <PriceHint tone="master" label="Item master price. This item has not been invoiced yet." />;
   }
 
   const kind = price.source === "purchase-invoice" ? "purchase" : "sale";
-  const date = price.documentDate ? formatDate(price.documentDate) : null;
-  const title = [
-    `Latest ${kind}`,
+  const label = [
+    `Last ${kind}`,
+    price.documentDate ? formatDate(price.documentDate) : null,
     price.displayNo ? `invoice ${price.displayNo}` : null,
     price.partyName,
-    date,
   ]
     .filter(Boolean)
     .join(" · ");
 
-  return (
-    <PriceHint title={title}>
-      Last {kind}
-      {date ? <span className="block">{date}</span> : null}
-    </PriceHint>
-  );
+  return <PriceHint tone="invoice" label={label} />;
 }

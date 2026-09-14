@@ -77,7 +77,7 @@ describe("PurchaseInvoiceFormDialog", () => {
 
     expect(within(grid()).getAllByRole("row").length).toBeGreaterThan(1);
     expect(screen.getByLabelText(/quantity on line 1/i)).toHaveValue("");
-    expect(screen.getByRole("button", { name: /add product/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add a line after line 1" })).toBeInTheDocument();
   });
 
   it("computes the line as it is typed", async () => {
