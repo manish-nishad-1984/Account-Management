@@ -1,0 +1,1 @@
+ALTER TABLE "suppliers" ALTER COLUMN "area" DROP NOT NULL;

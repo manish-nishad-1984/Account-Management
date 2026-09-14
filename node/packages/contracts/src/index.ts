@@ -8,6 +8,7 @@ export * from "./user-permissions";
 export * from "./companies";
 export * from "./sites";
 export * from "./site-groups";
+export * from "./site-addresses";
 export * from "./suppliers";
 export * from "./approvals";
 export * from "./items";

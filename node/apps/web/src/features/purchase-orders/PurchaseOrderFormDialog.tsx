@@ -31,6 +31,7 @@ import {
 import { DeliveryAddressPanels } from "./DeliveryAddressPanels";
 import { TermsField } from "./TermsField";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
+import { todayInput } from "../../lib/dates";
 
 /**
  * The purchase order form.
@@ -200,7 +201,11 @@ export function PurchaseOrderFormDialog({
     if (!open) return;
     setFormError(null);
     if (!isEdit) {
-      reset({ ...EMPTY, siteId: scope.siteId ?? "" });
+      // Dated today unless the person says otherwise, which is what the
+      // legacy screens did and what a day of data entry wants. Computed on
+      // open, never at module load: a tab left open overnight would
+      // otherwise offer yesterday.
+      reset({ ...EMPTY, documentDate: todayInput(), siteId: scope.siteId ?? "" });
     } else if (detail.data) {
       reset(toFormValues(detail.data));
     }

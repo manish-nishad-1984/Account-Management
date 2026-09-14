@@ -1,14 +1,17 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, count, eq, ilike, or, sql } from "drizzle-orm";
 import type {
+  AddressChoice,
   CreateSite,
   ListQuery,
+  SaveSiteAddress,
+  SiteAddress,
   SiteDetail,
   SortDirection,
   UpdateSite,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
-import { siteGroupSites, sites, userSites } from "../../db/schema";
+import { siteAddresses, siteGroupSites, sites, userSites } from "../../db/schema";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
@@ -279,5 +282,146 @@ export class SitesRepository extends BaseRepository {
     if (!row) {
       throw new NotFoundException("Site not found");
     }
+  }
+
+  /**
+   * THE DELIVERY ADDRESSES OF ONE SITE.
+   *
+   * Ordered by id, which is the order they were added in: `site_addresses.id`
+   * is an identity column, and the table has no name, no label and no sort
+   * field of its own to order by instead.
+   *
+   * Soft-deleted rows are excluded here and nowhere else. A purchase order that
+   * already names a deleted address keeps showing it, because the order stores
+   * the address as TEXT rather than as a reference — which is the behaviour the
+   * source has and the right one for a document.
+   */
+  async listAddresses(siteId: string): Promise<SiteAddress[]> {
+    await this.requireSite(siteId);
+    return this.db
+      .select({
+        id: siteAddresses.id,
+        siteId: siteAddresses.siteId,
+        address: siteAddresses.address,
+      })
+      .from(siteAddresses)
+      .where(and(eq(siteAddresses.siteId, siteId), eq(siteAddresses.isDeleted, false)))
+      .orderBy(siteAddresses.id);
+  }
+
+  async addAddress(siteId: string, input: SaveSiteAddress): Promise<SiteAddress> {
+    await this.requireSite(siteId);
+    const [row] = await writing(() =>
+      this.db
+        .insert(siteAddresses)
+        .values({ siteId, address: input.address })
+        .returning({
+          id: siteAddresses.id,
+          siteId: siteAddresses.siteId,
+          address: siteAddresses.address,
+        }),
+    );
+    return row!;
+  }
+
+  /**
+   * The site id is part of the WHERE clause, not just of the URL.
+   *
+   * Without it, anyone who can edit any site could edit any address by number —
+   * the ids are small integers, so guessing is not a feat. The route reads as
+   * nested; the query has to be nested too.
+   */
+  async updateAddress(
+    siteId: string,
+    addressId: number,
+    input: SaveSiteAddress,
+  ): Promise<SiteAddress> {
+    const [row] = await writing(() =>
+      this.db
+        .update(siteAddresses)
+        .set({ address: input.address })
+        .where(
+          and(
+            eq(siteAddresses.id, addressId),
+            eq(siteAddresses.siteId, siteId),
+            eq(siteAddresses.isDeleted, false),
+          ),
+        )
+        .returning({
+          id: siteAddresses.id,
+          siteId: siteAddresses.siteId,
+          address: siteAddresses.address,
+        }),
+    );
+    if (!row) {
+      throw new NotFoundException("Address not found");
+    }
+    return row;
+  }
+
+  /** Soft delete, matching every other delete in the application. */
+  async removeAddress(siteId: string, addressId: number): Promise<void> {
+    const [row] = await this.db
+      .update(siteAddresses)
+      .set({ isDeleted: true })
+      .where(
+        and(
+          eq(siteAddresses.id, addressId),
+          eq(siteAddresses.siteId, siteId),
+          eq(siteAddresses.isDeleted, false),
+        ),
+      )
+      .returning({ id: siteAddresses.id });
+
+    if (!row) {
+      throw new NotFoundException("Address not found");
+    }
+  }
+
+  /**
+   * Everywhere a delivery can go for this site, as one list for a dropdown.
+   *
+   * The site's own address leads, then its shipping address if it has one that
+   * differs, then the extra addresses. Blank entries are dropped rather than
+   * offered as empty options, and an address that repeats one already in the
+   * list is dropped with them: a site whose shipping address was filled in by
+   * copying its billing address — which several have — would otherwise offer
+   * the same words twice with no way to tell which is which.
+   */
+  async addressChoices(siteId: string): Promise<AddressChoice[]> {
+    const site = await this.requireSite(siteId);
+    const extras = await this.listAddresses(siteId);
+
+    const choices: AddressChoice[] = [];
+    const seen = new Set<string>();
+    const offer = (key: string, source: AddressChoice["source"], value: string | null) => {
+      const address = (value ?? "").trim();
+      if (address === "" || seen.has(address.toLowerCase())) return;
+      seen.add(address.toLowerCase());
+      choices.push({ key, source, address });
+    };
+
+    offer("site", "site", site.address);
+    offer("site-shipping", "site-shipping", site.shippingAddress);
+    for (const extra of extras) {
+      offer(`extra-${extra.id}`, "extra", extra.address);
+    }
+    return choices;
+  }
+
+  /** 404s rather than letting a bad site id look like a site with no addresses. */
+  private async requireSite(
+    siteId: string,
+  ): Promise<{ address: string | null; shippingAddress: string | null }> {
+    const [site] = await this.db
+      .select({ address: sites.address, shippingAddress: sites.shippingAddress })
+      .from(sites)
+      .where(and(eq(sites.id, siteId), eq(sites.isDeleted, false)))
+      .limit(1);
+
+    if (!site) {
+      throw new NotFoundException("Site not found");
+    }
+    return site;
   }
 }

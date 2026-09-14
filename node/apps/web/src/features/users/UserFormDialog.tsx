@@ -140,7 +140,7 @@ export function UserFormDialog({
               label="Phone"
               inputMode="tel"
               required
-              hint="10 digits, starting 6-9"
+              hint="More than one is fine, separated by commas"
               error={errors.phoneNo?.message}
               {...register("phoneNo")}
             />

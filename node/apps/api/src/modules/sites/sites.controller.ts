@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
   Patch,
   Post,
@@ -14,9 +15,14 @@ import {
   createSiteSchema,
   hasPermission,
   listQuerySchema,
+  saveSiteAddressSchema,
   updateSiteSchema,
+  type AddressChoicesResponse,
   type CreateSite,
   type ListResponse,
+  type SaveSiteAddress,
+  type SiteAddress,
+  type SiteAddressesResponse,
   type SiteDetail,
   type SiteRow,
   type SiteScopeResponse,
@@ -115,5 +121,66 @@ export class SitesController {
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<void> {
     return this.sites.remove(id, actorId(caller));
+  }
+
+  /**
+   * THE DELIVERY ADDRESSES OF A SITE — nested under it, not a module of their
+   * own.
+   *
+   * An address has no life outside its site: it is never listed across sites,
+   * never searched, and its permissions are the site's. A top-level
+   * `/site-addresses` resource would have to re-derive which site each row
+   * belongs to on every call, and would let an address be moved between sites by
+   * changing a field, which nothing should be able to do.
+   *
+   * The id is an INTEGER here, so `ParseIntPipe` rather than `ParseUUIDPipe`.
+   */
+  @Get(":id/addresses")
+  @Permissions("site.view")
+  listAddresses(@Param("id", ParseUUIDPipe) id: string): Promise<SiteAddressesResponse> {
+    return this.sites.listAddresses(id).then((rows) => ({ rows }));
+  }
+
+  /**
+   * Where a delivery can go for this site, for a document's address picker.
+   *
+   * NO `@Permissions`, like `assignable` above and for the same reason: the
+   * people who raise invoices hold `sales-invoice.add`, not `site.view`, and a
+   * picker they cannot load is a screen they cannot finish. It answers with
+   * addresses for one named site and nothing else — no names, no contacts, no
+   * ids beyond the choice keys.
+   */
+  @Get(":id/address-choices")
+  addressChoices(@Param("id", ParseUUIDPipe) id: string): Promise<AddressChoicesResponse> {
+    return this.sites.addressChoices(id).then((rows) => ({ rows }));
+  }
+
+  @Post(":id/addresses")
+  @Permissions("site.add")
+  addAddress(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(saveSiteAddressSchema)) body: SaveSiteAddress,
+  ): Promise<SiteAddress> {
+    return this.sites.addAddress(id, body);
+  }
+
+  @Patch(":id/addresses/:addressId")
+  @Permissions("site.edit")
+  updateAddress(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("addressId", ParseIntPipe) addressId: number,
+    @Body(new ZodValidationPipe(saveSiteAddressSchema)) body: SaveSiteAddress,
+  ): Promise<SiteAddress> {
+    return this.sites.updateAddress(id, addressId, body);
+  }
+
+  @Delete(":id/addresses/:addressId")
+  @Permissions("site.delete")
+  @HttpCode(204)
+  removeAddress(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("addressId", ParseIntPipe) addressId: number,
+  ): Promise<void> {
+    return this.sites.removeAddress(id, addressId);
   }
 }

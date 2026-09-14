@@ -7,6 +7,7 @@ import {
   CheckboxField,
   FormDialog,
   FormSection,
+  TextAreaField,
   TextField,
 } from "../../components/ui";
 import { applyServerErrors, unshownValidationMessage } from "../../lib/crud";
@@ -114,7 +115,7 @@ export function SupplierFormDialog({
             <TextField
               label="Mobile"
               inputMode="tel"
-              hint="10 digits; +91 and spacing are stripped"
+              hint="More than one is fine, separated by commas"
               error={errors.mobile?.message}
               {...register("mobile")}
             />
@@ -126,18 +127,20 @@ export function SupplierFormDialog({
             />
           </FormSection>
 
+          {/*
+            `buildingName` IS the address, whatever the source column is
+            called: across the 194 live suppliers it holds the whole thing,
+            down to the PIN code. It was a one-line input labelled Building
+            name next to a required Area that repeated it. Area and PIN code
+            stay in the form values so an edit preserves them.
+          */}
           <FormSection title="Address">
-            <TextField
-              label="Building name"
+            <TextAreaField
+              label="Address"
+              rows={2}
+              className="sm:col-span-2"
               error={errors.buildingName?.message}
               {...register("buildingName")}
-            />
-            <TextField label="Area" required error={errors.area?.message} {...register("area")} />
-            <TextField
-              label="PIN code"
-              inputMode="numeric"
-              error={errors.pincode?.message}
-              {...register("pincode")}
             />
           </FormSection>
 

@@ -30,6 +30,8 @@ import {
   useUpdateSalesInvoice,
 } from "./api";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
+import { todayInput } from "../../lib/dates";
+import { AddressPicker } from "../sites/AddressPicker";
 
 /**
  * The sales invoice form — the purchase invoice with the direction reversed.
@@ -163,7 +165,11 @@ export function SalesInvoiceFormDialog({
     if (!open) return;
     setFormError(null);
     if (!isEdit) {
-      reset({ ...EMPTY, siteId: scope.siteId ?? "" });
+      // Dated today unless the person says otherwise, which is what the
+      // legacy screens did and what a day of data entry wants. Computed on
+      // open, never at module load: a tab left open overnight would
+      // otherwise offer yesterday.
+      reset({ ...EMPTY, documentDate: todayInput(), siteId: scope.siteId ?? "" });
     } else if (detail.data) {
       reset(toFormValues(detail.data));
     }
@@ -222,6 +228,8 @@ export function SalesInvoiceFormDialog({
   const itemChoices = items.map((item) => ({ value: item.id, label: item.name }));
 
   const chosenCompanyId = watch("companyId");
+  // Watched, so the address picker follows the chosen site.
+  const chosenSiteId = watch("siteId") as string | undefined;
   const chosenCompany = companyRows.find((row) => row.id === chosenCompanyId);
 
   return (
@@ -400,6 +408,18 @@ export function SalesInvoiceFormDialog({
           </FormSection>
 
           <FormSection title="Addresses and notes" columns={1}>
+            {/*
+              The site’s own addresses, offered rather than retyped. Choosing
+              one COPIES it into the field below: the document keeps the words
+              it was raised with, so correcting the site later cannot rewrite
+              where a delivery already went.
+            */}
+            <AddressPicker
+              siteId={chosenSiteId ?? null}
+              onChoose={(address) =>
+                setValue("shippingAddress", address, { shouldDirty: true })
+              }
+            />
             <TextAreaField
               label="Shipping address"
               rows={2}

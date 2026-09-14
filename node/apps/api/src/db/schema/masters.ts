@@ -82,8 +82,27 @@ export const suppliers = pgTable(
     email: text("email"),
     gstNo: text("gst_no"),
 
+    /**
+     * THE SUPPLIER ADDRESS, all of it, in this one column.
+     *
+     * Named for `BuildingName` in the source, and the name is the only thing
+     * narrow about it: measured over the 194 live rows it holds the whole
+     * address, commas and all — `Ground Floor, Survey No 132/1/1/4, TNB
+     * POLYMERS, Kharadpada Road, ... 396235`. The form now says Address,
+     * because that is what it has always contained.
+     */
     buildingName: text("building_name"),
-    area: text("area").notNull(),
+
+    /**
+     * NULLABLE since 0016, having been `not null` since the port.
+     *
+     * It duplicated the address rather than narrowing it: of the 194 live rows
+     * every one is filled, and many hold a copy of `building_name` verbatim.
+     * The business asked for one address box and no area, so nothing writes
+     * this any more. The column and its data stay — a supplier list that lost
+     * its Location column overnight is not what was asked for either.
+     */
+    area: text("area"),
     cityId: integer("city_id"),
     stateId: integer("state_id"),
     pincode: text("pincode"),

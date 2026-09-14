@@ -17,6 +17,7 @@ import {
   useUpdatePurchaseRequest,
 } from "./api";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
+import { todayInput } from "../../lib/dates";
 
 /**
  * The purchase request form.
@@ -80,7 +81,11 @@ export function PurchaseRequestFormDialog({
     if (!isEdit) {
       // A new request defaults to the site in the header, which is what the
       // person raising it is looking at. Still changeable.
-      reset({ ...EMPTY, siteId: scope.siteId ?? "" });
+      // Dated today unless the person says otherwise, which is what the
+      // legacy screens did and what a day of data entry wants. Computed on
+      // open, never at module load: a tab left open overnight would
+      // otherwise offer yesterday.
+      reset({ ...EMPTY, documentDate: todayInput(), siteId: scope.siteId ?? "" });
     } else if (detail.data) {
       reset(toFormValues(detail.data));
     }

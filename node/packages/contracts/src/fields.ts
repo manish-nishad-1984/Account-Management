@@ -77,25 +77,50 @@ export const ifscCode = optionalText(11).superRefine((value, ctx) => {
 });
 
 /**
- * Indian mobile number — 10 digits starting 6-9. Spaces, hyphens and a +91 or 0
- * prefix are stripped first, because that is how people paste them.
+ * A phone number, or SEVERAL — and deliberately barely validated.
+ *
+ * This was `^[6-9][0-9]{9}$` after stripping spaces, hyphens and a `+91` or
+ * `0` prefix: exactly one Indian mobile, ten digits. Production disagrees on
+ * both counts. Site records hold more than one number in this single field —
+ * `9624972802,7567501707,98982598555` is a real row — and supplier numbers run
+ * to twelve digits, a country code the old rule did not strip and therefore
+ * rejected. Every such record could be read but never saved again, which is
+ * the worst way for a validator to fail: invisible until someone tries to
+ * correct a typo, and then blamed on the screen they were typing into.
+ *
+ * So the rule now asks two things only: that there is a digit, and that there
+ * are no letters. Both catch a field filled in by mistake — a name, an
+ * address — and neither has an opinion about how a number is written.
+ *
+ * NOTHING IS STRIPPED OR REWRITTEN any more either. The value is stored as
+ * typed, because someone who wrote `+91 98250 12345 (works)` meant the shape
+ * as much as the digits, and because a transform that quietly edits what was
+ * typed is indistinguishable from the field losing characters.
+ *
+ * Measured against the live database before it was loosened: every number in
+ * it is digits and commas, and the longest is 33 characters.
  */
-export const mobileNo = z
-  .string()
-  .trim()
-  .transform((value) => value.replace(/[\s-]/g, "").replace(/^(\+91|0)/, ""))
-  .transform((value) => (value === "" ? null : value))
-  .nullable()
-  .optional()
-  .transform((value) => value ?? null)
-  .superRefine((value, ctx) => {
-    if (value !== null && !/^[6-9][0-9]{9}$/.test(value)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Mobile number must be 10 digits starting 6-9",
-      });
-    }
-  });
+const PHONE_ALLOWED = /^[0-9+\-,/()\s.]+$/;
+
+export const phoneNumbers = optionalText(100).superRefine((value, ctx) => {
+  if (value === null) return;
+  if (!/[0-9]/.test(value)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Enter a phone number" });
+    return;
+  }
+  if (!PHONE_ALLOWED.test(value)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A phone number can hold digits and , + - / ( ) only",
+    });
+  }
+});
+
+/**
+ * The name three contracts already import. It points at the permissive rule:
+ * there is no strict mobile check left anywhere in the system.
+ */
+export const mobileNo = phoneNumbers;
 
 export const emailAddress = optionalText(200).superRefine((value, ctx) => {
   if (value !== null && !z.string().email().safeParse(value).success) {

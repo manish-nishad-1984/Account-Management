@@ -128,19 +128,22 @@ export function CompanyFormDialog({
             />
           </FormSection>
 
+          {/*
+            ONE BOX, and no Area or PIN code beside it.
+
+            The business asked for a single address field, and the data agrees:
+            what people type into Area is the address again, or part of it.
+            The two fields stay in `FormValues` and in `toFormValues` on
+            purpose — an edit then carries whatever the row already held,
+            rather than blanking it because the form stopped showing it.
+          */}
           <FormSection title="Address">
             <TextAreaField
               label="Address"
+              rows={2}
               className="sm:col-span-2"
               error={errors.address?.message}
               {...register("address")}
-            />
-            <TextField label="Area" error={errors.area?.message} {...register("area")} />
-            <TextField
-              label="PIN code"
-              inputMode="numeric"
-              error={errors.pincode?.message}
-              {...register("pincode")}
             />
           </FormSection>
 

@@ -109,9 +109,23 @@ describe("SuppliersRepository (real PostgreSQL)", () => {
       expect(stored!.createdBy).toBe(ACTOR);
     });
 
-    it("normalises a pasted mobile number, stripping +91 and spacing", async () => {
+    /**
+     * STORED AS TYPED since the phone rule was loosened. It used to strip the
+     * `+91` and the spacing, so what came back was not what was entered — and
+     * the rule that did the stripping also rejected the numbers this business
+     * actually keeps: several in one field, and twelve-digit ones.
+     */
+    it("keeps a pasted phone number exactly as it was written", async () => {
       const created = await repo.create(input({ mobile: "+91 98250 12345" }), ACTOR);
-      expect(created.mobile).toBe("9825012345");
+      expect(created.mobile).toBe("+91 98250 12345");
+    });
+
+    it("accepts several numbers in the one field, as the live rows have", async () => {
+      const created = await repo.create(
+        input({ mobile: "9624972802,7567501707,98982598555" }),
+        ACTOR,
+      );
+      expect(created.mobile).toBe("9624972802,7567501707,98982598555");
     });
 
     it("upper-cases GST and IFSC", async () => {
@@ -221,12 +235,31 @@ describe("SuppliersRepository (real PostgreSQL)", () => {
       expect(() => createSupplierSchema.parse({ name: "Bad", area: "X", gstNo: "NOTAGST" })).toThrow();
     });
 
-    it("refuses a mobile number that does not start 6-9", () => {
-      expect(() => createSupplierSchema.parse({ name: "Bad", area: "X", mobile: "1234567890" })).toThrow();
+    /**
+     * A landline, and a number that does not start 6-9, are both fine now. The
+     * phone rule asks only that there is a digit and no letters — see
+     * `fields.test.ts` for the whole of what is left of it.
+     */
+    it("accepts a number that is not an Indian mobile", () => {
+      expect(() =>
+        createSupplierSchema.parse({ name: "Fine", mobile: "0261-2345678" }),
+      ).not.toThrow();
     });
 
-    it("requires an area, as the source column is NOT NULL", () => {
-      expect(() => createSupplierSchema.parse({ name: "No Area" })).toThrow();
+    it("still refuses a name typed into the phone box", () => {
+      expect(() =>
+        createSupplierSchema.parse({ name: "Bad", mobile: "ring Amit" }),
+      ).toThrow();
+    });
+
+    /**
+     * AREA IS OPTIONAL SINCE 0016. It was required because the column was NOT
+     * NULL, and the column was NOT NULL because the source had it that way —
+     * but it holds a copy of the address rather than part of it, and the
+     * business asked for one address box with no area beside it.
+     */
+    it("no longer requires an area", () => {
+      expect(() => createSupplierSchema.parse({ name: "No Area" })).not.toThrow();
     });
   });
 });

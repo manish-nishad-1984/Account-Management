@@ -30,6 +30,8 @@ import {
   useUpdatePurchaseInvoice,
 } from "./api";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
+import { todayInput } from "../../lib/dates";
+import { AddressPicker } from "../sites/AddressPicker";
 
 /**
  * The purchase invoice form — the screen `11-create-purchase-invoice.md` calls
@@ -166,7 +168,11 @@ export function PurchaseInvoiceFormDialog({
     if (!open) return;
     setFormError(null);
     if (!isEdit) {
-      reset({ ...EMPTY, siteId: scope.siteId ?? "" });
+      // Dated today unless the person says otherwise, which is what the
+      // legacy screens did and what a day of data entry wants. Computed on
+      // open, never at module load: a tab left open overnight would
+      // otherwise offer yesterday.
+      reset({ ...EMPTY, documentDate: todayInput(), siteId: scope.siteId ?? "" });
     } else if (detail.data) {
       reset(toFormValues(detail.data));
     }
@@ -237,6 +243,8 @@ export function PurchaseInvoiceFormDialog({
   // order the SAME supplier raised, and offering all of them invites exactly the
   // mismatch the legacy text match makes silently.
   const chosenSupplierId = watch("supplierId");
+  // Watched, so the address picker follows the chosen site.
+  const chosenSiteId = watch("siteId") as string | undefined;
   const orders = usePurchaseOrderOptions(chosenSupplierId || null);
   const orderChoices = (orders.data?.rows ?? []).map((row) => ({
     value: row.id,
@@ -443,6 +451,18 @@ export function PurchaseInvoiceFormDialog({
           </FormSection>
 
           <FormSection title="Addresses and notes" columns={1}>
+            {/*
+              The site’s own addresses, offered rather than retyped. Choosing
+              one COPIES it into the field below: the document keeps the words
+              it was raised with, so correcting the site later cannot rewrite
+              where a delivery already went.
+            */}
+            <AddressPicker
+              siteId={chosenSiteId ?? null}
+              onChoose={(address) =>
+                setValue("shippingAddress", address, { shouldDirty: true })
+              }
+            />
             <TextAreaField
               label="Shipping address"
               rows={2}

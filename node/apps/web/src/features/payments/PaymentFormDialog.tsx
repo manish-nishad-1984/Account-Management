@@ -5,6 +5,7 @@ import { Alert, Button, Modal, SelectField, TextField } from "../../components/u
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { useCompanyOptions, useSupplierOptions } from "../purchase-orders/api";
 import { useCreatePayments } from "./api";
+import { todayInput } from "../../lib/dates";
 
 /**
  * The Payment Actions repeater, from `/Report/ReportDetails` panel 3.
@@ -36,7 +37,9 @@ const blankRow = (): Row => ({
   key: Math.random().toString(36).slice(2),
   kind: "payment",
   siteId: "",
-  paymentDate: new Date().toISOString().slice(0, 10),
+  // `todayInput`, not `toISOString().slice(0, 10)`: that converts to UTC first,
+  // so in India every payment entered after 18:30 was dated YESTERDAY.
+  paymentDate: todayInput(),
   amount: "",
   method: "",
   referenceNo: "",

@@ -21,6 +21,7 @@ import {
   useUpdateInwardChallan,
 } from "./api";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
+import { todayInput } from "../../lib/dates";
 
 /**
  * The inward challan form — "Create Inward Item".
@@ -74,7 +75,11 @@ export function InwardChallanFormDialog({
     setFormError(null);
     setQueued([]);
     if (!isEdit) {
-      reset({ ...EMPTY, siteId: scope.siteId ?? "" });
+      // Dated today unless the person says otherwise, which is what the
+      // legacy screens did and what a day of data entry wants. Computed on
+      // open, never at module load: a tab left open overnight would
+      // otherwise offer yesterday.
+      reset({ ...EMPTY, documentDate: todayInput(), siteId: scope.siteId ?? "" });
     } else if (detail.data) {
       reset(toFormValues(detail.data));
     }

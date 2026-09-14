@@ -17,6 +17,7 @@ import {
   useUpdateInventoryInward,
 } from "./api";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
+import { todayInput } from "../../lib/dates";
 
 /**
  * The inventory arrival form. Six fields, matching "Create Inventory".
@@ -66,7 +67,11 @@ export function InventoryFormDialog({
     if (!open) return;
     setFormError(null);
     if (!isEdit) {
-      reset({ ...EMPTY, siteId: scope.siteId ?? null });
+      // Dated today unless the person says otherwise, which is what the
+      // legacy screens did and what a day of data entry wants. Computed on
+      // open, never at module load: a tab left open overnight would
+      // otherwise offer yesterday.
+      reset({ ...EMPTY, documentDate: todayInput(), siteId: scope.siteId ?? null });
     } else if (detail.data) {
       reset(toFormValues(detail.data));
     }

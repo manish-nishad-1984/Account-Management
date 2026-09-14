@@ -181,7 +181,12 @@ describe("UserFormDialog", () => {
     expect(await screen.findByText(/plaintext password carried over/i)).toBeInTheDocument();
   });
 
-  it("normalises a pasted phone number before sending it", async () => {
+  /**
+   * SENT AS TYPED. The rule used to strip the `+91` and the spacing, so the
+   * number stored was not the number entered — and the same rule rejected a
+   * field holding two numbers, which is how this business records them.
+   */
+  it("sends a pasted phone number exactly as it was written", async () => {
     routes();
     render(null);
     await screen.findByText("Riverfront Phase 2");
@@ -195,6 +200,6 @@ describe("UserFormDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: /create user/i }));
 
     await waitFor(() => expect(bodyOfMethod("POST")).toBeDefined());
-    expect(bodyOfMethod("POST").phoneNo).toBe("9825011111");
+    expect(bodyOfMethod("POST").phoneNo).toBe("+91 98250 11111");
   });
 });

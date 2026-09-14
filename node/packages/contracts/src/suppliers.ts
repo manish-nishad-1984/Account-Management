@@ -45,7 +45,7 @@ export const supplierDetailSchema = z.object({
   email: z.string().nullable(),
   gstNo: z.string().nullable(),
   buildingName: z.string().nullable(),
-  area: z.string(),
+  area: z.string().nullable(),
   cityId: z.number().int().nullable(),
   stateId: z.number().int().nullable(),
   pincode: z.string().nullable(),
@@ -66,8 +66,14 @@ export const createSupplierSchema = z
     mobile: mobileNo,
     email: emailAddress,
     gstNo,
-    buildingName: optionalText(200),
-    area: requiredText("Area", 200),
+    /** The whole address. See the schema: the source name is narrower than the data. */
+    buildingName: optionalText(500),
+    /**
+     * OPTIONAL SINCE THE BUSINESS ASKED FOR ONE ADDRESS BOX. It was required,
+     * and it duplicated the address next to it rather than narrowing it. The
+     * form no longer offers it; an edit carries whatever the row already had.
+     */
+    area: optionalText(200),
     cityId: geographyId,
     stateId: geographyId,
     pincode,

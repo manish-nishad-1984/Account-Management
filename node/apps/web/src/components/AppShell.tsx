@@ -375,7 +375,16 @@ export function AppShell({ children }: { children: ReactNode }) {
             paneOpen ? "pr-4 sm:pr-[29rem]" : "pr-4 lg:pr-8",
           )}
         >
-          <div className="mx-auto max-w-7xl">{children}</div>
+          {/*
+            FULL WIDTH, no 1280px cap.
+
+            `max-w-7xl` centred every page in 1280px and left the rest of the
+            window empty, which on a 1920px screen is a third of the display
+            spent on margins while the grids underneath were scrolling
+            sideways. The client asked for the width and the grids are the
+            reason: 640px of unused desk is what a wide monitor was bought for.
+          */}
+          {children}
         </main>
       </div>
     </div>
