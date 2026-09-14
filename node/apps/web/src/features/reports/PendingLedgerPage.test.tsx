@@ -103,6 +103,16 @@ describe("the pending ledger screen", () => {
     expect(within(summary).getAllByText("13,000.00").length).toBeGreaterThan(0);
   });
 
+  it("asks the summary to leave out every row whose Net is zero", async () => {
+    withReports(pendingResponse([]));
+    renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
+
+    await screen.findByRole("table", { name: "Balance summary" });
+    const calls = requested("/reports/balances");
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((url) => url.searchParams.get("show") === "outstanding")).toBe(true);
+  });
+
   it("shows each pending invoice with what is left of it and the running balance", async () => {
     withReports(
       pendingResponse([

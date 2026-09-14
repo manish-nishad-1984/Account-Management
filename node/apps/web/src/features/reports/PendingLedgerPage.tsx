@@ -14,7 +14,8 @@ import { useBalances, usePendingLedger } from "./api";
  *
  * Four things differ from `LedgerPage`, all at the client's request:
  *
- *   1. The balance summary shows only Site, Supplier and Net.
+ *   1. The balance summary shows only Site, Supplier and Net, and hides any
+ *      row whose Net is zero.
  *   2. The ledger lists nothing whose balance is zero.
  *   3. The ledger has its own filters, above it, apart from the summary's.
  *   4. The ledger lists only the invoices still to be paid. Payments settle the
@@ -87,7 +88,10 @@ export function PendingLedgerPage() {
   const balances = useBalances({
     ...toQuery(summaryApplied),
     direction,
-    show: "all",
+    // The client asked (14 Sep 2026) for settled rows to be left out. Only a Net of
+    // exactly zero is hidden; an overpaid supplier still shows its negative Net.
+    // The footer is computed over the rows shown, so it still adds up.
+    show: "outstanding",
     limit: PAGE,
     offset: summaryOffset,
   });
@@ -164,7 +168,7 @@ export function PendingLedgerPage() {
           </div>
         )}
         {balances.data && balances.data.rows.length === 0 && (
-          <EmptyState title="Nothing to show" description="No documents match these filters." />
+          <EmptyState title="Nothing to show" description="Nothing is owed for these filters." />
         )}
         {balances.data && balances.data.rows.length > 0 && (
           <>
