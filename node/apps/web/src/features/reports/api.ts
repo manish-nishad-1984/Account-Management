@@ -2,9 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import {
   balancesResponseSchema,
   ledgerResponseSchema,
+  pendingLedgerResponseSchema,
   reportFileName,
   type BalancesResponse,
   type LedgerResponse,
+  type PendingLedgerResponse,
 } from "@accountmanagement/contracts";
 import { apiRequest, downloadRequest } from "../../lib/api-client";
 import { saveBlob } from "../../lib/download";
@@ -50,6 +52,18 @@ export const useLedger = (query: ReportQuery, enabled = true) =>
     queryFn: ({ signal }) =>
       apiRequest<LedgerResponse>(`/${RESOURCE}/ledger${toSearch(query)}`, {
         schema: ledgerResponseSchema,
+        signal,
+      }),
+  });
+
+/** The pending ledger: only the invoices still to be paid. */
+export const usePendingLedger = (query: ReportQuery, enabled = true) =>
+  useQuery({
+    queryKey: [RESOURCE, "pending-ledger", query],
+    enabled,
+    queryFn: ({ signal }) =>
+      apiRequest<PendingLedgerResponse>(`/${RESOURCE}/pending-ledger${toSearch(query)}`, {
+        schema: pendingLedgerResponseSchema,
         signal,
       }),
   });

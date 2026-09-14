@@ -6,6 +6,8 @@ import type {
   BalancesResponse,
   LedgerResponse,
   LedgerRow,
+  PendingLedgerResponse,
+  PendingLedgerRow,
   ReportFilter,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
@@ -284,6 +286,145 @@ export class ReportsRepository extends BaseRepository {
       totalCredit: this.money(totalCredit),
       totalDebit: this.money(totalDebit),
       closingBalance: this.difference(totalCredit, totalDebit),
+    };
+  }
+
+  /**
+   * THE PENDING LEDGER: the invoices still to be paid, and how much of each.
+   *
+   * See `pendingLedgerRowSchema` for the rule. In short, payments settle the
+   * oldest invoices first. The outstanding amount for a site and party is walked
+   * back from the newest invoice until it is used up.
+   *
+   * GROUPED BY SITE AND PARTY, not by party alone as the full ledger's running
+   * balance is. The summary above it on the screen is keyed by site and party,
+   * so the pending invoices under a summary row add up to that row's Net. Every
+   * live payment carries a site (576 of 576 on 14 Sep 2026), so a payment does
+   * not end up in a group of its own with nothing to settle.
+   *
+   * It works on the filtered set, as the summary does. A From date therefore
+   * leaves out earlier payments as well as earlier invoices, and the two
+   * screens still agree for the same filters.
+   *
+   * `newer_credit` is everything invoiced after this row. An invoice is still
+   * pending while that is below the outstanding amount. What is left once the
+   * newer invoices are counted is how much of this one is unpaid, capped at its
+   * own total.
+   */
+  async pendingLedger(
+    filter: ReportFilter,
+    page: { limit: number; offset: number },
+  ): Promise<PendingLedgerResponse> {
+    const entries = this.entries(filter);
+    const where = this.where(filter);
+
+    const base = sql`
+      with entries as (${entries}),
+      filtered as (
+        select e.*,
+          case when e.effect = 'credit' then e.amount else 0 end as credit,
+          case when e.effect = 'debit'  then e.amount else 0 end as debit
+        from entries e
+        where ${where}
+      ),
+      owed as (
+        select f.party_id, f.site_id, sum(f.credit) - sum(f.debit) as outstanding
+        from filtered f
+        group by f.party_id, f.site_id
+        having sum(f.credit) - sum(f.debit) > 0
+      ),
+      newest_first as (
+        select f.*,
+          sum(f.credit) over (
+            partition by f.party_id, f.site_id
+            order by f.document_date desc nulls last, f.created_at desc, f.document_id desc
+            rows between unbounded preceding and current row
+          ) - f.credit as newer_credit
+        from filtered f
+        where f.effect = 'credit' and f.credit > 0
+      ),
+      pending as (
+        select n.*, least(n.credit, o.outstanding - n.newer_credit) as pending
+        from newest_first n
+        join owed o
+          on o.party_id = n.party_id
+         and o.site_id is not distinct from n.site_id
+        where n.newer_credit < o.outstanding
+      )
+    `;
+
+    const totals = rawRow<{ total: string; total_amount: string; total_pending: string }>(
+      await this.db.execute(sql`
+        ${base}
+        select
+          count(*)::text                   as total,
+          coalesce(sum(credit), 0)::text   as total_amount,
+          coalesce(sum(pending), 0)::text  as total_pending
+        from pending
+      `),
+    );
+
+    const rows = rawRows<Record<string, string | null>>(
+      await this.db.execute(sql`
+      ${base},
+      running as (
+        -- The exact reverse of the newest_first ordering, so the last row of a
+        -- site and party carries its whole outstanding amount.
+        select p.*,
+          sum(p.pending) over (
+            partition by p.party_id, p.site_id
+            order by p.document_date asc nulls first, p.created_at asc, p.document_id asc
+            rows between unbounded preceding and current row
+          ) as balance
+        from pending p
+      )
+      select
+        r.document_id, r.source_kind, r.display_no, r.label,
+        r.document_date, r.party_id, r.site_id, r.site_group_id, r.company_id,
+        r.credit::text as amount, r.pending::text as pending, r.balance::text as balance,
+        s.name  as party_name,
+        st.name as site_name,
+        sg.name as site_group_name,
+        c.name  as company_name
+      from running r
+      join suppliers s  on s.id  = r.party_id
+      join companies c  on c.id  = r.company_id
+      left join sites st       on st.id = r.site_id
+      left join site_groups sg on sg.id = r.site_group_id
+      order by s.name asc, st.name asc nulls first, r.party_id, r.site_id,
+        r.document_date asc nulls first, r.created_at asc, r.document_id asc
+      limit ${page.limit} offset ${page.offset}
+    `),
+    );
+
+    const total = Number.parseInt(totals?.total ?? "0", 10);
+
+    return {
+      rows: rows.map(
+        (row): PendingLedgerRow => ({
+          id: `${row.source_kind}:${row.document_id}`,
+          documentId: String(row.document_id),
+          source: row.source_kind === "opening_balance" ? "opening_balance" : "invoice",
+          displayNo: String(row.display_no ?? "—"),
+          label: String(row.label ?? ""),
+          documentDate: row.document_date === null ? null : new Date(String(row.document_date)).toISOString(),
+          partyId: String(row.party_id),
+          partyName: String(row.party_name),
+          siteId: row.site_id === null ? null : String(row.site_id),
+          siteName: row.site_name === null ? null : String(row.site_name),
+          siteGroupId: row.site_group_id === null ? null : String(row.site_group_id),
+          siteGroupName: row.site_group_name === null ? null : String(row.site_group_name),
+          companyId: String(row.company_id),
+          companyName: String(row.company_name),
+          amount: this.money(row.amount),
+          pending: this.money(row.pending),
+          balance: this.money(row.balance),
+        }),
+      ),
+      total,
+      nextCursor: page.offset + page.limit < total ? String(page.offset + page.limit) : null,
+      totalAmount: this.money(totals?.total_amount),
+      totalPending: this.money(totals?.total_pending),
     };
   }
 

@@ -11,6 +11,7 @@ import {
   salesExportQuerySchema,
   type BalancesResponse,
   type LedgerResponse,
+  type PendingLedgerResponse,
 } from "@accountmanagement/contracts";
 import { ReportsRepository } from "./reports.repository";
 import { ReportExportService } from "./report-export.service";
@@ -105,6 +106,21 @@ export class ReportsController {
   ): Promise<LedgerResponse> {
     const { limit, offset, ...filter } = query;
     return this.reports.ledger(filter, { limit, offset });
+  }
+
+  /**
+   * The pending ledger: only the invoices still to be paid. A copy of the
+   * ledger for the client to try out, on the same right, because it shows a
+   * subset of what the ledger already shows.
+   */
+  @Get("pending-ledger")
+  @Permissions("reports-payments.view")
+  pendingLedger(
+    @Query(new ZodValidationPipe(ledgerQuerySchema))
+    query: ReturnType<typeof ledgerQuerySchema.parse>,
+  ): Promise<PendingLedgerResponse> {
+    const { limit, offset, ...filter } = query;
+    return this.reports.pendingLedger(filter, { limit, offset });
   }
 
   /**

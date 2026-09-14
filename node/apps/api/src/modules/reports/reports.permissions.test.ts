@@ -32,6 +32,7 @@ const permissionsOf = (controller: object, method: string): string[] => {
 
 const REPORT_ROUTES = [
   "ledger",
+  "pendingLedger",
   "balances",
   "ledgerXlsx",
   "ledgerPdf",

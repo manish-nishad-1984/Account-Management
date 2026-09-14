@@ -90,6 +90,9 @@ export const NAV: NavSection[] = [
       // in production, so naming them here hid the report from everyone.
       { label: "Sales Report", to: "/reports/sales", icon: ScrollText, permission: "reports-payments", status: "ready", legacy: "/Sales/SalesReport" },
       { label: "Ledger & Balances", to: "/reports/ledger", icon: ScrollText, permission: "reports-payments", status: "ready", legacy: "/InvoiceMaster/PayOutInvoice" },
+      // A copy of the ledger for the client to try out (14 Sep 2026): the summary
+      // cut to site, supplier and net, and only the invoices still to be paid.
+      { label: "Pending Ledger", to: "/reports/pending-ledger", icon: ScrollText, permission: "reports-payments", status: "ready" },
     ],
   },
 ];

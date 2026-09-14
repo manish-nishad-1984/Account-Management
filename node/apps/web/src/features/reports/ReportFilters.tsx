@@ -61,21 +61,33 @@ export function ReportFilters({
   onApply,
   onReset,
   partyLabel,
+  idPrefix,
+  label,
 }: {
   value: FilterState;
   onChange: (next: FilterState) => void;
   onApply: () => void;
   onReset: () => void;
   partyLabel: string;
+  /**
+   * Needed only when two filter rows share a page. The fields take their ids
+   * from their labels, so a second "Company" select would get the first one's
+   * id — and clicking the second label would move focus to the first control.
+   */
+  idPrefix?: string;
+  /** Names the form for a screen reader when there is more than one. */
+  label?: string;
 }) {
   const scope = useSiteScope();
   const suppliers = useSupplierOptions();
   const companies = useCompanyOptions();
 
   const set = (change: Partial<FilterState>) => onChange({ ...value, ...change });
+  const idOf = (name: string) => (idPrefix ? `${idPrefix}-${name}` : undefined);
 
   return (
     <form
+      aria-label={label}
       className="mb-4 rounded-xl border border-slate-200/80 bg-white p-3 shadow-card"
       onSubmit={(event) => {
         event.preventDefault();
@@ -84,6 +96,7 @@ export function ReportFilters({
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <SelectField
+          id={idOf("company")}
           label="Company"
           value={value.companyId}
           onChange={(event) => set({ companyId: event.target.value })}
@@ -97,6 +110,7 @@ export function ReportFilters({
         />
 
         <SelectField
+          id={idOf("site")}
           label="Site"
           value={value.siteId}
           onChange={(event) => set({ siteId: event.target.value })}
@@ -107,6 +121,7 @@ export function ReportFilters({
         />
 
         <SelectField
+          id={idOf("party")}
           label={partyLabel}
           value={value.partyId}
           onChange={(event) => set({ partyId: event.target.value })}
@@ -120,12 +135,14 @@ export function ReportFilters({
         />
 
         <TextField
+          id={idOf("from")}
           label="From"
           type="date"
           value={value.fromDate}
           onChange={(event) => set({ fromDate: event.target.value })}
         />
         <TextField
+          id={idOf("to")}
           label="To"
           type="date"
           value={value.toDate}

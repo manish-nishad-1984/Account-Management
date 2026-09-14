@@ -57,6 +57,7 @@ describe("the sidebar", () => {
 
     const names = navLinkNames().join("|");
     expect(names).not.toContain("Ledger & Balances");
+    expect(names).not.toContain("Pending Ledger");
     expect(names).not.toContain("Companies");
   });
 
@@ -82,6 +83,16 @@ describe("the sidebar", () => {
     expect(names).toContain("Sales Report");
   });
 
+  /** The client asked for the trial copy to sit directly under the ledger. */
+  it("puts the Pending Ledger straight after Ledger & Balances, on the same right", () => {
+    renderShell(["reports-payments.view"]);
+
+    const names = navLinkNames();
+    const ledger = names.findIndex((name) => name.includes("Ledger & Balances"));
+    expect(ledger).toBeGreaterThanOrEqual(0);
+    expect(names[ledger + 1]).toContain("Pending Ledger");
+  });
+
   it("shows none of them without that right", () => {
     renderShell(["purchase-invoice.view"]);
 
@@ -89,6 +100,7 @@ describe("the sidebar", () => {
     expect(names).toContain("Purchase Invoices");
     expect(names).not.toContain("Payments");
     expect(names).not.toContain("Ledger & Balances");
+    expect(names).not.toContain("Pending Ledger");
     expect(names).not.toContain("Sales Report");
   });
 

@@ -24,6 +24,7 @@ import { InwardChallansPage } from "./features/inward-challans/InwardChallansPag
 import { PermissionsPage } from "./features/users/PermissionsPage";
 import { PaymentsPage } from "./features/payments/PaymentsPage";
 import { LedgerPage } from "./features/reports/LedgerPage";
+import { PendingLedgerPage } from "./features/reports/PendingLedgerPage";
 import { SalesReportPage } from "./features/reports/SalesReportPage";
 import { createQueryClient } from "./lib/query-client";
 import { NAV } from "./navigation/nav";
@@ -55,6 +56,7 @@ const IMPLEMENTED: Record<string, React.ComponentType> = {
   "/inward": InwardChallansPage,
   "/payments": PaymentsPage,
   "/reports/ledger": LedgerPage,
+  "/reports/pending-ledger": PendingLedgerPage,
   "/reports/sales": SalesReportPage,
 };
 

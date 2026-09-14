@@ -109,6 +109,68 @@ export const ledgerResponseSchema = z.object({
 });
 export type LedgerResponse = z.infer<typeof ledgerResponseSchema>;
 
+/**
+ * THE PENDING LEDGER: only the invoices that are still to be paid.
+ *
+ * Added 14 Sep 2026 as a copy of the ledger for the client to try out. The full
+ * ledger lists every document and payment, and most of those are long settled.
+ * The client asked to see only what is still owed.
+ *
+ * PAYMENTS SETTLE THE OLDEST INVOICES FIRST. For each site and party, the
+ * outstanding amount is credit minus debit, the same figure as the summary's
+ * Net. That amount is then matched against the invoices from newest to oldest
+ * until it is used up:
+ *
+ *   - invoices newer than that point are unpaid in full;
+ *   - the invoice where it runs out is partly paid, so `pending` is less than
+ *     `amount`;
+ *   - everything older was paid off and is not listed.
+ *
+ * A site and party that are settled or overpaid list nothing. For the same
+ * filters, the `pending` column for one site and party adds up to exactly the
+ * Net shown for that row in the summary.
+ *
+ * Opening balances count as invoices here: they are money owed, and are paid
+ * off the same way.
+ */
+export const PENDING_LEDGER_SOURCES = ["invoice", "opening_balance"] as const;
+
+export const pendingLedgerRowSchema = z.object({
+  id: z.string(),
+  documentId: z.string(),
+  source: z.enum(PENDING_LEDGER_SOURCES),
+  displayNo: z.string(),
+  label: z.string(),
+  documentDate: z.string().nullable(),
+
+  partyId: z.string(),
+  partyName: z.string(),
+  siteId: z.string().nullable(),
+  siteName: z.string().nullable(),
+  siteGroupId: z.string().nullable(),
+  siteGroupName: z.string().nullable(),
+  companyId: z.string(),
+  companyName: z.string(),
+
+  /** The document's full total. */
+  amount: z.string(),
+  /** The part of it not yet paid. Always above zero, never above `amount`. */
+  pending: z.string(),
+  /** What is still owed for this site and party up to and including this row. */
+  balance: z.string(),
+});
+export type PendingLedgerRow = z.infer<typeof pendingLedgerRowSchema>;
+
+export const pendingLedgerResponseSchema = z.object({
+  rows: z.array(pendingLedgerRowSchema),
+  total: z.number().int().nonnegative(),
+  nextCursor: z.string().nullable(),
+  /** Over every pending row matching the filters, not just this page. */
+  totalAmount: z.string(),
+  totalPending: z.string(),
+});
+export type PendingLedgerResponse = z.infer<typeof pendingLedgerResponseSchema>;
+
 export const balanceRowSchema = z.object({
   /** `<siteId|none>:<partyId>` — the group key, since the pair is the identity. */
   id: z.string(),
