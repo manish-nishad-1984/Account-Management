@@ -37,16 +37,19 @@ export function LedgerPage() {
   const [applied, setApplied] = useState<FilterState>(EMPTY_FILTERS);
   const [offset, setOffset] = useState(0);
   /**
-   * The ledger loads nothing until Search is pressed (client request, 14 Sep
-   * 2026). Unfiltered, it pages through every document and payment in the
-   * system, which is slow and is not what anyone opens the screen to read. The
-   * summary above it still loads straight away.
+   * NOTHING LOADS UNTIL SEARCH IS PRESSED (client request, 14 Sep 2026) — not
+   * the ledger and not the summary. Unfiltered, both scan every document and
+   * payment in the system, which is slow and is not what anyone opens the
+   * screen to read. Reset goes back to that empty state.
    */
   const [ledgerSearched, setLedgerSearched] = useState(false);
 
   const query = { ...toQuery(applied), direction, limit: PAGE, offset };
   const ledger = useLedger(query, ledgerSearched);
-  const balances = useBalances({ ...toQuery(applied), direction, show: "all", limit: PAGE });
+  const balances = useBalances(
+    { ...toQuery(applied), direction, show: "all", limit: PAGE },
+    ledgerSearched,
+  );
 
   const apply = () => {
     setApplied(draft);
@@ -106,25 +109,33 @@ export function LedgerPage() {
       <section className="mb-6">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h2 className="heading text-sm">Balance summary</h2>
-          <ExportButtons
-            kind="balances"
-            query={{ ...toQuery(applied), direction, show: "all" }}
-          />
+          {ledgerSearched && (
+            <ExportButtons
+              kind="balances"
+              query={{ ...toQuery(applied), direction, show: "all" }}
+            />
+          )}
         </div>
-        {balances.isError && (
+        {!ledgerSearched && (
+          <EmptyState
+            title="Search to see the balances"
+            description="Choose the filters above and press Search. Nothing is loaded until then."
+          />
+        )}
+        {ledgerSearched && balances.isError && (
           <Alert icon={AlertTriangle}>
             {describeLoadError(balances.error, "the balance summary")}
           </Alert>
         )}
-        {balances.isPending && (
+        {ledgerSearched && balances.isPending && (
           <div className="flex items-center gap-2 py-6 text-sm text-slate-500">
             <Loader2 aria-hidden className="size-4 animate-spin" /> Loading balances
           </div>
         )}
-        {balances.data && balances.data.rows.length === 0 && (
+        {ledgerSearched && balances.data && balances.data.rows.length === 0 && (
           <EmptyState title="Nothing to show" description="No documents match these filters." />
         )}
-        {balances.data && balances.data.rows.length > 0 && (
+        {ledgerSearched && balances.data && balances.data.rows.length > 0 && (
           <div className="overflow-x-auto rounded-xl ring-1 ring-slate-200">
             <table className="w-full min-w-[40rem] border-collapse text-sm">
               <thead className="bg-slate-50 text-xs text-slate-500">

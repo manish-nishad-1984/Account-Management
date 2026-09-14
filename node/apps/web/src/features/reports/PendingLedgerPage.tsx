@@ -85,19 +85,24 @@ export function PendingLedgerPage() {
   const [ledgerApplied, setLedgerApplied] = useState<FilterState>(EMPTY_FILTERS);
   const [ledgerOffset, setLedgerOffset] = useState(0);
 
-  const balances = useBalances({
-    ...toQuery(summaryApplied),
-    direction,
-    // The client asked (14 Sep 2026) for settled rows to be left out. Only a Net of
-    // exactly zero is hidden; an overpaid supplier still shows its negative Net.
-    // The footer is computed over the rows shown, so it still adds up.
-    show: "outstanding",
-    limit: PAGE,
-    offset: summaryOffset,
-  });
-  // The ledger loads nothing until its Search is pressed (client request, 14 Sep
-  // 2026). Its Reset goes back to that state. The summary still loads at once.
+  // NOTHING LOADS UNTIL SEARCH IS PRESSED (client request, 14 Sep 2026). Each
+  // section waits for its own Search, and its Reset takes it back to empty.
+  const [summarySearched, setSummarySearched] = useState(false);
   const [ledgerSearched, setLedgerSearched] = useState(false);
+
+  const balances = useBalances(
+    {
+      ...toQuery(summaryApplied),
+      direction,
+      // The client asked (14 Sep 2026) for settled rows to be left out. Only a Net of
+      // exactly zero is hidden; an overpaid supplier still shows its negative Net.
+      // The footer is computed over the rows shown, so it still adds up.
+      show: "outstanding",
+      limit: PAGE,
+      offset: summaryOffset,
+    },
+    summarySearched,
+  );
   const ledger = usePendingLedger(
     {
       ...toQuery(ledgerApplied),
@@ -154,29 +159,37 @@ export function PendingLedgerPage() {
           onApply={() => {
             setSummaryApplied(summaryDraft);
             setSummaryOffset(0);
+            setSummarySearched(true);
           }}
           onReset={() => {
             setSummaryDraft(EMPTY_FILTERS);
             setSummaryApplied(EMPTY_FILTERS);
             setSummaryOffset(0);
+            setSummarySearched(false);
           }}
           partyLabel={partyLabel}
         />
 
-        {balances.isError && (
+        {!summarySearched && (
+          <EmptyState
+            title="Search to see the balances"
+            description="Choose the summary filters above and press Search. Nothing is loaded until then."
+          />
+        )}
+        {summarySearched && balances.isError && (
           <Alert icon={AlertTriangle}>
             {describeLoadError(balances.error, "the balance summary")}
           </Alert>
         )}
-        {balances.isPending && (
+        {summarySearched && balances.isPending && (
           <div className="flex items-center gap-2 py-6 text-sm text-slate-500">
             <Loader2 aria-hidden className="size-4 animate-spin" /> Loading balances
           </div>
         )}
-        {balances.data && balances.data.rows.length === 0 && (
+        {summarySearched && balances.data && balances.data.rows.length === 0 && (
           <EmptyState title="Nothing to show" description="Nothing is owed for these filters." />
         )}
-        {balances.data && balances.data.rows.length > 0 && (
+        {summarySearched && balances.data && balances.data.rows.length > 0 && (
           <>
             <div className="overflow-x-auto rounded-xl ring-1 ring-slate-200">
               <table aria-label="Balance summary" className="w-full border-collapse text-sm">

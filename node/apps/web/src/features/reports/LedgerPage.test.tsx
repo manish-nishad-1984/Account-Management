@@ -152,6 +152,7 @@ describe("the ledger and balances screen", () => {
   it("explains that returns reduce the balance", async () => {
     withReports(ledgerResponse([]), balancesResponse([balanceRow()]));
     renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
+    await search();
 
     // Awaited on the NUMBER, not on the sentence: the paragraph renders
     // unconditionally, so awaiting it passes while the panel is still loading.
@@ -253,24 +254,41 @@ describe("the ledger and balances screen", () => {
       ).length;
 
   /** Client request, 14 Sep 2026: nothing is loaded into the ledger by default. */
-  it("loads no ledger until Search is pressed, while the summary loads at once", async () => {
+  const balanceRequests = () =>
+    vi
+      .mocked(globalThis.fetch)
+      .mock.calls.filter((call) =>
+        new URL(String(call[0]), "http://localhost").pathname.endsWith("/reports/balances"),
+      ).length;
+
+  /**
+   * Client request, 14 Sep 2026, repeated: nothing is shown by default — not the
+   * ledger and not the summary — until the user searches.
+   */
+  it("loads neither the ledger nor the summary until Search is pressed", async () => {
     withReports(ledgerResponse([ledgerRow()]), balancesResponse([balanceRow()]));
     renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
 
-    expect(await screen.findAllByText("8,000.00")).not.toHaveLength(0);
-    expect(screen.getByText("Search to see the ledger")).toBeInTheDocument();
+    expect(await screen.findByText("Search to see the ledger")).toBeInTheDocument();
+    expect(screen.getByText("Search to see the balances")).toBeInTheDocument();
     expect(screen.queryByText("BB/154")).not.toBeInTheDocument();
+    expect(screen.queryByText("8,000.00")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /excel|pdf/i })).not.toBeInTheDocument();
     expect(ledgerRequests()).toBe(0);
+    expect(balanceRequests()).toBe(0);
 
     await search();
 
     expect(await screen.findByText("BB/154")).toBeInTheDocument();
+    expect((await screen.findAllByText("8,000.00")).length).toBeGreaterThan(0);
     expect(screen.queryByText("Search to see the ledger")).not.toBeInTheDocument();
+    expect(screen.queryByText("Search to see the balances")).not.toBeInTheDocument();
     expect(ledgerRequests()).toBe(1);
+    expect(balanceRequests()).toBe(1);
   });
 
-  it("goes back to an empty ledger on Reset", async () => {
-    withReports(ledgerResponse([ledgerRow()]));
+  it("goes back to empty, summary and ledger both, on Reset", async () => {
+    withReports(ledgerResponse([ledgerRow()]), balancesResponse([balanceRow()]));
     renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
     await search();
     await screen.findByText("BB/154");
@@ -278,6 +296,8 @@ describe("the ledger and balances screen", () => {
     await userEvent.click(screen.getByRole("button", { name: "Reset" }));
 
     expect(await screen.findByText("Search to see the ledger")).toBeInTheDocument();
+    expect(screen.getByText("Search to see the balances")).toBeInTheDocument();
     expect(screen.queryByText("BB/154")).not.toBeInTheDocument();
+    expect(screen.queryByText("8,000.00")).not.toBeInTheDocument();
   });
 });

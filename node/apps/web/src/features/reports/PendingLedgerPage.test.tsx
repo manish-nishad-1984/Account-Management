@@ -85,6 +85,12 @@ const searchLedger = async () =>
     within(await screen.findByRole("form", { name: "Ledger filters" })).getByRole("button", { name: "Search" }),
   );
 
+/** The summary also loads nothing until its own Search is pressed. */
+const searchSummary = async () =>
+  userEvent.click(
+    within(await screen.findByRole("form", { name: "Balance summary filters" })).getByRole("button", { name: "Search" }),
+  );
+
 describe("the pending ledger screen", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
@@ -98,6 +104,7 @@ describe("the pending ledger screen", () => {
   it("shows only site, supplier and net in the balance summary", async () => {
     withReports(pendingResponse([]));
     renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
+    await searchSummary();
 
     const summary = await screen.findByRole("table", { name: "Balance summary" });
     const headers = within(summary)
@@ -112,6 +119,7 @@ describe("the pending ledger screen", () => {
   it("asks the summary to leave out every row whose Net is zero", async () => {
     withReports(pendingResponse([]));
     renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
+    await searchSummary();
 
     await screen.findByRole("table", { name: "Balance summary" });
     const calls = requested("/reports/balances");
@@ -162,6 +170,8 @@ describe("the pending ledger screen", () => {
     withReports(pendingResponse([pendingRow()]));
     renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
 
+    await searchSummary();
+    await screen.findByRole("table", { name: "Balance summary" });
     const ledgerFilters = await screen.findByRole("form", { name: "Ledger filters" });
     expect(screen.getByRole("form", { name: "Balance summary filters" })).toBeInTheDocument();
 
@@ -180,7 +190,7 @@ describe("the pending ledger screen", () => {
     withReports(pendingResponse([]));
     renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
 
-    await screen.findByRole("table", { name: "Balance summary" });
+    await screen.findByRole("form", { name: "Balance summary filters" });
 
     const summaryFrom = within(screen.getByRole("form", { name: "Balance summary filters" })).getByLabelText("From");
     const ledgerFrom = within(screen.getByRole("form", { name: "Ledger filters" })).getByLabelText("From");
@@ -188,25 +198,44 @@ describe("the pending ledger screen", () => {
     expect(summaryFrom.id).not.toBe(ledgerFrom.id);
   });
 
-  /** Client request, 14 Sep 2026: nothing is loaded into the ledger by default. */
-  it("loads no pending invoices until the ledger's Search is pressed", async () => {
+  /**
+   * Client request, 14 Sep 2026, repeated: nothing is shown by default — not the
+   * summary and not the ledger. Each section waits for its own Search.
+   */
+  it("loads neither the summary nor the ledger until each one's Search is pressed", async () => {
     withReports(pendingResponse([pendingRow()]));
     renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
 
-    await screen.findByRole("table", { name: "Balance summary" });
+    expect(await screen.findByText("Search to see the balances")).toBeInTheDocument();
     expect(screen.getByText("Search to see pending invoices")).toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "Balance summary" })).not.toBeInTheDocument();
     expect(screen.queryByRole("table", { name: "Pending invoices" })).not.toBeInTheDocument();
+    expect(requested("/reports/balances")).toHaveLength(0);
     expect(requested("/reports/pending-ledger")).toHaveLength(0);
 
-    // The summary's own Search does not load the ledger either.
-    await userEvent.click(
-      within(screen.getByRole("form", { name: "Balance summary filters" })).getByRole("button", { name: "Search" }),
-    );
+    // The summary's Search loads the summary, and only the summary.
+    await searchSummary();
+    expect(await screen.findByRole("table", { name: "Balance summary" })).toBeInTheDocument();
+    expect(requested("/reports/balances")).toHaveLength(1);
     expect(requested("/reports/pending-ledger")).toHaveLength(0);
 
     await searchLedger();
     expect(await screen.findByRole("table", { name: "Pending invoices" })).toBeInTheDocument();
     expect(requested("/reports/pending-ledger")).toHaveLength(1);
+  });
+
+  it("goes back to an empty summary when the summary's Reset is pressed", async () => {
+    withReports(pendingResponse([]));
+    renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
+    await searchSummary();
+    await screen.findByRole("table", { name: "Balance summary" });
+
+    await userEvent.click(
+      within(screen.getByRole("form", { name: "Balance summary filters" })).getByRole("button", { name: "Reset" }),
+    );
+
+    expect(await screen.findByText("Search to see the balances")).toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "Balance summary" })).not.toBeInTheDocument();
   });
 
   it("goes back to an empty ledger when the ledger's Reset is pressed", async () => {
