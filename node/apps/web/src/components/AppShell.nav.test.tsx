@@ -111,6 +111,17 @@ describe("the sidebar", () => {
     expect(screen.queryByText("Reports")).not.toBeInTheDocument();
   });
 
+  it("lists Document Layouts under Settings for whoever holds the template right", () => {
+    renderShell(["document-template.view"]);
+    expect(navLinkNames().join("|")).toContain("Document Layouts");
+  });
+
+  /** Printing an invoice needs only the invoice; managing layouts is its own right. */
+  it("does not list Document Layouts for someone who can only open invoices", () => {
+    renderShell(["sales-invoice.view", "purchase-invoice.view"]);
+    expect(navLinkNames().join("|")).not.toContain("Document Layouts");
+  });
+
   it("shows nothing at all to a user with no permissions", () => {
     renderShell([]);
     expect(screen.queryAllByRole("link")).toHaveLength(0);

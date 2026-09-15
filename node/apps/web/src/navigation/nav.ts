@@ -16,6 +16,7 @@ import {
   FileInput,
   FileText,
   LayoutDashboard,
+  LayoutTemplate,
   MapPin,
   Layers,
   Package,
@@ -93,6 +94,14 @@ export const NAV: NavSection[] = [
       // A copy of the ledger for the client to try out (14 Sep 2026): the summary
       // cut to site, supplier and net, and only the invoices still to be paid.
       { label: "Pending Ledger", to: "/reports/pending-ledger", icon: ScrollText, permission: "reports-payments", status: "ready" },
+    ],
+  },
+  {
+    title: "Settings",
+    items: [
+      // New, with no legacy screen: the old app has one fixed print page per
+      // invoice (client request, 14 Sep 2026).
+      { label: "Document Layouts", to: "/settings/document-layouts", icon: LayoutTemplate, permission: "document-template", status: "ready" },
     ],
   },
 ];

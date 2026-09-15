@@ -24,6 +24,7 @@ import { PaymentsModule } from "./modules/payments/payments.module";
 import { ReportsModule } from "./modules/reports/reports.module";
 import { InwardChallansModule } from "./modules/inward-challans/inward-challans.module";
 import { GridPreferencesModule } from "./modules/grid-preferences/grid-preferences.module";
+import { DocumentTemplatesModule } from "./modules/document-templates/document-templates.module";
 
 const env = loadEnv();
 
@@ -59,6 +60,7 @@ const env = loadEnv();
     PaymentsModule,
     ReportsModule,
     GridPreferencesModule,
+    DocumentTemplatesModule,
   ],
   providers: [
     // Order matters: authenticate, then authorise.

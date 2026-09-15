@@ -10,3 +10,4 @@ export * from "./purchase-invoices";
 export * from "./sales-invoices";
 export * from "./payments";
 export * from "./preferences";
+export * from "./document-templates";

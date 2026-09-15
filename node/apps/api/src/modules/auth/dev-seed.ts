@@ -522,6 +522,11 @@ export class DevSeed implements OnModuleInit {
        */
       { userId: admin.id, formId: 14, isViewAllow: true },
       { userId: admin.id, formId: 15, isViewAllow: true },
+      /**
+       * Document Template — form 100, inserted by migration 0018 rather than
+       * here, because production needs the row too and gets it the same way.
+       */
+      { userId: admin.id, formId: 100, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
     ]);
 
     /**

@@ -26,3 +26,4 @@ export * from "./reports";
 export * from "./format";
 export * from "./report-sheets";
 export * from "./grid-preferences";
+export * from "./document-templates";

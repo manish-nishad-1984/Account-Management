@@ -26,6 +26,8 @@ import { PaymentsPage } from "./features/payments/PaymentsPage";
 import { LedgerPage } from "./features/reports/LedgerPage";
 import { PendingLedgerPage } from "./features/reports/PendingLedgerPage";
 import { SalesReportPage } from "./features/reports/SalesReportPage";
+import { DocumentLayoutsPage } from "./features/document-templates/DocumentLayoutsPage";
+import { PrintDocumentPage } from "./features/document-templates/PrintDocumentPage";
 import { createQueryClient } from "./lib/query-client";
 import { NAV } from "./navigation/nav";
 
@@ -58,6 +60,7 @@ const IMPLEMENTED: Record<string, React.ComponentType> = {
   "/reports/ledger": LedgerPage,
   "/reports/pending-ledger": PendingLedgerPage,
   "/reports/sales": SalesReportPage,
+  "/settings/document-layouts": DocumentLayoutsPage,
 };
 
 /**
@@ -114,6 +117,19 @@ export function App() {
                 />
               );
             })}
+            {/*
+              Printing sits OUTSIDE the shell: no sidebar or header to hide from
+              the printout. Still behind sign-in, and the API checks the right to
+              view the document itself.
+            */}
+            <Route
+              path="/print/:documentType/:id"
+              element={
+                <RequireAuth>
+                  <PrintDocumentPage />
+                </RequireAuth>
+              }
+            />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AuthProvider>

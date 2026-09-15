@@ -22,3 +22,6 @@ export type {
   DeliveryAllocationLine,
   DeliveryAllocation,
 } from "./delivery-allocation.js";
+export { amountInWords, wholeNumberInWords } from "./amount-in-words.js";
+export { summariseTax } from "./tax-summary.js";
+export type { TaxSummary, TaxSummaryLine, TaxSummaryRow } from "./tax-summary.js";
