@@ -3,7 +3,7 @@
 **Written:** 2 September 2026, after the unblocking session. **Last extended
 15 September 2026** (§5v). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
+> **This file is current as of `b0f728b3`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
@@ -3399,7 +3399,7 @@ Tests: **1158** — 1139 Node (63 contracts + 65 domain + 665 API + 346 web) + 1
 ## 5v. Exports, the real data, and a week of client requests on the live site (9–15 Sep 2026)
 
 Covers `c8cc38c8` through `154d5405` — 24 code commits. Written up on 15 Sep
-2026 in `<COMMIT>`.
+2026 in `b0f728b3`.
 
 **THIS SECTION IS RECONSTRUCTED.** None of the sessions that made these commits
 updated this file, although `PLAN.md` and `14-reports-and-payments.md` both
