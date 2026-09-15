@@ -200,3 +200,95 @@ describe("InwardChallanFormDialog — attachments on a new challan", () => {
     expect(callsTo("/documents")).toHaveLength(0);
   });
 });
+
+/**
+ * Receiver from the site's contacts (client request, 15 Sep 2026): "Fetch Name
+ * & Contact no. from Site Master. Example: Nikunj-989898988".
+ */
+describe("InwardChallanFormDialog — receiver and challan number", () => {
+  beforeEach(() => {
+    vi.spyOn(globalThis, "fetch");
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const CONTACTS = {
+    rows: [
+      { id: "c1", name: "Nikunj", phone: "989898988", label: "Nikunj-989898988" },
+      { id: "c2", name: "Ramesh", phone: "9825011111", label: "Ramesh-9825011111" },
+    ],
+  };
+
+  const routes = (receivers: unknown, challan: unknown = json(detail())) =>
+    routeFetch([
+      [/\/inward-challans\/receivers$/, receivers],
+      [/\/inward-challans\/[0-9a-f-]{36}$/, challan],
+      [/\/inward-challans$/, json(detail())],
+      [/\/units$/, UNITS],
+      [/\/items$/, ITEMS],
+      [/\/suppliers$/, SUPPLIERS],
+    ]);
+
+  const posted = () => JSON.parse(String(callsTo("/inward-challans")[0]![1]!.body));
+
+  const openNew = () =>
+    renderWithAuth(<InwardChallanFormDialog open challanId={null} onClose={vi.fn()} />, {
+      scope: { siteId: SITE, siteName: "SURAT-AURO UNIVERSITY" },
+    });
+
+  it("labels the supplier's number Challan No.", async () => {
+    routes(CONTACTS);
+    openNew();
+
+    expect(await screen.findByLabelText("Challan No.")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Invoice no/i)).not.toBeInTheDocument();
+  });
+
+  it("offers the site's contacts and saves the chosen one as Name-Phone", async () => {
+    routes(CONTACTS);
+    openNew();
+
+    const receiver = await screen.findByRole("combobox", { name: "Receiver" });
+    await screen.findByRole("option", { name: "Nikunj-989898988" });
+    await userEvent.selectOptions(receiver, "Nikunj-989898988");
+    await fillAndSave();
+
+    await waitFor(() => expect(callsTo("/inward-challans")).toHaveLength(1));
+    expect(posted().receiverName).toBe("Nikunj-989898988");
+    const asked = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
+    expect(asked).toContain(`/api/v1/inward-challans/receivers?siteId=${SITE}`);
+  });
+
+  it("lets someone not on the list be typed in", async () => {
+    routes(CONTACTS);
+    openNew();
+
+    await screen.findByRole("option", { name: "Nikunj-989898988" });
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Receiver" }), "Someone else — type a name");
+    await userEvent.type(screen.getByRole("textbox", { name: "Receiver" }), "Driver Mahesh");
+    await fillAndSave();
+
+    await waitFor(() => expect(callsTo("/inward-challans")).toHaveLength(1));
+    expect(posted().receiverName).toBe("Driver Mahesh");
+  });
+
+  it("gives a plain text box when the site has no contacts", async () => {
+    routes({ rows: [] });
+    openNew();
+
+    expect(await screen.findByText(/This site has no contacts in the Site master/)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Receiver" })).toBeInTheDocument();
+  });
+
+  /** An old challan's receiver is whatever the site wrote; it must not be blanked. */
+  it("keeps an old receiver that is not one of today's contacts", async () => {
+    routes(CONTACTS, json({ ...detail(), receiverName: "SURESHBHAI" }));
+    renderWithAuth(<InwardChallanFormDialog open challanId={CREATED} onClose={vi.fn()} />, {
+      scope: { siteId: SITE, siteName: "SURAT-AURO UNIVERSITY" },
+    });
+
+    expect(await screen.findByDisplayValue("SURESHBHAI")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Site contacts" })).toBeInTheDocument();
+  });
+});

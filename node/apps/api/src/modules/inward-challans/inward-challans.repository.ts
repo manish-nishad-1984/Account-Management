@@ -1,6 +1,8 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, count, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
+import { receiverLabel } from "@accountmanagement/contracts";
 import type {
+  ChallanReceiver,
   CreateInwardChallan,
   InwardChallanDetail,
   InwardChallanFilters,
@@ -13,6 +15,7 @@ import {
   inwardChallanDocuments,
   inwardChallans,
   items,
+  siteContacts,
   sites,
   suppliers,
   units,
@@ -290,6 +293,22 @@ export class InwardChallansRepository extends BaseRepository {
       isDownloadable: row.storageKey !== null,
       uploadedAt: iso(row.createdAt) as string,
     }));
+  }
+
+  /**
+   * A site's contact list, as Receiver choices. Read-only, and nothing but names
+   * and numbers: a site that does not exist simply has no contacts.
+   */
+  async receivers(siteId: string): Promise<ChallanReceiver[]> {
+    const rows = await this.db
+      .select({ id: siteContacts.id, name: siteContacts.name, phone: siteContacts.phone })
+      .from(siteContacts)
+      .where(eq(siteContacts.siteId, siteId))
+      .orderBy(siteContacts.lineNumber);
+
+    return rows
+      .map((row) => ({ ...row, label: receiverLabel(row.name, row.phone) }))
+      .filter((row) => row.label !== "");
   }
 
   async findById(id: string): Promise<InwardChallanDetail> {

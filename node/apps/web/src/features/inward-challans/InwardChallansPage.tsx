@@ -123,7 +123,9 @@ export function InwardChallansPage() {
       },
       {
         id: "invoiceNo",
-        header: "Invoice",
+        // "Challan No." since 15 Sep 2026, at the client's request. The value was
+        // always the number written on the challan; only the label changed.
+        header: "Challan No.",
         cell: ({ row }) => (
           <div className="flex items-center gap-1.5">
             {/* Free text — 922, 1 and 253-1 are all real. Not right-aligned,

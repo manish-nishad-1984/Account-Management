@@ -107,6 +107,30 @@ export const createInwardChallanSchema = z.object({
 export type CreateInwardChallan = z.infer<typeof createInwardChallanSchema>;
 
 export const updateInwardChallanSchema = createInwardChallanSchema.partial();
+
+/**
+ * "Nikunj-989898988" — how a site contact is written into a challan's Receiver.
+ *
+ * The client's own example (15 Sep 2026). A contact with only a name or only a
+ * number gives just that part, never a dangling hyphen.
+ */
+export const receiverLabel = (name: string | null, phone: string | null): string =>
+  [name?.trim(), phone?.trim()].filter((part): part is string => Boolean(part)).join("-");
+
+/**
+ * The people a challan's Receiver can be chosen from: the site's contact list
+ * from the Site master, in the order it was keyed.
+ */
+export const challanReceiverSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+  phone: z.string().nullable(),
+  label: z.string(),
+});
+export type ChallanReceiver = z.infer<typeof challanReceiverSchema>;
+
+export const challanReceiversSchema = z.object({ rows: z.array(challanReceiverSchema) });
+export type ChallanReceivers = z.infer<typeof challanReceiversSchema>;
 export type UpdateInwardChallan = z.infer<typeof updateInwardChallanSchema>;
 
 /**

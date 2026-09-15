@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch, type UseFormRegisterReturn } from "react-hook-form";
+import { List } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
 import { createInwardChallanSchema, type InwardChallanDetail } from "@accountmanagement/contracts";
-import { Alert, FormDialog, FormSection, SelectField, TextField } from "../../components/ui";
+import { Alert, Button, FormDialog, FormSection, SelectField, TextField } from "../../components/ui";
 import {
   ChallanAttachments,
   QueuedAttachments,
@@ -15,6 +16,7 @@ import { useAllUnits } from "../items/api";
 import { useItemOptions } from "../purchase-requests/api";
 import {
   useAttachChallanDocuments,
+  useChallanReceivers,
   useCreateInwardChallan,
   useInwardChallan,
   useSupplierOptions,
@@ -64,11 +66,14 @@ export function InwardChallanFormDialog({
     handleSubmit,
     reset,
     setError,
+    setValue,
+    control,
     formState: { errors },
   } = useForm<FormValues, unknown, Submitted>({
     resolver: zodResolver(createInwardChallanSchema),
     defaultValues: EMPTY,
   });
+  const [siteId, receiverName] = useWatch({ control, name: ["siteId", "receiverName"] });
 
   useEffect(() => {
     if (!open) return;
@@ -202,8 +207,10 @@ export function InwardChallanFormDialog({
               {...register("supplierId")}
             />
             <TextField
-              label="Invoice no"
-              hint="As the supplier wrote it — 922, 253-1, anything"
+              // "Challan No." at the client's request (15 Sep 2026). The same
+              // field — `invoiceNo` — only the label changed.
+              label="Challan No."
+              hint="As written on the challan — 922, 253-1, anything"
               error={errors.invoiceNo?.message}
               {...register("invoiceNo")}
             />
@@ -220,12 +227,14 @@ export function InwardChallanFormDialog({
               error={errors.vehicleNumber?.message}
               {...register("vehicleNumber")}
             />
-            <TextField
-              label="Receiver"
-              className="sm:col-span-2"
-              hint="Who took delivery. Free text — whatever the site writes down."
+            <ReceiverField
+              siteId={siteId || null}
+              value={receiverName ?? ""}
               error={errors.receiverName?.message}
-              {...register("receiverName")}
+              onChoose={(label) =>
+                setValue("receiverName", label, { shouldDirty: true, shouldValidate: true })
+              }
+              textInput={register("receiverName")}
             />
           </FormSection>
 
@@ -246,6 +255,110 @@ export function InwardChallanFormDialog({
         </>
       )}
     </FormDialog>
+  );
+}
+
+const SOMEONE_ELSE = "__someone-else__";
+
+/**
+ * Receiver: chosen from the site's contacts in the Site master, written as
+ * "Nikunj-989898988" (client request, 15 Sep 2026).
+ *
+ * STILL A TEXT FIELD UNDERNEATH. `receiver_name` has always been free text, and
+ * old challans hold whatever the site wrote down, so:
+ *  - "Someone else — type a name" opens a text box, for a driver or a visitor
+ *    who is not on the list;
+ *  - a challan whose receiver is not one of today's contacts opens in the text
+ *    box with its value, rather than showing a blank dropdown and losing it;
+ *  - a site with no contacts, or contacts that fail to load, gets the text box,
+ *    so a challan can always be recorded.
+ */
+function ReceiverField({
+  siteId,
+  value,
+  error,
+  onChoose,
+  textInput,
+}: {
+  siteId: string | null;
+  value: string;
+  error?: string;
+  onChoose: (label: string) => void;
+  textInput: UseFormRegisterReturn;
+}) {
+  const receivers = useChallanReceivers(siteId);
+  const contacts = receivers.data?.rows ?? [];
+  const [typing, setTyping] = useState(false);
+
+  const known = contacts.some((contact) => contact.label === value);
+  const showText = contacts.length === 0 || typing || (value !== "" && !known);
+
+  if (receivers.isLoading) {
+    return (
+      <SelectField
+        label="Receiver"
+        className="sm:col-span-2"
+        placeholder="Loading site contacts…"
+        options={[]}
+        value=""
+        disabled
+        onChange={() => {}}
+      />
+    );
+  }
+
+  if (showText) {
+    return (
+      <div className="flex items-end gap-2 sm:col-span-2">
+        <TextField
+          label="Receiver"
+          className="flex-1"
+          hint={
+            contacts.length === 0
+              ? "This site has no contacts in the Site master. Type who took delivery."
+              : "Who took delivery, if not one of the site's contacts."
+          }
+          error={error}
+          {...textInput}
+        />
+        {contacts.length > 0 && (
+          <Button
+            variant="secondary"
+            icon={List}
+            className="mb-5"
+            onClick={() => {
+              setTyping(false);
+              onChoose("");
+            }}
+          >
+            Site contacts
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <SelectField
+      label="Receiver"
+      className="sm:col-span-2"
+      hint="The site's contacts, from the Site master."
+      error={error}
+      value={value}
+      onChange={(event) => {
+        if (event.target.value === SOMEONE_ELSE) {
+          setTyping(true);
+          onChoose("");
+        } else {
+          onChoose(event.target.value);
+        }
+      }}
+      options={[
+        { value: "", label: "Choose who took delivery" },
+        ...contacts.map((contact) => ({ value: contact.label, label: contact.label })),
+        { value: SOMEONE_ELSE, label: "Someone else — type a name" },
+      ]}
+    />
   );
 }
 

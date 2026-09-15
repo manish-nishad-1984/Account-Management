@@ -26,6 +26,7 @@ import {
   type InwardChallanListResponse,
   type BulkApproval,
   type BulkApprovalResult,
+  type ChallanReceivers,
   type SetApproval,
   type UpdateInwardChallan,
 } from "@accountmanagement/contracts";
@@ -106,6 +107,22 @@ export class InwardChallansController {
        */
       totalQuantity: totals.quantity,
     };
+  }
+
+  /**
+   * Who a challan's Receiver can be chosen from: the site's contacts in the Site
+   * master (client request, 15 Sep 2026).
+   *
+   * Under the CHALLAN's right, not `site.view`: the person recording deliveries
+   * at a site gate is not someone who maintains the site master, and every
+   * challan right already needs View. Names and numbers only.
+   */
+  @Get("receivers")
+  @Permissions("inward-challan.view")
+  async receivers(
+    @Query(new ZodValidationPipe(z.object({ siteId: z.string().uuid() }))) query: { siteId: string },
+  ): Promise<ChallanReceivers> {
+    return { rows: await this.challans.receivers(query.siteId) };
   }
 
   @Get(":id")

@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  challanReceiversSchema,
   inwardChallanDetailSchema,
   inwardChallanListResponseSchema,
   inwardChallanRowSchema,
   listResponseSchema,
   supplierRowSchema,
+  type ChallanReceivers,
   type CreateInwardChallan,
   type InwardChallanDetail,
   type InwardChallanListResponse,
@@ -45,6 +47,18 @@ export const useInwardChallanList = (params: ListParams, filters: ChallanFilters
     { enabled: isReady, responseSchema: inwardChallanListResponseSchema },
   );
 };
+
+/** The site's contacts, for the Receiver dropdown. Nothing is asked for without a site. */
+export const useChallanReceivers = (siteId: string | null) =>
+  useQuery({
+    queryKey: [RESOURCE, "receivers", siteId],
+    enabled: Boolean(siteId),
+    queryFn: ({ signal }) =>
+      apiRequest<ChallanReceivers>(`/${RESOURCE}/receivers?siteId=${siteId}`, {
+        schema: challanReceiversSchema,
+        signal,
+      }),
+  });
 
 export const useInwardChallan = (id: string | null) =>
   useQuery({
