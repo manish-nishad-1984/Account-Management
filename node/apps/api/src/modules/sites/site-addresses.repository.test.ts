@@ -180,6 +180,22 @@ describe("site addresses (real PostgreSQL)", () => {
       expect(locations.map((l) => l.name)).toEqual(["Block A", "Store yard"]);
     });
 
+    it("lists the site's contacts in the Site master's order, and no other site's", async () => {
+      await db.insert(schema.siteContacts).values([
+        { siteId, name: "Suresh", phone: "9824000002", lineNumber: 2 },
+        { siteId, name: "Ramesh", phone: "9824000001", lineNumber: 1 },
+        { siteId, name: null, phone: "0261 2400000", lineNumber: 3 },
+        { siteId: otherSiteId, name: "Theirs", phone: "9999999999", lineNumber: 1 },
+      ]);
+
+      const { contacts } = await repo.documentOptions(siteId);
+      expect(contacts.map(({ name, phone }) => ({ name, phone }))).toEqual([
+        { name: "Ramesh", phone: "9824000001" },
+        { name: "Suresh", phone: "9824000002" },
+        { name: null, phone: "0261 2400000" },
+      ]);
+    });
+
     /**
      * Several live sites have a shipping address that is a copy of the billing
      * one. Offered twice, the list asks the reader to choose between two

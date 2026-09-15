@@ -28,6 +28,7 @@ import {
   useUpdatePurchaseOrder,
 } from "./api";
 import { SiteAddressFields } from "../sites/SiteAddressFields";
+import { SiteContactSelect } from "../sites/SiteContactSelect";
 import { TermsField } from "./TermsField";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { todayInput } from "../../lib/dates";
@@ -294,6 +295,8 @@ export function PurchaseOrderFormDialog({
   const chosenSiteId = useWatch({ control, name: "siteId" });
   const chosenLocationId = useWatch({ control, name: "siteLocationId" });
   const shippingAddress = useWatch({ control, name: "shippingAddress" });
+  const contactName = useWatch({ control, name: "contactName" });
+  const contactNumber = useWatch({ control, name: "contactNumber" });
   const terms = useWatch({ control, name: "terms" }) ?? "";
   const termsTemplate = useWatch({ control, name: "termsTemplate" }) ?? null;
 
@@ -355,12 +358,14 @@ export function PurchaseOrderFormDialog({
               options={siteOptions}
               error={errors.siteId?.message}
               {...register("siteId", {
-                // The location and shipping address belonged to the site chosen
-                // before. Cleared HERE, on the person's change, and not by
+                // The location, shipping address and contact belonged to the site
+                // chosen before. Cleared HERE, on the person's change, and not by
                 // watching the value — see SiteAddressFields.
                 onChange: () => {
                   setValue("siteLocationId", "");
                   setValue("shippingAddress", "");
+                  setValue("contactName", "");
+                  setValue("contactNumber", "");
                 },
               })}
             />
@@ -583,15 +588,15 @@ export function PurchaseOrderFormDialog({
               error={errors.deliveryDate?.message}
               {...register("deliveryDate")}
             />
-            <TextField
-              label="Contact person"
-              error={errors.contactName?.message}
-              {...register("contactName")}
-            />
-            <TextField
-              label="Contact number"
-              error={errors.contactNumber?.message}
-              {...register("contactNumber")}
+            <SiteContactSelect
+              siteId={chosenSiteId}
+              name={contactName}
+              number={contactNumber}
+              onChange={(name, number) => {
+                setValue("contactName", name, { shouldDirty: true });
+                setValue("contactNumber", number, { shouldDirty: true });
+              }}
+              error={errors.contactName?.message ?? errors.contactNumber?.message}
             />
             {/* The legacy label reads "Other ContectNo". The column is spelled
                 correctly and so is this. */}

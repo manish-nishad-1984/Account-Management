@@ -33,6 +33,7 @@ import {
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { todayInput } from "../../lib/dates";
 import { SiteAddressFields } from "../sites/SiteAddressFields";
+import { SiteContactSelect } from "../sites/SiteContactSelect";
 
 /**
  * The purchase invoice form — the screen `11-create-purchase-invoice.md` calls
@@ -264,6 +265,8 @@ export function PurchaseInvoiceFormDialog({
   const chosenSiteId = watch("siteId") as string | undefined;
   const chosenLocationId = useWatch({ control, name: "siteLocationId" });
   const shippingAddress = useWatch({ control, name: "shippingAddress" });
+  const contactName = useWatch({ control, name: "contactName" });
+  const contactNumber = useWatch({ control, name: "contactNumber" });
   const orders = usePurchaseOrderOptions(chosenSupplierId || null);
   const orderChoices = (orders.data?.rows ?? []).map((row) => ({
     value: row.id,
@@ -335,12 +338,14 @@ export function PurchaseInvoiceFormDialog({
               hint="Optional — the source allows an invoice with no site"
               error={errors.siteId?.message}
               {...register("siteId", {
-                // The location and shipping address belonged to the site chosen
-                // before. Cleared HERE, on the person's change, and not by
+                // The location, shipping address and contact belonged to the site
+                // chosen before. Cleared HERE, on the person's change, and not by
                 // watching the value — see SiteAddressFields.
                 onChange: () => {
                   setValue("siteLocationId", "");
                   setValue("shippingAddress", "");
+                  setValue("contactName", "");
+                  setValue("contactNumber", "");
                 },
               })}
             />
@@ -469,15 +474,15 @@ export function PurchaseInvoiceFormDialog({
               error={errors.dispatchBy?.message}
               {...register("dispatchBy")}
             />
-            <TextField
-              label="Contact person"
-              error={errors.contactName?.message}
-              {...register("contactName")}
-            />
-            <TextField
-              label="Contact number"
-              error={errors.contactNumber?.message}
-              {...register("contactNumber")}
+            <SiteContactSelect
+              siteId={chosenSiteId}
+              name={contactName}
+              number={contactNumber}
+              onChange={(name, number) => {
+                setValue("contactName", name, { shouldDirty: true });
+                setValue("contactNumber", number, { shouldDirty: true });
+              }}
+              error={errors.contactName?.message ?? errors.contactNumber?.message}
             />
             <TextField
               label="Payment terms"

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requiredText } from "./fields";
 import { siteLocationSchema } from "./site-locations";
+import { siteContactSchema } from "./sites";
 
 /**
  * The delivery addresses belonging to a site.
@@ -63,11 +64,14 @@ export type AddressChoice = z.infer<typeof addressChoiceSchema>;
  * The rule the business set on 15 Sep 2026: the BILLING address is our own
  * site's address and nothing else, so it is shown, not chosen; the SHIPPING
  * address is exactly one of the site's addresses, chosen from a list. The
- * location names are what the Location select offers.
+ * location names are what the Location select offers, and the CONTACTS are the
+ * site's contact list from the Site master, one of which the form picks as the
+ * document's contact person.
  */
 export const siteDocumentOptionsSchema = z.object({
   billingAddress: z.string().nullable(),
   shippingAddresses: z.array(addressChoiceSchema),
   locations: z.array(siteLocationSchema),
+  contacts: z.array(siteContactSchema),
 });
 export type SiteDocumentOptions = z.infer<typeof siteDocumentOptionsSchema>;

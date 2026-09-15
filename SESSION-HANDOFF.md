@@ -117,7 +117,7 @@ AC/
         └── web/                   React 19 + Vite + Tailwind (489 tests)
 ```
 
-**1563 tests pass** — 1544 Node (135 contracts + 90 domain + 845 API + 474 web)
+**1579 tests pass** — 1560 Node (135 contracts + 90 domain + 855 API + 480 web)
 plus 19 .NET. **Both figures were RUN on 15 Sep 2026**, against `154d5405`:
 Node exit 0, 48 of 48 API files and 51 of 51 web files, zero failures; .NET
 `Passed! - Failed: 0, Passed: 19`. `npm run typecheck` was run the same day:
@@ -181,7 +181,7 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 ## 4. Repository state
 
 Branch **`main`**, working tree clean, pushed to `origin/main`. Typechecks, and
-all **1563 tests pass** — 1544 Node (135 contracts + 90 domain + 845 API + 474
+all **1579 tests pass** — 1560 Node (135 contracts + 90 domain + 855 API + 480
 web) + 19 .NET.
 
 The Node suite was last measured on the §5w code commit (15 Sep 2026) and RUN;
@@ -3730,6 +3730,24 @@ Asked before building, and answered:
   same reason, and a stored address that is no longer in the list shows as
   "Saved on this document" rather than vanishing.
 
+### The contact person is picked, not typed (same day, follow-up request)
+
+Straight after, the client asked that the contacts entered on the Site master be
+what a PO or invoice PICKS as its contact. On all three forms the "Contact
+person" and "Contact number" boxes became one **Contact person** select, fed by
+`contacts` on `/sites/:id/document-options`, in the Site master's order.
+
+- **No migration.** The choice is copied into the columns the documents always
+  had, `contact_name` / `contact_number`, which the print layouts already read.
+  No id is stored, and cannot be: the Site master REPLACES its contact rows on
+  every save, so an id would dangle after the next edit of the site.
+- `contactNumber` max went **20 → 100**, the site contact's own ceiling — one
+  entry there can hold several numbers, and 20 would refuse the pick.
+- A contact typed on the old form shows as "… (saved on this document)" and is
+  kept on save. Changing the site clears it, in the Site select's `onChange`.
+- The PO's **Other contact** pair is still free text; the request named the
+  contact person only.
+
 ### The migration, and how it was checked
 
 Five hand-written statements after the generated DDL: contacts from the site
@@ -3774,19 +3792,18 @@ the old data cannot exist.
 
 ### The honest cost
 
-- Tests went DOWN: web 489 → 474 and API 849 → 845. The site-groups tests, the
-  address picker and the PO delivery-panel tests were deleted with the code they
-  tested; the replacements (13 site-location repository tests, 4 migration tests,
-  the billing/shipping/location PO tests, 7 new web tests) are fewer and narrower.
+- Web tests went DOWN, 489 → 480: the site-groups screen, the address picker and
+  the PO delivery-panel tests were deleted with the code they tested, and the
+  replacements are fewer and narrower. API went 849 → 855 (13 site-location
+  repository tests and 4 migration tests in, the site-groups tests out).
 - The print data has no billing block yet; templates still show the site address
   they showed before.
 - Two copies of history: `site_group_id` and `site_location_id` on the same rows
   until the old columns are dropped.
 
-Tests: **1563** — 1544 Node (135 contracts + 90 domain + 845 API + 474 web) + 19
-.NET. The Node suite was RUN on 15 Sep 2026; three failures in that run (two
-stale fixtures, trap 3) were fixed and their workspaces re-run green (contracts
-135, web 474). No .NET file changed since `154d5405`, so its 19 are proved by the
+Tests: **1579** — 1560 Node (135 contracts + 90 domain + 855 API + 480 web) + 19
+.NET. The Node suite was RUN on 15 Sep 2026 after the contact picker, all green;
+the run before it had three failures (two stale fixtures, trap 3), fixed first. No .NET file changed since `154d5405`, so its 19 are proved by the
 diff, not re-run. `npm run build` clean.
 
 Deployed: <RELEASE>.

@@ -470,7 +470,7 @@ export class SitesRepository extends BaseRepository {
    */
   async documentOptions(siteId: string): Promise<SiteDocumentOptions> {
     const site = await this.requireSite(siteId);
-    const [extras, locationAddresses, locations] = await Promise.all([
+    const [extras, locationAddresses, locations, contacts] = await Promise.all([
       this.listAddresses(siteId),
       this.db
         .select({ id: siteLocationAddresses.id, address: siteLocationAddresses.address })
@@ -482,6 +482,12 @@ export class SitesRepository extends BaseRepository {
         .from(siteLocations)
         .where(and(eq(siteLocations.siteId, siteId), eq(siteLocations.isDeleted, false)))
         .orderBy(siteLocations.name),
+      // In the order the Site master lists them, so the first is the site's main contact.
+      this.db
+        .select({ id: siteContacts.id, name: siteContacts.name, phone: siteContacts.phone })
+        .from(siteContacts)
+        .where(eq(siteContacts.siteId, siteId))
+        .orderBy(siteContacts.lineNumber),
     ]);
 
     const choices: AddressChoice[] = [];
@@ -507,6 +513,7 @@ export class SitesRepository extends BaseRepository {
       // `billingAddressOf` in site-document-rules.ts applies the same rule on save.
       shippingAddresses: choices,
       locations,
+      contacts,
     };
   }
 

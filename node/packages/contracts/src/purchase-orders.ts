@@ -258,7 +258,11 @@ export const createPurchaseOrderSchema = z.object({
 
   buyersPurchaseNo: optionalText(100),
   contactName: optionalText(200),
-  contactNumber: optionalText(20),
+  /**
+   * 100, the site contact's own ceiling: the contact is picked from the site's
+   * list (15 Sep 2026), and one entry there can hold several numbers.
+   */
+  contactNumber: optionalText(100),
   otherContactName: optionalText(200),
   otherContactNumber: optionalText(20),
   dispatchBy: optionalText(200),

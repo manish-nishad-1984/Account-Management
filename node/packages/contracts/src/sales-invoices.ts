@@ -198,7 +198,11 @@ export const createSalesInvoiceSchema = z.object({
   description: optionalText(2000),
 
   contactName: optionalText(200),
-  contactNumber: optionalText(20),
+  /**
+   * 100, the site contact's own ceiling: the contact is picked from the site's
+   * list (15 Sep 2026), and one entry there can hold several numbers.
+   */
+  contactNumber: optionalText(100),
   /** ONE shipping address, chosen from the site's addresses. Billing is set by the server. */
   shippingAddress: optionalText(500),
 

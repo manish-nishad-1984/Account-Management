@@ -82,6 +82,10 @@ const SITE_OPTIONS = {
     { id: "55555555-5555-4555-8555-555555555555", name: "Block A" },
     { id: "66666666-6666-4666-8666-666666666666", name: "Store Yard" },
   ],
+  contacts: [
+    { id: "c1", name: "Ramesh", phone: "9824000001" },
+    { id: "c2", name: "Suresh", phone: "9824000002, 9824000003" },
+  ],
 };
 
 const routes = () =>
@@ -471,6 +475,31 @@ describe("PurchaseOrderFormDialog", () => {
       expect(body).not.toHaveProperty("billingAddress");
     });
 
+    it("picks the contact person from the site's contacts, with no boxes to type a name or number", async () => {
+      const user = userEvent.setup();
+      fullRoutes();
+      open();
+
+      const contact = await screen.findByLabelText(/^contact person/i);
+      await waitFor(() => expect(within(contact).getAllByRole("option")).toHaveLength(3));
+      expect(screen.queryByRole("textbox", { name: /^contact number/i })).not.toBeInTheDocument();
+
+      await user.selectOptions(contact, "Suresh — 9824000002, 9824000003");
+
+      await user.selectOptions(screen.getByLabelText(/^supplier/i), SUPPLIER.id);
+      await user.selectOptions(screen.getByLabelText(/^company/i), COMPANY.id);
+      await user.selectOptions(screen.getByLabelText(/item on line 1/i), ITEM.id);
+      await user.selectOptions(screen.getByLabelText(/unit on line 1/i), String(UNIT.id));
+      await user.type(screen.getByLabelText(/quantity on line 1/i), "2");
+      await user.type(screen.getByLabelText(/price on line 1/i), "100");
+      await user.click(screen.getByRole("button", { name: /add purchase order/i }));
+
+      await waitFor(() => expect(postedBody()).not.toBeNull());
+      const body = postedBody() as unknown as Record<string, unknown>;
+      expect(body.contactName).toBe("Suresh");
+      expect(body.contactNumber).toBe("9824000002, 9824000003");
+    });
+
     describe("an order raised before the change, with a quantity split", () => {
       const ORDER_ID = "77777777-7777-4777-8777-777777777777";
       const DETAIL = {
@@ -495,8 +524,8 @@ describe("PurchaseOrderFormDialog", () => {
         billingAddress: "Plot 12, Akwada Lake Front",
         shippingAddress: "Typed by hand, long ago",
         groupAddress: null,
-        contactName: null,
-        contactNumber: null,
+        contactName: "Mahesh",
+        contactNumber: "98250 11111",
         otherContactName: null,
         otherContactNumber: null,
         dispatchBy: null,
@@ -566,11 +595,20 @@ describe("PurchaseOrderFormDialog", () => {
         expect(await screen.findByText(/delivery split from the old screen/i)).toBeInTheDocument();
         const group = await screen.findByRole("radiogroup", { name: /shipping address/i });
         expect(within(group).getByRole("radio", { name: /Typed by hand, long ago/ })).toBeChecked();
+        // A contact typed on the old form is not on the site's list; it stays, labelled.
+        const contact = screen.getByLabelText(/^contact person/i) as HTMLSelectElement;
+        await waitFor(() =>
+          expect(contact.selectedOptions[0]?.textContent).toBe(
+            "Mahesh — 98250 11111 (saved on this document)",
+          ),
+        );
 
         await user.click(screen.getByRole("button", { name: /save changes/i }));
         await waitFor(() => expect(patchedBody()).not.toBeNull());
         // The resolver's create-schema default would have sent [] and wiped the split.
         expect(patchedBody()).not.toHaveProperty("deliveryAddresses");
+        expect(patchedBody()!.contactName).toBe("Mahesh");
+        expect(patchedBody()!.contactNumber).toBe("98250 11111");
       });
 
       it("clears the split only when asked", async () => {
