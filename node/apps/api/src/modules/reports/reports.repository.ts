@@ -100,7 +100,9 @@ export class ReportsRepository extends BaseRepository {
           -- purchase side does have the column (SupplierInvoice.SiteGroup,
           -- an nvarchar holding the name; see §6). Null here, and the screen
           -- says so rather than drawing an empty column.
-          null::uuid                              as site_group_id,
+          -- (Since 15 Sep 2026 the column is the SITE LOCATION, which replaced
+          -- the group; sales invoices carry none either.)
+          null::uuid                              as site_location_id,
           si.company_id                           as company_id,
           si.total_amount                         as amount,
           case when si.invoice_type in (${RETURN_TYPE_LIST}) then 'debit' else 'credit' end as effect
@@ -120,7 +122,7 @@ export class ReportsRepository extends BaseRepository {
           pi.created_at                           as created_at,
           pi.supplier_id                          as party_id,
           pi.site_id                              as site_id,
-          pi.site_group_id                        as site_group_id,
+          pi.site_location_id                        as site_location_id,
           pi.company_id                           as company_id,
           pi.total_amount                         as amount,
           case when pi.invoice_type in (${RETURN_TYPE_LIST}) then 'debit' else 'credit' end as effect
@@ -139,7 +141,7 @@ export class ReportsRepository extends BaseRepository {
         p.created_at                              as created_at,
         p.party_id                                as party_id,
         p.site_id                                 as site_id,
-        p.site_group_id                           as site_group_id,
+        p.site_location_id                           as site_location_id,
         p.company_id                              as company_id,
         p.amount                                  as amount,
         -- An opening balance is what was already owed, so it is a CREDIT. The
@@ -159,7 +161,7 @@ export class ReportsRepository extends BaseRepository {
     if (filter.companyId) clauses.push(sql`e.company_id = ${filter.companyId}::uuid`);
     if (filter.siteId) clauses.push(sql`e.site_id = ${filter.siteId}::uuid`);
     if (filter.partyId) clauses.push(sql`e.party_id = ${filter.partyId}::uuid`);
-    if (filter.siteGroupId) clauses.push(sql`e.site_group_id = ${filter.siteGroupId}::uuid`);
+    if (filter.siteLocationId) clauses.push(sql`e.site_location_id = ${filter.siteLocationId}::uuid`);
     // A document with no date is NOT excluded by a date filter it cannot be
     // compared against — it would silently vanish from a balance it belongs to.
     if (filter.fromDate) {
@@ -237,18 +239,18 @@ export class ReportsRepository extends BaseRepository {
       )
       select
         r.document_id, r.source_kind, r.display_no, r.label,
-        r.document_date, r.party_id, r.site_id, r.site_group_id, r.company_id,
+        r.document_date, r.party_id, r.site_id, r.site_location_id, r.company_id,
         r.effect, r.credit::text as credit, r.debit::text as debit,
         r.balance::text as balance,
         s.name  as party_name,
         st.name as site_name,
-        sg.name as site_group_name,
+        sg.name as site_location_name,
         c.name  as company_name
       from running r
       join suppliers s  on s.id  = r.party_id
       join companies c  on c.id  = r.company_id
       left join sites st       on st.id = r.site_id
-      left join site_groups sg on sg.id = r.site_group_id
+      left join site_locations sg on sg.id = r.site_location_id
       order by r.party_id, r.document_date asc nulls first, r.created_at asc, r.document_id asc
       limit ${page.limit} offset ${page.offset}
     `),
@@ -271,8 +273,8 @@ export class ReportsRepository extends BaseRepository {
           partyName: String(row.party_name),
           siteId: row.site_id === null ? null : String(row.site_id),
           siteName: row.site_name === null ? null : String(row.site_name),
-          siteGroupId: row.site_group_id === null ? null : String(row.site_group_id),
-          siteGroupName: row.site_group_name === null ? null : String(row.site_group_name),
+          siteLocationId: row.site_location_id === null ? null : String(row.site_location_id),
+          siteLocationName: row.site_location_name === null ? null : String(row.site_location_name),
           companyId: String(row.company_id),
           companyName: String(row.company_name),
           effect: row.effect === "debit" ? "debit" : "credit",
@@ -380,17 +382,17 @@ export class ReportsRepository extends BaseRepository {
       )
       select
         r.document_id, r.source_kind, r.display_no, r.label,
-        r.document_date, r.party_id, r.site_id, r.site_group_id, r.company_id,
+        r.document_date, r.party_id, r.site_id, r.site_location_id, r.company_id,
         r.credit::text as amount, r.pending::text as pending, r.balance::text as balance,
         s.name  as party_name,
         st.name as site_name,
-        sg.name as site_group_name,
+        sg.name as site_location_name,
         c.name  as company_name
       from running r
       join suppliers s  on s.id  = r.party_id
       join companies c  on c.id  = r.company_id
       left join sites st       on st.id = r.site_id
-      left join site_groups sg on sg.id = r.site_group_id
+      left join site_locations sg on sg.id = r.site_location_id
       order by s.name asc, st.name asc nulls first, r.party_id, r.site_id,
         r.document_date asc nulls first, r.created_at asc, r.document_id asc
       limit ${page.limit} offset ${page.offset}
@@ -412,8 +414,8 @@ export class ReportsRepository extends BaseRepository {
           partyName: String(row.party_name),
           siteId: row.site_id === null ? null : String(row.site_id),
           siteName: row.site_name === null ? null : String(row.site_name),
-          siteGroupId: row.site_group_id === null ? null : String(row.site_group_id),
-          siteGroupName: row.site_group_name === null ? null : String(row.site_group_name),
+          siteLocationId: row.site_location_id === null ? null : String(row.site_location_id),
+          siteLocationName: row.site_location_name === null ? null : String(row.site_location_name),
           companyId: String(row.company_id),
           companyName: String(row.company_name),
           amount: this.money(row.amount),

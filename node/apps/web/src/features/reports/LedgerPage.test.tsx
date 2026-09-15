@@ -26,8 +26,8 @@ const ledgerRow = (overrides: Record<string, unknown> = {}) => ({
   partyName: "AL BURHAN PIPES",
   siteId: "s1",
   siteName: "Akwada Lake Front",
-  siteGroupId: null,
-  siteGroupName: null,
+  siteLocationId: null,
+  siteLocationName: null,
   companyId: "c1",
   companyName: "DH PATEL",
   effect: "credit",
@@ -190,7 +190,7 @@ describe("the ledger and balances screen", () => {
 
   it("says a sales entry has no site group rather than drawing an empty column", async () => {
     const user = userEvent.setup();
-    withReports(ledgerResponse([ledgerRow({ siteGroupName: null })]));
+    withReports(ledgerResponse([ledgerRow({ siteLocationName: null })]));
     renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
     await search();
 

@@ -22,11 +22,46 @@ export const siteRowSchema = z.object({
   pincode: z.string().nullable(),
   /** Users assigned to this site, via the junction table that replaced the CSV column. */
   userCount: z.number().int().nonnegative(),
-  /** Site groups this site belongs to. */
-  groupCount: z.number().int().nonnegative(),
+  /** How many people are on the site's contact list; the columns above are the first. */
+  contactCount: z.number().int().nonnegative(),
+  /** Live locations recorded for this site on the Site Location screen. */
+  locationCount: z.number().int().nonnegative(),
   capabilities: rowCapabilitiesSchema,
 });
 export type SiteRow = z.infer<typeof siteRowSchema>;
+
+/**
+ * One person to call at a site. Asked for on 15 Sep 2026: "the same way
+ * addresses are multiple, contact numbers and names should be multiple too".
+ */
+export const siteContactSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+  phone: z.string().nullable(),
+});
+export type SiteContact = z.infer<typeof siteContactSchema>;
+
+/**
+ * A contact as it is written. A name with no number, or a number with no name,
+ * is fine — a site office often has one before the other. A row with neither
+ * is refused rather than silently dropped, so the person sees why it did not
+ * save instead of watching a row vanish.
+ */
+export const siteContactInputSchema = z
+  .object({
+    name: optionalText(200),
+    phone: mobileNo,
+  })
+  .superRefine((value, ctx) => {
+    if (value.name === null && value.phone === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["name"],
+        message: "Enter a name or a phone number, or remove the row",
+      });
+    }
+  });
+export type SiteContactInput = z.infer<typeof siteContactInputSchema>;
 
 /**
  * The full record, for the edit form.
@@ -58,6 +93,7 @@ export const siteDetailSchema = z.object({
   shippingStateId: z.number().int().nullable(),
   shippingCountryId: z.number().int().nullable(),
   shippingPincode: z.string().nullable(),
+  contacts: z.array(siteContactSchema),
 });
 export type SiteDetail = z.infer<typeof siteDetailSchema>;
 
@@ -78,6 +114,13 @@ export const createSiteSchema = z.object({
   shippingStateId: geographyId,
   shippingCountryId: geographyId,
   shippingPincode: pincode,
+  /**
+   * The WHOLE contact list, replacing what is stored. Left out, the stored list
+   * is untouched. When sent, the server copies the first contact into
+   * `contactPersonName` / `contactPersonPhoneNo` and ignores those two fields
+   * in the body, so the list and the columns cannot disagree.
+   */
+  contacts: z.array(siteContactInputSchema).max(20, "A site can list at most 20 contacts").optional(),
 });
 export type CreateSite = z.infer<typeof createSiteSchema>;
 

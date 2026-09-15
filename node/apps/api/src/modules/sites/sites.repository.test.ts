@@ -1,12 +1,14 @@
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { listQuerySchema } from "@accountmanagement/contracts";
+import { createSiteSchema, listQuerySchema, updateSiteSchema } from "@accountmanagement/contracts";
 import { SitesRepository } from "./sites.repository";
 import * as schema from "../../db/schema";
 import { freshDatabase } from "../../test/fresh-database";
 import type { Database } from "../../db/database";
 
 const query = (overrides: Record<string, unknown> = {}) => listQuerySchema.parse(overrides);
+
+const ACTOR = "11111111-1111-1111-1111-111111111111";
 
 describe("SitesRepository (real PostgreSQL)", () => {
   let db: Database;
@@ -110,11 +112,12 @@ describe("SitesRepository (real PostgreSQL)", () => {
   /**
    * The one that matters.
    *
-   * A site with 3 users AND 2 groups must report 3 and 2 — not 6 and 6. Joining
-   * both relations in a single query multiplies them together, which is exactly
-   * the shape of the .NET list queries that join and then de-duplicate in memory.
+   * A site with 3 users AND 2 locations must report 3 and 2 — not 6 and 6.
+   * Joining both relations in a single query multiplies them together, which is
+   * exactly the shape of the .NET list queries that join and then de-duplicate in
+   * memory.
    */
-  it("counts users and groups independently, not as a cross product", async () => {
+  it("counts users, contacts and locations independently, not as a cross product", async () => {
     const [site] = await db.select({ id: schema.sites.id }).from(schema.sites).limit(1);
 
     const insertedUsers = await db
@@ -134,20 +137,101 @@ describe("SitesRepository (real PostgreSQL)", () => {
       .insert(schema.userSites)
       .values(insertedUsers.map((u) => ({ userId: u.id, siteId: site!.id })));
 
-    const insertedGroups = await db
-      .insert(schema.siteGroups)
-      .values([{ name: "Group A" }, { name: "Group B" }])
-      .returning({ id: schema.siteGroups.id });
-    await db
-      .insert(schema.siteGroupSites)
-      .values(insertedGroups.map((g) => ({ groupId: g.id, siteId: site!.id })));
+    await db.insert(schema.siteLocations).values([
+      { siteId: site!.id, name: "Block A" },
+      { siteId: site!.id, name: "Block B" },
+      // A deleted location is not counted.
+      { siteId: site!.id, name: "Old yard", isDeleted: true },
+    ]);
+    await db.insert(schema.siteContacts).values([
+      { siteId: site!.id, name: "Ramesh", lineNumber: 1 },
+      { siteId: site!.id, phone: "9824000001", lineNumber: 2 },
+      { siteId: site!.id, name: "Suresh", lineNumber: 3 },
+      { siteId: site!.id, name: "Mahesh", lineNumber: 4 },
+    ]);
 
     const page = await repo.list(query({ limit: 100 }));
     const row = page.rows.find((r) => r.id === site!.id)!;
 
     expect(row.userCount).toBe(3);
-    expect(row.groupCount).toBe(2);
+    expect(row.contactCount).toBe(4);
+    expect(row.locationCount).toBe(2);
     expect(page.rows.filter((r) => r.id === site!.id)).toHaveLength(1);
+  });
+
+  /**
+   * Several contacts per site, asked for on 15 Sep 2026. The first one is also
+   * written to the site's own two columns, which older readers still use.
+   */
+  describe("contacts", () => {
+    const base = { name: "Contacts Site", isActive: true };
+
+    it("saves the list in order and returns it with the site", async () => {
+      const created = await repo.create(
+        createSiteSchema.parse({
+          ...base,
+          contacts: [
+            { name: "Ramesh", phone: "9824000001" },
+            { name: "", phone: "9824000002, 9824000003" },
+          ],
+        }),
+        ACTOR,
+      );
+
+      expect(created.contacts.map(({ name, phone }) => ({ name, phone }))).toEqual([
+        { name: "Ramesh", phone: "9824000001" },
+        { name: null, phone: "9824000002, 9824000003" },
+      ]);
+    });
+
+    it("writes the first contact to the site's own columns, whatever the body says for them", async () => {
+      const created = await repo.create(
+        createSiteSchema.parse({
+          ...base,
+          contactPersonName: "Someone else",
+          contactPersonPhoneNo: "1111111111",
+          contacts: [{ name: "Ramesh", phone: "9824000001" }],
+        }),
+        ACTOR,
+      );
+
+      expect(created.contactPersonName).toBe("Ramesh");
+      expect(created.contactPersonPhoneNo).toBe("9824000001");
+    });
+
+    it("replaces the list on update, and clears the columns when it is emptied", async () => {
+      const created = await repo.create(
+        createSiteSchema.parse({ ...base, contacts: [{ name: "Ramesh", phone: "1" }, { name: "Suresh" }] }),
+        ACTOR,
+      );
+
+      const trimmed = await repo.update(
+        created.id,
+        updateSiteSchema.parse({ contacts: [{ name: "Suresh" }] }),
+        ACTOR,
+      );
+      expect(trimmed.contacts.map((c) => c.name)).toEqual(["Suresh"]);
+      expect(trimmed.contactPersonName).toBe("Suresh");
+
+      const emptied = await repo.update(created.id, updateSiteSchema.parse({ contacts: [] }), ACTOR);
+      expect(emptied.contacts).toEqual([]);
+      expect(emptied.contactPersonName).toBeNull();
+    });
+
+    it("leaves the list alone when an update does not mention it", async () => {
+      const created = await repo.create(
+        createSiteSchema.parse({ ...base, contacts: [{ name: "Ramesh" }] }),
+        ACTOR,
+      );
+      const renamed = await repo.update(created.id, updateSiteSchema.parse({ name: "Renamed" }), ACTOR);
+      expect(renamed.contacts.map((c) => c.name)).toEqual(["Ramesh"]);
+    });
+
+    it("refuses a contact row with neither a name nor a phone", () => {
+      expect(() =>
+        createSiteSchema.parse({ ...base, contacts: [{ name: "", phone: "" }] }),
+      ).toThrow(/name or a phone/);
+    });
   });
 
   /**

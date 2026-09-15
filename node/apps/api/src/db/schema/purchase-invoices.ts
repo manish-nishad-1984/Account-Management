@@ -11,6 +11,7 @@ import {
 import { companies, sites } from "./users";
 import { items, suppliers, units } from "./masters";
 import { siteGroups } from "./site-groups";
+import { siteLocations } from "./site-locations";
 import { purchaseOrders } from "./purchase-orders";
 
 /**
@@ -123,6 +124,9 @@ export const purchaseInvoices = pgTable(
     /** See `purchase_orders.site_group_id` — the same text match, made real. */
     siteGroupId: uuid("site_group_id").references(() => siteGroups.id),
 
+    /** See `purchase_orders.site_location_id`. */
+    siteLocationId: uuid("site_location_id").references(() => siteLocations.id),
+
     documentDate: timestamp("document_date", { withTimezone: true }),
 
     /** Goods-receipt references, all free text on the source. */
@@ -137,6 +141,8 @@ export const purchaseInvoices = pgTable(
     contactNumber: text("contact_number"),
     shippingAddress: text("shipping_address"),
     groupAddress: text("group_address"),
+    /** Our site's address, copied by the server. See `purchase_orders.billing_address`. */
+    billingAddress: text("billing_address"),
 
     /**
      * TOTALS — computed by `invoiceTotal.corrected()` on the server, never

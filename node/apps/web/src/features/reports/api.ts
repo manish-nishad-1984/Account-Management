@@ -18,7 +18,7 @@ export interface ReportQuery {
   companyId?: string;
   siteId?: string;
   partyId?: string;
-  siteGroupId?: string;
+  siteLocationId?: string;
   fromDate?: string;
   toDate?: string;
   show?: "all" | "outstanding";

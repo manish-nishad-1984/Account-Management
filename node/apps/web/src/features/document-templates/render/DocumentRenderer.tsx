@@ -125,7 +125,7 @@ function fieldValue(document: PrintDocument, field: DocumentField): string | nul
     case "site":
       return f.siteName;
     case "site-group":
-      return f.siteGroupName;
+      return f.siteLocationName;
     case "contact":
       return [f.contactName, f.contactNumber].filter(Boolean).join(" · ") || null;
   }

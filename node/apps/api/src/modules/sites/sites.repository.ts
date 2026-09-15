@@ -6,15 +6,26 @@ import type {
   ListQuery,
   SaveSiteAddress,
   SiteAddress,
+  SiteContact,
+  SiteContactInput,
   SiteDetail,
+  SiteDocumentOptions,
   SortDirection,
   UpdateSite,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
-import { siteAddresses, siteGroupSites, sites, userSites } from "../../db/schema";
+import {
+  siteAddresses,
+  siteContacts,
+  siteLocationAddresses,
+  siteLocations,
+  sites,
+  userSites,
+} from "../../db/schema";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
+import { blankToNull } from "./site-document-rules";
 
 const SORTABLE = {
   name: sites.name,
@@ -58,7 +69,8 @@ export interface SiteListRow {
   area: string | null;
   pincode: string | null;
   userCount: number;
-  groupCount: number;
+  contactCount: number;
+  locationCount: number;
 }
 
 @Injectable()
@@ -101,17 +113,21 @@ export class SitesRepository extends BaseRepository {
       filters.push(seek);
     }
 
-    // Two independent counts, two correlated subqueries. Joining both would
-    // multiply the rows together and give a site with 3 users and 2 groups a
+    // Independent counts, one correlated subquery each. Joining them would
+    // multiply the rows together and give a site with 3 users and 2 locations a
     // count of 6 for each — the exact defect the .NET list queries carry.
     // The outer reference is table-qualified deliberately — see the note in
-    // site-groups.repository.ts. Bare `${sites.id}` renders as `"id"` and binds
+    // site-locations.repository.ts. Bare `${sites.id}` renders as `"id"` and binds
     // to whichever joined table happens to have one.
     const userCount = sql<number>`(
       select count(*)::int from ${userSites} where ${userSites.siteId} = ${sites}.id
     )`;
-    const groupCount = sql<number>`(
-      select count(*)::int from ${siteGroupSites} where ${siteGroupSites.siteId} = ${sites}.id
+    const contactCount = sql<number>`(
+      select count(*)::int from ${siteContacts} where ${siteContacts.siteId} = ${sites}.id
+    )`;
+    const locationCount = sql<number>`(
+      select count(*)::int from ${siteLocations}
+      where ${siteLocations.siteId} = ${sites}.id and ${siteLocations.isDeleted} = false
     )`;
 
     const rows = await this.db
@@ -124,7 +140,8 @@ export class SitesRepository extends BaseRepository {
         area: sites.area,
         pincode: sites.pincode,
         userCount,
-        groupCount,
+        contactCount,
+        locationCount,
         sortValue: sql<string>`${sortColumn}::text`,
       })
       .from(sites)
@@ -202,32 +219,89 @@ export class SitesRepository extends BaseRepository {
     if (!row) {
       throw new NotFoundException("Site not found");
     }
-    return row;
+    return { ...row, contacts: await this.contacts(id) };
+  }
+
+  /** The contact list, in the order it was keyed. */
+  private contacts(siteId: string): Promise<SiteContact[]> {
+    return this.db
+      .select({ id: siteContacts.id, name: siteContacts.name, phone: siteContacts.phone })
+      .from(siteContacts)
+      .where(eq(siteContacts.siteId, siteId))
+      .orderBy(siteContacts.lineNumber);
+  }
+
+  /**
+   * THE FIRST CONTACT IS ALSO WRITTEN TO THE SITE'S OWN TWO COLUMNS.
+   *
+   * `contact_person_name` / `contact_person_phone_no` predate the list, and the
+   * Sites grid, the importer and the print data all read them. Deriving them
+   * from the list — and ignoring whatever the body says for those two fields
+   * when a list is sent — means the two can never disagree.
+   */
+  private withPrimaryContact<T extends { contacts?: SiteContactInput[] }>(input: T) {
+    const { contacts, ...columns } = input;
+    if (contacts === undefined) return { columns, contacts };
+    const first = contacts[0];
+    return {
+      columns: {
+        ...columns,
+        contactPersonName: first?.name ?? null,
+        contactPersonPhoneNo: first?.phone ?? null,
+      },
+      contacts,
+    };
+  }
+
+  /** Replaces the whole list. Nothing references a contact, so ids need not survive. */
+  private async writeContacts(tx: Database, siteId: string, contacts: SiteContactInput[]) {
+    await tx.delete(siteContacts).where(eq(siteContacts.siteId, siteId));
+    if (contacts.length > 0) {
+      await tx.insert(siteContacts).values(
+        contacts.map((contact, index) => ({
+          siteId,
+          name: contact.name,
+          phone: contact.phone,
+          lineNumber: index + 1,
+        })),
+      );
+    }
   }
 
   async create(input: CreateSite, actorId: string): Promise<SiteDetail> {
-    const [row] = await writing(() =>
-      this.db
-        .insert(sites)
-        .values({ ...input, ...createdBy(actorId) })
-        .returning(DETAIL_COLUMNS),
+    const { columns, contacts } = this.withPrimaryContact(input);
+    const id = await writing(() =>
+      this.db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(sites)
+          .values({ ...columns, ...createdBy(actorId) })
+          .returning({ id: sites.id });
+        await this.writeContacts(tx as unknown as Database, row!.id, contacts ?? []);
+        return row!.id;
+      }),
     );
-    return row!;
+    return this.findById(id);
   }
 
   async update(id: string, input: UpdateSite, actorId: string): Promise<SiteDetail> {
-    const [row] = await writing(() =>
-      this.db
-        .update(sites)
-        .set({ ...input, ...updatedBy(actorId) })
-        .where(and(eq(sites.id, id), eq(sites.isDeleted, false)))
-        .returning(DETAIL_COLUMNS),
-    );
+    const { columns, contacts } = this.withPrimaryContact(input);
+    await writing(() =>
+      this.db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(sites)
+          .set({ ...columns, ...updatedBy(actorId) })
+          .where(and(eq(sites.id, id), eq(sites.isDeleted, false)))
+          .returning({ id: sites.id });
 
-    if (!row) {
-      throw new NotFoundException("Site not found");
-    }
-    return row;
+        if (!row) {
+          throw new NotFoundException("Site not found");
+        }
+        if (contacts !== undefined) {
+          await this.writeContacts(tx as unknown as Database, id, contacts);
+        }
+      }),
+    );
+    return this.findById(id);
   }
 
   /**
@@ -239,30 +313,30 @@ export class SitesRepository extends BaseRepository {
    *  - `user_sites` — the assignments would survive and every affected user's
    *    access token would keep carrying the id in `siteIds`, which is what site
    *    scoping is read from.
-   *  - `site_group_sites` — the group would keep a member no screen can show,
-   *    and site groups are read-only in this app (only `Group-View` exists), so
-   *    nobody could remove it afterwards even if they noticed.
+   *  - `site_locations` — documents reference a location by id, and the
+   *    locations of a deleted site would stay on the Site Location screen under
+   *    a site no other screen shows. Remove them there first.
    *
    * Both counts are gathered before refusing, so the message can say what is
    * actually in the way rather than making the user rediscover it one at a time.
    */
   async remove(id: string, actorId: string): Promise<void> {
-    const [[assignedUsers], [memberOfGroups]] = await Promise.all([
+    const [[assignedUsers], [liveLocations]] = await Promise.all([
       this.db.select({ value: count() }).from(userSites).where(eq(userSites.siteId, id)),
       this.db
         .select({ value: count() })
-        .from(siteGroupSites)
-        .where(eq(siteGroupSites.siteId, id)),
+        .from(siteLocations)
+        .where(and(eq(siteLocations.siteId, id), eq(siteLocations.isDeleted, false))),
     ]);
 
     const blockers: string[] = [];
     const users = assignedUsers?.value ?? 0;
-    const groups = memberOfGroups?.value ?? 0;
+    const locations = liveLocations?.value ?? 0;
     if (users > 0) {
       blockers.push(`${users} assigned ${users === 1 ? "user" : "users"}`);
     }
-    if (groups > 0) {
-      blockers.push(`${groups} site ${groups === 1 ? "group" : "groups"}`);
+    if (locations > 0) {
+      blockers.push(`${locations} site ${locations === 1 ? "location" : "locations"}`);
     }
 
     if (blockers.length > 0) {
@@ -379,18 +453,36 @@ export class SitesRepository extends BaseRepository {
   }
 
   /**
-   * Everywhere a delivery can go for this site, as one list for a dropdown.
+   * What an order or invoice form needs from its site: the billing address, the
+   * shipping choices and the location names.
    *
-   * The site's own address leads, then its shipping address if it has one that
-   * differs, then the extra addresses. Blank entries are dropped rather than
-   * offered as empty options, and an address that repeats one already in the
-   * list is dropped with them: a site whose shipping address was filled in by
-   * copying its billing address — which several have — would otherwise offer
-   * the same words twice with no way to tell which is which.
+   * BILLING is the site's own address and nothing else — the business rule of
+   * 15 Sep 2026. The forms show it; the document repositories copy it with
+   * `billingAddressOf` below, so the rule holds whatever a client sends.
+   *
+   * SHIPPING is one list: the site's own address, its shipping address if that
+   * differs, the Site master's delivery addresses, then the Site Location
+   * screen's addresses. Blank entries are dropped rather than offered as empty
+   * options, and an address that repeats one already in the list is dropped with
+   * them: a site whose shipping address was filled in by copying its billing
+   * address — which several have — would otherwise offer the same words twice
+   * with no way to tell which is which.
    */
-  async addressChoices(siteId: string): Promise<AddressChoice[]> {
+  async documentOptions(siteId: string): Promise<SiteDocumentOptions> {
     const site = await this.requireSite(siteId);
-    const extras = await this.listAddresses(siteId);
+    const [extras, locationAddresses, locations] = await Promise.all([
+      this.listAddresses(siteId),
+      this.db
+        .select({ id: siteLocationAddresses.id, address: siteLocationAddresses.address })
+        .from(siteLocationAddresses)
+        .where(eq(siteLocationAddresses.siteId, siteId))
+        .orderBy(siteLocationAddresses.lineNumber),
+      this.db
+        .select({ id: siteLocations.id, name: siteLocations.name })
+        .from(siteLocations)
+        .where(and(eq(siteLocations.siteId, siteId), eq(siteLocations.isDeleted, false)))
+        .orderBy(siteLocations.name),
+    ]);
 
     const choices: AddressChoice[] = [];
     const seen = new Set<string>();
@@ -406,7 +498,16 @@ export class SitesRepository extends BaseRepository {
     for (const extra of extras) {
       offer(`extra-${extra.id}`, "extra", extra.address);
     }
-    return choices;
+    for (const row of locationAddresses) {
+      offer(`location-${row.id}`, "location", row.address);
+    }
+
+    return {
+      billingAddress: blankToNull(site.address),
+      // `billingAddressOf` in site-document-rules.ts applies the same rule on save.
+      shippingAddresses: choices,
+      locations,
+    };
   }
 
   /** 404s rather than letting a bad site id look like a site with no addresses. */

@@ -174,7 +174,7 @@ describe("ReportExportService (real PostgreSQL)", () => {
             partyId: supplierId,
             companyId,
             siteId,
-            siteGroupId: null,
+            siteLocationId: null,
             paymentDate: null,
             amount: "40000.00",
             description: "part payment",

@@ -32,7 +32,7 @@ import {
 } from "./api";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { todayInput } from "../../lib/dates";
-import { AddressPicker } from "../sites/AddressPicker";
+import { SiteAddressFields } from "../sites/SiteAddressFields";
 
 /**
  * The sales invoice form — the purchase invoice with the direction reversed.
@@ -246,8 +246,10 @@ export function SalesInvoiceFormDialog({
   });
 
   const chosenCompanyId = watch("companyId");
-  // Watched, so the address picker follows the chosen site.
+  // Watched, so the addresses follow the chosen site. `useWatch` for the
+  // shipping address, which is written by `setValue` and `watch` misses.
   const chosenSiteId = watch("siteId") as string | undefined;
+  const shippingAddress = useWatch({ control, name: "shippingAddress" });
   const chosenCompany = companyRows.find((row) => row.id === chosenCompanyId);
 
   return (
@@ -304,7 +306,11 @@ export function SalesInvoiceFormDialog({
               options={siteOptions}
               hint="Optional — the source allows an invoice with no site"
               error={errors.siteId?.message}
-              {...register("siteId")}
+              {...register("siteId", {
+                // The shipping address belonged to the site chosen before. Cleared
+                // on the person's change, not by watching — see SiteAddressFields.
+                onChange: () => setValue("shippingAddress", ""),
+              })}
             />
             <TextField
               label="Their reference"
@@ -436,22 +442,17 @@ export function SalesInvoiceFormDialog({
 
           <FormSection title="Addresses and notes" columns={1}>
             {/*
-              The site’s own addresses, offered rather than retyped. Choosing
-              one COPIES it into the field below: the document keeps the words
-              it was raised with, so correcting the site later cannot rewrite
-              where a delivery already went.
+              Billing is our site's own address; shipping is ONE of the site's
+              addresses, chosen — the rules of 15 Sep 2026. A sales invoice
+              carries no location. Both are copied onto the invoice as text.
             */}
-            <AddressPicker
-              siteId={chosenSiteId ?? null}
-              onChoose={(address) =>
+            <SiteAddressFields
+              siteId={chosenSiteId}
+              shippingAddress={shippingAddress}
+              onShippingChange={(address) =>
                 setValue("shippingAddress", address, { shouldDirty: true })
               }
-            />
-            <TextAreaField
-              label="Shipping address"
-              rows={2}
-              error={errors.shippingAddress?.message}
-              {...register("shippingAddress")}
+              shippingError={errors.shippingAddress?.message}
             />
             <TextAreaField
               label="Notes"

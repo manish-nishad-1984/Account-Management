@@ -9,7 +9,7 @@ import type {
   UpdatePayment,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
-import { companies, payments, siteGroups, sites, suppliers } from "../../db/schema";
+import { companies, payments, siteLocations, sites, suppliers } from "../../db/schema";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
@@ -52,7 +52,7 @@ const DETAIL_COLUMNS = {
   partyId: payments.partyId,
   companyId: payments.companyId,
   siteId: payments.siteId,
-  siteGroupId: payments.siteGroupId,
+  siteLocationId: payments.siteLocationId,
   paymentDate: payments.paymentDate,
   amount: payments.amount,
   description: payments.description,
@@ -77,7 +77,7 @@ export interface PaymentListRow extends PaymentDetail {
   partyName: string;
   companyName: string;
   siteName: string | null;
-  siteGroupName: string | null;
+  siteLocationName: string | null;
 }
 
 @Injectable()
@@ -146,7 +146,7 @@ export class PaymentsRepository extends BaseRepository {
         partyName: suppliers.name,
         companyName: companies.name,
         siteName: sites.name,
-        siteGroupName: siteGroups.name,
+        siteLocationName: siteLocations.name,
         sortValue: sql<string>`${sortColumn}::text`,
       })
       .from(payments)
@@ -155,7 +155,7 @@ export class PaymentsRepository extends BaseRepository {
       // LEFT on both: an opening balance has no site, and a site group is
       // optional on every document in this system.
       .leftJoin(sites, eq(payments.siteId, sites.id))
-      .leftJoin(siteGroups, eq(payments.siteGroupId, siteGroups.id))
+      .leftJoin(siteLocations, eq(payments.siteLocationId, siteLocations.id))
       .where(and(...filters))
       .orderBy(...keysetOrder(sortColumn, payments.id, direction))
       .limit(query.limit + 1);
@@ -215,7 +215,7 @@ export class PaymentsRepository extends BaseRepository {
             // An opening balance carries no site — the contract enforces that a
             // payment does, so this null is only ever the deliberate case.
             siteId: one.siteId,
-            siteGroupId: one.siteGroupId,
+            siteLocationId: one.siteLocationId,
             paymentDate: one.paymentDate === null ? null : new Date(one.paymentDate),
             amount: one.amount,
             description: one.description,

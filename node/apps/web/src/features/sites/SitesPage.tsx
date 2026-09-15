@@ -29,6 +29,8 @@ export function SitesPage() {
             <div className="font-medium text-slate-900">{row.original.name}</div>
             <div className="text-xs text-slate-500">
               {row.original.contactPersonName ?? "No contact recorded"}
+              {/* The first contact is shown; the rest are on the form. */}
+              {row.original.contactCount > 1 && ` +${row.original.contactCount - 1} more`}
             </div>
           </div>
         ),
@@ -65,7 +67,9 @@ export function SitesPage() {
       },
       {
         id: "area",
-        header: "Location",
+        // "Area", not "Location": since 15 Sep 2026 a location is a place
+        // inside a site, with its own screen and its own count column below.
+        header: "Area",
         cell: ({ row }) =>
           row.original.area || row.original.pincode ? (
             <div>
@@ -89,14 +93,14 @@ export function SitesPage() {
         ),
       },
       {
-        id: "groupCount",
-        header: "Groups",
+        id: "locationCount",
+        header: "Locations",
         cell: ({ row }) => (
           <span
             className="tabular inline-flex min-w-6 justify-center rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600"
-            title="Site groups this site belongs to"
+            title="Locations recorded for this site on the Site Location screen"
           >
-            {row.original.groupCount}
+            {row.original.locationCount}
           </span>
         ),
       },
@@ -129,7 +133,7 @@ export function SitesPage() {
     <>
       <PageHeader
         title="Sites"
-        description="Project sites, their contacts and the groups they belong to"
+        description="Project sites, their contacts and their addresses"
         actions={
           canAdd ? (
             <Button icon={Plus} onClick={screen.openCreate}>
@@ -168,13 +172,12 @@ export function SitesPage() {
             </p>
             {/*
               Worth stating up front: this delete is refused outright while users
-              are assigned or the site belongs to a group. Both are now fixable on
-              a screen — site groups became editable on 14 Sep 2026, so a
-              membership no longer has to be cleared in the database.
+              are assigned or the site still has locations. Both are fixable on a
+              screen — the locations on Site Location.
             */}
             <p className="mt-2 text-xs text-slate-500">
               The site is marked deleted and hidden from every list. It is refused
-              while users are assigned to it, or while it belongs to a site group.
+              while users are assigned to it, or while it still has site locations.
             </p>
           </>
         }

@@ -62,31 +62,31 @@ const ITEM = {
  * A SITE IN SCOPE, which the default test stub does not provide.
  *
  * `renderWithAuth` defaults to every site and a null `siteId`, and with no site
- * the delivery options request — which requires one — is correctly never made,
- * so both address panels sit empty however the fixture is written. A site clerk
- * is scoped to their own site, and that is the state these assertions are about.
+ * the document-options request — which needs one — is correctly never made, so
+ * the address fields sit on "Choose a site first" however the fixture is written.
  */
 const SITE_SCOPE = { siteId: "11111111-1111-4111-8111-111111111111", sites: [{ id: "11111111-1111-4111-8111-111111111111", name: "Akwada Lake Front" }] };
 
 /**
- * `delivery-options` is listed BEFORE `/purchase-orders`, because `routeFetch`
- * takes the first pattern that matches and `/purchase-orders/` matches both. A
- * list response arriving where the panels expect addresses fails the schema
- * parse inside the query, and the panels then render their empty state with no
- * error anywhere — the same shape of trap the sales form's incomplete company
- * fixture produced.
+ * What the site offers an order. Listed BEFORE `/purchase-orders` in the routes
+ * for the old reason: `routeFetch` takes the first pattern that matches.
  */
-const DELIVERY_OPTIONS = {
-  siteAddresses: ["Gate 3, Plot 9, Mora", "Survey 118, Hazira"],
-  groups: [
-    { id: "55555555-5555-4555-8555-555555555555", name: "ROAD-GATE", addresses: ["Ward 3, Colony Office", "Ward 1"] },
-    { id: "66666666-6666-4666-8666-666666666666", name: "PUMP HOUSE", addresses: [] },
+const SITE_OPTIONS = {
+  billingAddress: "Plot 12, Akwada Lake Front",
+  shippingAddresses: [
+    { key: "site", source: "site", address: "Plot 12, Akwada Lake Front" },
+    { key: "extra-4", source: "extra", address: "Gate 3, Plot 9, Mora" },
+    { key: "location-9", source: "location", address: "Block A gate, Hazira" },
+  ],
+  locations: [
+    { id: "55555555-5555-4555-8555-555555555555", name: "Block A" },
+    { id: "66666666-6666-4666-8666-666666666666", name: "Store Yard" },
   ],
 };
 
 const routes = () =>
   routeFetch([
-    [/\/purchase-orders\/delivery-options/, DELIVERY_OPTIONS],
+    [/\/document-options/, SITE_OPTIONS],
     [/\/units/, list([UNIT])],
     [/\/items/, list([])],
     [/\/suppliers/, list([])],
@@ -123,7 +123,7 @@ const COMPANY = {
 /** Every dropdown populated — for the tests that fill the form in and save it. */
 const fullRoutes = () =>
   routeFetch([
-    [/\/purchase-orders\/delivery-options/, DELIVERY_OPTIONS],
+    [/\/document-options/, SITE_OPTIONS],
     [/\/items/, list([ITEM])],
     [/\/units/, list([UNIT])],
     [/\/suppliers/, list([SUPPLIER])],
@@ -424,103 +424,182 @@ describe("PurchaseOrderFormDialog", () => {
     });
   });
 
-  describe("delivery addresses", () => {
-    const summary = () => screen.getByText("Allocated").closest("div")!;
-
-    it("offers the site's addresses, and says when no group is chosen", async () => {
+  /**
+   * The rules of 15 Sep 2026: billing is the site's own address and is shown,
+   * not typed; shipping is ONE of the site's addresses; the location is one of
+   * the site's locations. They replaced the quantity-split panels.
+   */
+  describe("location and addresses", () => {
+    it("shows the site's address as the billing address, with no box to type in", async () => {
       open();
 
-      expect(await screen.findByText("Gate 3, Plot 9, Mora")).toBeInTheDocument();
-      expect(screen.getByText(/choose a group above to see its addresses/i)).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.getByLabelText("Billing address")).toHaveTextContent(
+          "Plot 12, Akwada Lake Front",
+        ),
+      );
+      expect(screen.queryByRole("textbox", { name: /billing address/i })).not.toBeInTheDocument();
     });
 
-    it("shows a group's addresses once the group is chosen", async () => {
+    it("offers every address of the site as ONE shipping choice, and posts the one chosen", async () => {
       const user = userEvent.setup();
+      fullRoutes();
       open();
-      await screen.findByText("Gate 3, Plot 9, Mora");
 
-      await user.selectOptions(screen.getByLabelText(/^group/i), "55555555-5555-4555-8555-555555555555");
+      const group = await screen.findByRole("radiogroup", { name: /shipping address/i });
+      expect(within(group).getAllByRole("radio")).toHaveLength(3);
+      expect(within(group).getByText("Location address")).toBeInTheDocument();
 
-      expect(await screen.findByText("Ward 3, Colony Office")).toBeInTheDocument();
+      await user.click(within(group).getByRole("radio", { name: /Gate 3, Plot 9, Mora/ }));
+      // Choosing another moves the one choice; it never adds a second.
+      await user.click(within(group).getByRole("radio", { name: /Block A gate, Hazira/ }));
+      expect(within(group).getAllByRole("radio", { checked: true })).toHaveLength(1);
+
+      await user.selectOptions(screen.getByLabelText(/^supplier/i), SUPPLIER.id);
+      await user.selectOptions(screen.getByLabelText(/^company/i), COMPANY.id);
+      await user.selectOptions(screen.getByLabelText(/item on line 1/i), ITEM.id);
+      await user.selectOptions(screen.getByLabelText(/unit on line 1/i), String(UNIT.id));
+      await user.type(screen.getByLabelText(/quantity on line 1/i), "2");
+      await user.type(screen.getByLabelText(/price on line 1/i), "100");
+      await user.selectOptions(screen.getByLabelText(/^location/i), "55555555-5555-4555-8555-555555555555");
+      await user.click(screen.getByRole("button", { name: /add purchase order/i }));
+
+      await waitFor(() => expect(postedBody()).not.toBeNull());
+      const body = postedBody() as unknown as Record<string, unknown>;
+      expect(body.shippingAddress).toBe("Block A gate, Hazira");
+      expect(body.siteLocationId).toBe("55555555-5555-4555-8555-555555555555");
+      expect(body).not.toHaveProperty("billingAddress");
     });
 
-    it("counts what is allocated against what is ordered, across both panels", async () => {
-      const user = userEvent.setup();
-      open();
-      await screen.findByText("Gate 3, Plot 9, Mora");
+    describe("an order raised before the change, with a quantity split", () => {
+      const ORDER_ID = "77777777-7777-4777-8777-777777777777";
+      const DETAIL = {
+        id: ORDER_ID,
+        poNo: "DHP/PO/26-27/001",
+        siteId: SITE_SCOPE.siteId,
+        supplierId: SUPPLIER.id,
+        companyId: COMPANY.id,
+        siteLocationId: null,
+        documentDate: "2026-09-01T00:00:00.000Z",
+        buyersPurchaseNo: null,
+        subtotal: "200.00",
+        totalGstAmount: "36.00",
+        totalAmount: "236.00",
+        isActive: true,
+        isApproved: false,
+        createdAt: "2026-09-01T00:00:00.000Z",
+        deliveryDate: null,
+        deliveryImmediate: false,
+        terms: null,
+        description: null,
+        billingAddress: "Plot 12, Akwada Lake Front",
+        shippingAddress: "Typed by hand, long ago",
+        groupAddress: null,
+        contactName: null,
+        contactNumber: null,
+        otherContactName: null,
+        otherContactNumber: null,
+        dispatchBy: null,
+        paymentTerms: null,
+        termsTemplate: null,
+        totalDiscount: null,
+        items: [
+          {
+            id: "88888888-8888-4888-8888-888888888888",
+            itemId: ITEM.id,
+            itemLabel: ITEM.name,
+            itemDescription: null,
+            hsnCode: null,
+            unitId: UNIT.id,
+            unitName: UNIT.name,
+            quantity: "2.00",
+            unitPrice: "100.00",
+            gstPercent: "18.00",
+            gstAmount: "36.00",
+            lineTotal: "236.00",
+            lineNumber: 1,
+          },
+        ],
+        deliveryAddresses: [
+          {
+            id: "99999999-9999-4999-8999-999999999999",
+            kind: "site",
+            address: "Gate 3, Plot 9, Mora",
+            quantity: "2.00",
+            lineNumber: 1,
+          },
+        ],
+      };
 
-      await user.type(screen.getByLabelText(/quantity on line 1/i), "10");
-      await user.selectOptions(screen.getByLabelText(/^group/i), "55555555-5555-4555-8555-555555555555");
+      const patchedBody = (): Record<string, unknown> | null => {
+        const call = vi
+          .mocked(globalThis.fetch)
+          .mock.calls.find(
+            ([url, init]) =>
+              String(url).endsWith("/purchase-orders/" + ORDER_ID) &&
+              (init as RequestInit | undefined)?.method === "PATCH",
+          );
+        const body = (call?.[1] as RequestInit | undefined)?.body;
+        return typeof body === "string" ? JSON.parse(body) : null;
+      };
 
-      await user.click(screen.getByRole("checkbox", { name: /deliver to Gate 3, Plot 9, Mora/i }));
-      await user.type(screen.getByLabelText(/quantity for Gate 3, Plot 9, Mora/i), "4");
-      await user.click(screen.getByRole("checkbox", { name: /deliver to Ward 3, Colony Office/i }));
-      await user.type(screen.getByLabelText(/quantity for Ward 3, Colony Office/i), "6");
+      const openOrder = () => {
+        routeFetch([
+          [/\/document-options/, SITE_OPTIONS],
+          [new RegExp("/purchase-orders/" + ORDER_ID + "$"), DETAIL],
+          [/\/items/, list([ITEM])],
+          [/\/units/, list([UNIT])],
+          [/\/suppliers/, list([SUPPLIER])],
+          [/\/companies/, list([COMPANY])],
+          [/\/purchase-orders/, list([])],
+        ]);
+        return renderWithAuth(<PurchaseOrderFormDialog open orderId={ORDER_ID} onClose={() => {}} />, {
+          permissions: ["purchase-orders.view", "purchase-orders.edit"],
+          scope: SITE_SCOPE,
+        });
+      };
 
-      // `formatQuantity` trims a whole number's fraction, so 10.00 reads "10".
-      await waitFor(() => {
-        expect(within(summary()).getAllByText("10")).toHaveLength(2);
+      it("shows the old split and a hand-typed shipping address, and saves without touching the split", async () => {
+        const user = userEvent.setup();
+        openOrder();
+
+        expect(await screen.findByText(/delivery split from the old screen/i)).toBeInTheDocument();
+        const group = await screen.findByRole("radiogroup", { name: /shipping address/i });
+        expect(within(group).getByRole("radio", { name: /Typed by hand, long ago/ })).toBeChecked();
+
+        await user.click(screen.getByRole("button", { name: /save changes/i }));
+        await waitFor(() => expect(patchedBody()).not.toBeNull());
+        // The resolver's create-schema default would have sent [] and wiped the split.
+        expect(patchedBody()).not.toHaveProperty("deliveryAddresses");
       });
-      // Ordered 10, allocated 10, nothing left unallocated.
-      expect(within(summary()).getByText("0")).toBeInTheDocument();
-    });
 
-    /**
-     * THE DEPARTURE FROM THE SOURCE, on screen.
-     *
-     * The source keeps one accumulator per panel and compares each to the order
-     * on its own, so 10 units to a site address and 10 more to a group address
-     * passes against an order for 10 — twice the goods, no warning anywhere.
-     * Here the two are one total, and the form says so before Save is pressed.
-     */
-    it("refuses an allocation the source would have accepted twice over", async () => {
-      const user = userEvent.setup();
-      open();
-      await screen.findByText("Gate 3, Plot 9, Mora");
+      it("clears the split only when asked", async () => {
+        const user = userEvent.setup();
+        openOrder();
 
-      await user.type(screen.getByLabelText(/quantity on line 1/i), "10");
-      await user.selectOptions(screen.getByLabelText(/^group/i), "55555555-5555-4555-8555-555555555555");
-
-      await user.click(screen.getByRole("checkbox", { name: /deliver to Gate 3, Plot 9, Mora/i }));
-      await user.type(screen.getByLabelText(/quantity for Gate 3, Plot 9, Mora/i), "10");
-      await user.click(screen.getByRole("checkbox", { name: /deliver to Ward 3, Colony Office/i }));
-      await user.type(screen.getByLabelText(/quantity for Ward 3, Colony Office/i), "10");
-
-      expect(
-        await screen.findByText(/account for 20\.00 units, and the order is for 10\.00/i),
-      ).toBeInTheDocument();
-    });
-
-    it("removes the row when an address is unticked, rather than keeping a zero", async () => {
-      const user = userEvent.setup();
-      open();
-      await screen.findByText("Gate 3, Plot 9, Mora");
-
-      // An ordered quantity first, so 5 allocated is a part allocation rather
-      // than an over-allocation — otherwise Allocated and "Over by" are both 5
-      // and the assertion cannot tell which it matched.
-      await user.type(screen.getByLabelText(/quantity on line 1/i), "10");
-
-      const box = screen.getByRole("checkbox", { name: /deliver to Gate 3, Plot 9, Mora/i });
-      await user.click(box);
-      await user.type(screen.getByLabelText(/quantity for Gate 3, Plot 9, Mora/i), "5");
-
-      await waitFor(() => {
-        expect(within(summary()).getAllByText("5")).toHaveLength(2);
+        await user.click(await screen.findByRole("button", { name: /remove the old split/i }));
+        await user.click(screen.getByRole("button", { name: /save changes/i }));
+        await waitFor(() => expect(patchedBody()).not.toBeNull());
+        expect(patchedBody()!.deliveryAddresses).toEqual([]);
       });
-
-      await user.click(box);
-      await waitFor(() => {
-        expect(within(summary()).queryByText("5")).not.toBeInTheDocument();
-      });
-      // Nothing allocated, and the whole order still unallocated.
-      expect(within(summary()).getByText("0")).toBeInTheDocument();
     });
 
-    it("says why a site with no address on file offers nothing", async () => {
+    it("lists the site's locations, with a choice of none", async () => {
+      open();
+
+      const select = await screen.findByLabelText(/^location/i);
+      await waitFor(() =>
+        expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual([
+          "No location",
+          "Block A",
+          "Store Yard",
+        ]),
+      );
+    });
+
+    it("says so when the site has no addresses at all", async () => {
       routeFetch([
-        [/\/purchase-orders\/delivery-options/, { siteAddresses: [], groups: [] }],
-        [/\/sites\/assignable$/, SITE_SCOPE],
+        [/\/document-options/, { billingAddress: null, shippingAddresses: [], locations: [] }],
         [/\/units/, list([UNIT])],
         [/\/items/, list([])],
         [/\/suppliers/, list([])],
@@ -529,7 +608,8 @@ describe("PurchaseOrderFormDialog", () => {
       ]);
       open();
 
-      expect(await screen.findByText(/this site has no address recorded/i)).toBeInTheDocument();
+      expect(await screen.findByText(/this site has no addresses yet/i)).toBeInTheDocument();
+      expect(screen.getByLabelText("Billing address")).toHaveTextContent(/has no address/i);
     });
   });
 });

@@ -24,6 +24,7 @@ import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/key
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
 import { nextDocumentNumber, salesInvoiceNumber } from "../../common/document-number";
+import { billingAddressOf } from "../sites/site-document-rules";
 
 const SORTABLE = {
   createdAt: salesInvoices.createdAt,
@@ -88,6 +89,7 @@ const HEADER_COLUMNS = {
   description: salesInvoices.description,
   contactName: salesInvoices.contactName,
   contactNumber: salesInvoices.contactNumber,
+  billingAddress: salesInvoices.billingAddress,
   shippingAddress: salesInvoices.shippingAddress,
   subtotal: salesInvoices.subtotal,
   totalGstAmount: salesInvoices.totalGstAmount,
@@ -390,6 +392,8 @@ export class SalesInvoicesRepository extends BaseRepository {
           .insert(salesInvoices)
           .values({
             ...header,
+            // Our site's address, whatever the client sent — the business rule.
+            billingAddress: await billingAddressOf(handle, header.siteId),
             salesInvoiceNo,
             documentDate: header.documentDate ? new Date(header.documentDate) : null,
             subtotal: totals.subtotal,
@@ -432,6 +436,11 @@ export class SalesInvoicesRepository extends BaseRepository {
     await writing(() =>
       this.db.transaction(async (tx) => {
         const patch: Record<string, unknown> = { ...header, ...updatedBy(actorId) };
+
+        // Recopied only when the site itself is sent; see `placementPatch`.
+        if (header.siteId !== undefined) {
+          patch.billingAddress = await billingAddressOf(tx as unknown as Database, header.siteId);
+        }
 
         if (header.documentDate !== undefined) {
           patch.documentDate = header.documentDate ? new Date(header.documentDate) : null;

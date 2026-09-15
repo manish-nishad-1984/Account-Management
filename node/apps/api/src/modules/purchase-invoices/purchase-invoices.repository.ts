@@ -17,7 +17,7 @@ import {
   purchaseInvoiceItems,
   purchaseInvoices,
   purchaseOrders,
-  siteGroups,
+  siteLocations,
   sites,
   suppliers,
   units,
@@ -25,6 +25,11 @@ import {
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
+import {
+  assertLocationAtSite,
+  billingAddressOf,
+  placementPatch,
+} from "../sites/site-document-rules";
 
 /**
  * `documentDate` is deliberately absent. It is NULLABLE, and a nullable keyset
@@ -86,8 +91,8 @@ export interface PurchaseInvoiceListRow {
   supplierName: string;
   companyId: string;
   companyName: string;
-  siteGroupId: string | null;
-  siteGroupName: string | null;
+  siteLocationId: string | null;
+  siteLocationName: string | null;
   documentDate: string | null;
   subtotal: string;
   totalGstAmount: string;
@@ -111,7 +116,7 @@ const HEADER_COLUMNS = {
   siteId: purchaseInvoices.siteId,
   supplierId: purchaseInvoices.supplierId,
   companyId: purchaseInvoices.companyId,
-  siteGroupId: purchaseInvoices.siteGroupId,
+  siteLocationId: purchaseInvoices.siteLocationId,
   purchaseOrderId: purchaseInvoices.purchaseOrderId,
   documentDate: purchaseInvoices.documentDate,
   challanNo: purchaseInvoices.challanNo,
@@ -122,6 +127,7 @@ const HEADER_COLUMNS = {
   description: purchaseInvoices.description,
   contactName: purchaseInvoices.contactName,
   contactNumber: purchaseInvoices.contactNumber,
+  billingAddress: purchaseInvoices.billingAddress,
   shippingAddress: purchaseInvoices.shippingAddress,
   groupAddress: purchaseInvoices.groupAddress,
   subtotal: purchaseInvoices.subtotal,
@@ -253,8 +259,8 @@ export class PurchaseInvoicesRepository extends BaseRepository {
         supplierName: suppliers.name,
         companyId: purchaseInvoices.companyId,
         companyName: companies.name,
-        siteGroupId: purchaseInvoices.siteGroupId,
-        siteGroupName: siteGroups.name,
+        siteLocationId: purchaseInvoices.siteLocationId,
+        siteLocationName: siteLocations.name,
         documentDate: purchaseInvoices.documentDate,
         subtotal: purchaseInvoices.subtotal,
         totalGstAmount: purchaseInvoices.totalGstAmount,
@@ -275,7 +281,7 @@ export class PurchaseInvoicesRepository extends BaseRepository {
       // would silently hide every invoice that has neither — which is exactly
       // how the source's own INNER JOINs lose free-text lines.
       .leftJoin(sites, eq(purchaseInvoices.siteId, sites.id))
-      .leftJoin(siteGroups, eq(purchaseInvoices.siteGroupId, siteGroups.id))
+      .leftJoin(siteLocations, eq(purchaseInvoices.siteLocationId, siteLocations.id))
       .innerJoin(suppliers, eq(purchaseInvoices.supplierId, suppliers.id))
       .innerJoin(companies, eq(purchaseInvoices.companyId, companies.id))
       .where(where.length ? and(...where) : undefined)
@@ -415,10 +421,15 @@ export class PurchaseInvoicesRepository extends BaseRepository {
 
     const id = await writing(() =>
       this.db.transaction(async (tx) => {
+        const handle = tx as unknown as Database;
+        await assertLocationAtSite(handle, header.siteLocationId, header.siteId);
+
         const [created] = await tx
           .insert(purchaseInvoices)
           .values({
             ...header,
+            // Our site's address, whatever the client sent — the business rule.
+            billingAddress: await billingAddressOf(handle, header.siteId),
             documentDate: header.documentDate ? new Date(header.documentDate) : null,
             subtotal: totals.subtotal,
             totalGstAmount: totals.totalGst,
@@ -465,7 +476,22 @@ export class PurchaseInvoicesRepository extends BaseRepository {
 
     await writing(() =>
       this.db.transaction(async (tx) => {
-        const patch: Record<string, unknown> = { ...header, ...updatedBy(actorId) };
+        const handle = tx as unknown as Database;
+        const patch: Record<string, unknown> = {
+          ...header,
+          ...(await placementPatch(handle, header, async () => {
+            const [row] = await tx
+              .select({
+                siteId: purchaseInvoices.siteId,
+                siteLocationId: purchaseInvoices.siteLocationId,
+              })
+              .from(purchaseInvoices)
+              .where(eq(purchaseInvoices.id, id))
+              .limit(1);
+            return { siteId: row?.siteId ?? null, siteLocationId: row?.siteLocationId ?? null };
+          })),
+          ...updatedBy(actorId),
+        };
 
         if (header.documentDate !== undefined) {
           patch.documentDate = header.documentDate ? new Date(header.documentDate) : null;

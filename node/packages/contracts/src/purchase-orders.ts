@@ -123,46 +123,6 @@ export type PurchaseOrderDeliveryAddressInput = z.infer<
   typeof purchaseOrderDeliveryAddressInputSchema
 >;
 
-/**
- * What the two address panels offer, for one site.
- *
- * ONE REQUEST, because the panels are useless separately: the Group select, the
- * group's addresses and the site's addresses all change together when the site
- * in the header changes, and three requests would let the screen show a group
- * from one site beside addresses from another for as long as the slowest of them
- * took.
- */
-export const purchaseOrderDeliveryGroupSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  /** The group's "Multiple Group Address" repeater — `site_group_addresses`. */
-  addresses: z.array(z.string()),
-});
-export type PurchaseOrderDeliveryGroup = z.infer<typeof purchaseOrderDeliveryGroupSchema>;
-
-export const purchaseOrderDeliveryOptionsSchema = z.object({
-  /**
-   * The site's own addresses, composed from the columns the port holds.
-   *
-   * KNOWN SHORT OF THE LEGACY SCREEN, and the screen says so rather than
-   * pretending. Two reasons, both PLAN.md §1.4 and both waiting on the census:
-   *
-   *  - The source's primary list is the `SiteAddresses` TABLE, many rows per
-   *    site, which has no equivalent here. `sites` carries one main address and
-   *    one shipping address, so at most two are on offer where the legacy screen
-   *    may show several.
-   *  - The legacy string ends `", CityName, StateName, CountryName"`, and those
-   *    are bare integer ids here with no lookup table behind them. Including
-   *    "13, 7, 1" in a delivery address would be worse than leaving it out.
-   *
-   * Nothing is invented to fill the gap: an address that cannot be composed is
-   * absent, and a site with neither column filled returns an empty list.
-   */
-  siteAddresses: z.array(z.string()),
-  groups: z.array(purchaseOrderDeliveryGroupSchema),
-});
-export type PurchaseOrderDeliveryOptions = z.infer<typeof purchaseOrderDeliveryOptionsSchema>;
-
 export const purchaseOrderRowSchema = z.object({
   id: z.string(),
   poNo: z.string(),
@@ -203,7 +163,7 @@ export type PurchaseOrderRow = z.infer<typeof purchaseOrderRowSchema>;
 export const purchaseOrderDetailSchema = purchaseOrderRowSchema
   .omit({ capabilities: true, siteName: true, supplierName: true, companyName: true, lineCount: true })
   .extend({
-    siteGroupId: z.string().nullable(),
+    siteLocationId: z.string().nullable(),
 
     deliveryDate: z.string().nullable(),
     deliveryImmediate: z.boolean(),
@@ -211,6 +171,7 @@ export const purchaseOrderDetailSchema = purchaseOrderRowSchema
     terms: z.string().nullable(),
     description: z.string().nullable(),
     billingAddress: z.string().nullable(),
+    shippingAddress: z.string().nullable(),
     groupAddress: z.string().nullable(),
 
     contactName: z.string().nullable(),
@@ -227,6 +188,10 @@ export const purchaseOrderDetailSchema = purchaseOrderRowSchema
     totalDiscount: z.string().nullable(),
 
     items: z.array(purchaseOrderItemRowSchema),
+    /**
+     * The per-address quantity split of orders raised before 15 Sep 2026. The
+     * form no longer offers it; it shows these rows read-only and can clear them.
+     */
     deliveryAddresses: z.array(purchaseOrderDeliveryAddressRowSchema),
   });
 export type PurchaseOrderDetail = z.infer<typeof purchaseOrderDetailSchema>;
@@ -277,7 +242,8 @@ export const createPurchaseOrderSchema = z.object({
   siteId: uuidId,
   supplierId: uuidId,
   companyId: uuidId,
-  siteGroupId: optionalUuidId,
+  /** A location of the order's site. The server refuses one from another site. */
+  siteLocationId: optionalUuidId,
 
   documentDate: optionalDate,
 
@@ -298,8 +264,12 @@ export const createPurchaseOrderSchema = z.object({
   dispatchBy: optionalText(200),
   paymentTerms: optionalText(500),
 
-  billingAddress: optionalText(500),
-  groupAddress: optionalText(500),
+  /**
+   * ONE shipping address, chosen on the form from the site's addresses and
+   * copied as text. There is no billing address here: the server copies the
+   * site's own address into it on every save, which is the business rule.
+   */
+  shippingAddress: optionalText(500),
 
   /**
    * HTML, and sanitised on the way in — see `purchase-order-terms.ts` for the
@@ -321,6 +291,10 @@ export const createPurchaseOrderSchema = z.object({
     .max(200, "An order cannot carry more than 200 lines"),
 
   /**
+   * THE OLD QUANTITY SPLIT. The form stopped offering it on 15 Sep 2026 and sends
+   * this only as an empty list, to clear an old order's rows. It is still
+   * accepted in full, so an order's existing split can be carried and checked.
+   *
    * Empty is normal — the source saves orders with no delivery address at all,
    * and an order whose deliveries are not yet decided is an ordinary state.
    *

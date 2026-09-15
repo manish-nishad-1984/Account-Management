@@ -131,9 +131,11 @@ describe("site addresses (real PostgreSQL)", () => {
     });
   });
 
-  describe("the choices a document offers", () => {
+  describe("what a document form is offered", () => {
+    const choicesFor = async (id: string) => (await repo.documentOptions(id)).shippingAddresses;
+
     it("leads with the site's own address", async () => {
-      const choices = await repo.addressChoices(siteId);
+      const choices = await choicesFor(siteId);
 
       expect(choices[0]).toMatchObject({
         source: "site",
@@ -141,19 +143,41 @@ describe("site addresses (real PostgreSQL)", () => {
       });
     });
 
-    it("includes the shipping address and then the extra ones", async () => {
+    it("includes the shipping address, then the extra ones, then the location addresses", async () => {
       await repo.addAddress(siteId, { address: "Warehouse B, Sachin GIDC" });
-      const choices = await repo.addressChoices(siteId);
+      await db
+        .insert(schema.siteLocationAddresses)
+        .values({ siteId, address: "Block A gate, Ring Road", lineNumber: 1 });
+      const choices = await choicesFor(siteId);
 
-      expect(choices.map((c) => c.source)).toEqual(["site", "site-shipping", "extra"]);
-      expect(choices.at(-1)!.address).toBe("Warehouse B, Sachin GIDC");
+      expect(choices.map((c) => c.source)).toEqual(["site", "site-shipping", "extra", "location"]);
+      expect(choices.at(-1)!.address).toBe("Block A gate, Ring Road");
     });
 
     it("offers nothing for an address the site has left blank", async () => {
-      const choices = await repo.addressChoices(otherSiteId);
+      const choices = await choicesFor(otherSiteId);
 
       expect(choices).toHaveLength(1);
       expect(choices[0]!.source).toBe("site");
+    });
+
+    /** The business rule: billing is the site's own address, and only that. */
+    it("gives the site's own address as the billing address", async () => {
+      expect((await repo.documentOptions(siteId)).billingAddress).toBe(
+        "Plot 14, Ring Road, Surat 395002",
+      );
+    });
+
+    it("lists the site's live locations by name, and no other site's", async () => {
+      await db.insert(schema.siteLocations).values([
+        { siteId, name: "Store yard" },
+        { siteId, name: "Block A" },
+        { siteId, name: "Gone", isDeleted: true },
+        { siteId: otherSiteId, name: "Theirs" },
+      ]);
+
+      const { locations } = await repo.documentOptions(siteId);
+      expect(locations.map((l) => l.name)).toEqual(["Block A", "Store yard"]);
     });
 
     /**
@@ -167,7 +191,7 @@ describe("site addresses (real PostgreSQL)", () => {
         .set({ shippingAddress: "Plot 14, Ring Road, Surat 395002" })
         .where(eq(schema.sites.id, siteId));
 
-      const choices = await repo.addressChoices(siteId);
+      const choices = await choicesFor(siteId);
       expect(choices).toHaveLength(1);
     });
 
@@ -175,13 +199,13 @@ describe("site addresses (real PostgreSQL)", () => {
       const created = await repo.addAddress(siteId, { address: "Gate 2" });
       await repo.removeAddress(siteId, created.id);
 
-      const choices = await repo.addressChoices(siteId);
+      const choices = await choicesFor(siteId);
       expect(choices.map((c) => c.address)).not.toContain("Gate 2");
     });
 
     it("gives each choice a key that is stable within the site", async () => {
       const created = await repo.addAddress(siteId, { address: "Gate 2" });
-      const choices = await repo.addressChoices(siteId);
+      const choices = await choicesFor(siteId);
 
       expect(choices.map((c) => c.key)).toEqual([
         "site",

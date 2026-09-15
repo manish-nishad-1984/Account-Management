@@ -1,15 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  addressChoicesResponseSchema,
   siteAddressSchema,
   siteAddressesResponseSchema,
   siteDetailSchema,
+  siteDocumentOptionsSchema,
   siteRowSchema,
-  type AddressChoicesResponse,
   type CreateSite,
   type SiteAddress,
   type SiteAddressesResponse,
   type SiteDetail,
+  type SiteDocumentOptions,
   type SiteRow,
   type UpdateSite,
 } from "@accountmanagement/contracts";
@@ -56,15 +56,19 @@ export const useSiteAddresses = (siteId: string | null) =>
       }).then((response) => response.rows),
   });
 
-export const useAddressChoices = (siteId: string | null) =>
+/**
+ * The billing address, shipping choices and locations an order or invoice form
+ * needs for its site. Unguarded on the server, like the header's site scope.
+ */
+export const useSiteDocumentOptions = (siteId: string | null) =>
   useQuery({
-    queryKey: [RESOURCE, "address-choices", siteId],
+    queryKey: [RESOURCE, "document-options", siteId],
     enabled: siteId !== null && siteId !== "",
     queryFn: ({ signal }) =>
-      apiRequest<AddressChoicesResponse>(`/${RESOURCE}/${siteId}/address-choices`, {
-        schema: addressChoicesResponseSchema,
+      apiRequest<SiteDocumentOptions>(`/${RESOURCE}/${siteId}/document-options`, {
+        schema: siteDocumentOptionsSchema,
         signal,
-      }).then((response) => response.rows),
+      }),
   });
 
 /**
@@ -95,7 +99,7 @@ export function useSiteAddressWrites() {
     onSuccess: (_result, variables) => {
       void invalidate(variables.siteId);
       void queryClient.invalidateQueries({
-        queryKey: [RESOURCE, "address-choices", variables.siteId],
+        queryKey: [RESOURCE, "document-options", variables.siteId],
       });
     },
   });

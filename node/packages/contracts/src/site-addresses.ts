@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requiredText } from "./fields";
+import { siteLocationSchema } from "./site-locations";
 
 /**
  * The delivery addresses belonging to a site.
@@ -40,23 +41,33 @@ export const saveSiteAddressSchema = z.object({
 export type SaveSiteAddress = z.infer<typeof saveSiteAddressSchema>;
 
 /**
- * What a document offers when someone picks "deliver to".
+ * One place a document can be shipped to.
  *
- * The site's own address and its extra ones arrive as one list, because that is
+ * The site's own address, its delivery addresses from the Site master, and the
+ * addresses from the Site Location screen arrive as ONE list, because that is
  * the choice being made — a person picking where a delivery goes does not care
  * which table the line came from. `source` says which, so the screen can label
- * the primary one, and so a future session can tell them apart without guessing
- * at the text.
+ * them, and so a future session can tell them apart without guessing at the text.
  */
 export const addressChoiceSchema = z.object({
-  /** Stable within one site: `site`, `site-shipping`, or `extra-<id>`. */
+  /** Stable within one site: `site`, `site-shipping`, `extra-<id>` or `location-<id>`. */
   key: z.string(),
-  source: z.enum(["site", "site-shipping", "extra"]),
+  source: z.enum(["site", "site-shipping", "extra", "location"]),
   address: z.string(),
 });
 export type AddressChoice = z.infer<typeof addressChoiceSchema>;
 
-export const addressChoicesResponseSchema = z.object({
-  rows: z.array(addressChoiceSchema),
+/**
+ * Everything an order or invoice form needs from its site, in one request.
+ *
+ * The rule the business set on 15 Sep 2026: the BILLING address is our own
+ * site's address and nothing else, so it is shown, not chosen; the SHIPPING
+ * address is exactly one of the site's addresses, chosen from a list. The
+ * location names are what the Location select offers.
+ */
+export const siteDocumentOptionsSchema = z.object({
+  billingAddress: z.string().nullable(),
+  shippingAddresses: z.array(addressChoiceSchema),
+  locations: z.array(siteLocationSchema),
 });
-export type AddressChoicesResponse = z.infer<typeof addressChoicesResponseSchema>;
+export type SiteDocumentOptions = z.infer<typeof siteDocumentOptionsSchema>;

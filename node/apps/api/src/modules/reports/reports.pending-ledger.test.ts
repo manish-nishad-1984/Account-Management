@@ -59,7 +59,7 @@ describe("ReportsRepository.pendingLedger (real PostgreSQL)", () => {
           partyId: supplierId,
           companyId,
           siteId,
-          siteGroupId: null,
+          siteLocationId: null,
           paymentDate: `${date}T00:00:00.000Z`,
           amount,
           description: null,

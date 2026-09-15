@@ -99,12 +99,12 @@ export function PaymentsPage() {
         ),
       },
       {
-        id: "siteGroupName",
-        header: "Site group",
+        id: "siteLocationName",
+        header: "Location",
         meta: { defaultHidden: true },
         cell: ({ row }) =>
-          row.original.siteGroupName ? (
-            <span className="text-slate-600">{row.original.siteGroupName}</span>
+          row.original.siteLocationName ? (
+            <span className="text-slate-600">{row.original.siteLocationName}</span>
           ) : (
             <span className="text-slate-300">—</span>
           ),

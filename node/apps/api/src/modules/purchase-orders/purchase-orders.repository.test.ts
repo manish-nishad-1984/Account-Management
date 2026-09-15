@@ -712,110 +712,103 @@ describe("PurchaseOrdersRepository (real PostgreSQL)", () => {
     });
   });
 
-  describe("delivery options", () => {
-    it("offers the site's shipping address first, then its main address", async () => {
-      const [only] = await db
-        .insert(schema.sites)
-        .values({
-          name: "Hazira Yard",
-          address: "Survey 118",
-          area: "Hazira",
-          pincode: "394270",
-          shippingAddress: "Gate 3, Plot 9",
-          shippingArea: "Mora",
-          shippingPincode: "394517",
-        })
-        .returning({ id: schema.sites.id });
+  /**
+   * The business rules of 15 Sep 2026: billing is our site's own address and is
+   * not accepted from the client; shipping is one chosen address; the location
+   * must be one of the order's own site's locations.
+   */
+  describe("billing, shipping and location", () => {
+    const locationAt = async (site: string, name: string) => {
+      const [row] = await db
+        .insert(schema.siteLocations)
+        .values({ siteId: site, name })
+        .returning({ id: schema.siteLocations.id });
+      return row!.id;
+    };
 
-      const options = await repo.deliveryOptions(only!.id);
-
-      expect(options.siteAddresses).toEqual([
-        "Gate 3, Plot 9, Mora, 394517",
-        "Survey 118, Hazira, 394270",
-      ]);
+    beforeEach(async () => {
+      await db
+        .update(schema.sites)
+        .set({ address: "  Plot 12, Akwada Lake Front  " })
+        .where(eq(schema.sites.id, siteId));
     });
 
-    it("offers one line when the two addresses are the same", async () => {
-      const [same] = await db
-        .insert(schema.sites)
-        .values({ name: "One Address", address: "Plot 1", shippingAddress: "Plot 1" })
-        .returning({ id: schema.sites.id });
-
-      expect((await repo.deliveryOptions(same!.id)).siteAddresses).toEqual(["Plot 1"]);
+    it("copies the site's own address into the billing address", async () => {
+      const created = await repo.create(input(), ACTOR);
+      expect(created.billingAddress).toBe("Plot 12, Akwada Lake Front");
     });
 
-    it("skips the parts a site has not filled in rather than leaving gaps", async () => {
-      // The source concatenates with no null handling and produces ", , Surat,".
-      const [sparse] = await db
-        .insert(schema.sites)
-        .values({ name: "Sparse", address: "Plot 7" })
-        .returning({ id: schema.sites.id });
-
-      expect((await repo.deliveryOptions(sparse!.id)).siteAddresses).toEqual(["Plot 7"]);
+    it("ignores a billing address in the body", async () => {
+      // The contract has no billing field, so a crafted one is stripped on parse.
+      const created = await repo.create(input({ billingAddress: "Somewhere else" }), ACTOR);
+      expect(created.billingAddress).toBe("Plot 12, Akwada Lake Front");
     });
 
-    it("offers nothing rather than an empty string when a site has no address", async () => {
-      expect((await repo.deliveryOptions(siteId)).siteAddresses).toEqual([]);
+    it("stores the one shipping address chosen", async () => {
+      const created = await repo.create(input({ shippingAddress: "Gate 3, Riverside" }), ACTOR);
+      expect(created.shippingAddress).toBe("Gate 3, Riverside");
     });
 
-    it("lists the groups the site is in, with their addresses", async () => {
-      const [group] = await db
-        .insert(schema.siteGroups)
-        .values({ name: "ROAD-GATE" })
-        .returning({ id: schema.siteGroups.id });
-      await db.insert(schema.siteGroupSites).values({ groupId: group!.id, siteId });
-      await db.insert(schema.siteGroupAddresses).values([
-        { groupId: group!.id, address: "Ward 3" },
-        { groupId: group!.id, address: "Ward 1" },
-      ]);
-
-      const options = await repo.deliveryOptions(siteId);
-
-      expect(options.groups).toHaveLength(1);
-      expect(options.groups[0]!.name).toBe("ROAD-GATE");
-      expect(options.groups[0]!.addresses).toEqual(["Ward 1", "Ward 3"]);
+    it("stores the location when it belongs to the order's site", async () => {
+      const blockA = await locationAt(siteId, "Block A");
+      const created = await repo.create(input({ siteLocationId: blockA }), ACTOR);
+      expect(created.siteLocationId).toBe(blockA);
     });
 
-    it("lists a group that has no addresses, because it is still a real group", async () => {
-      const [group] = await db
-        .insert(schema.siteGroups)
-        .values({ name: "EMPTY" })
-        .returning({ id: schema.siteGroups.id });
-      await db.insert(schema.siteGroupSites).values({ groupId: group!.id, siteId });
-
-      const options = await repo.deliveryOptions(siteId);
-      expect(options.groups).toHaveLength(1);
-      expect(options.groups[0]!.addresses).toEqual([]);
-    });
-
-    it("does not offer a group from another site", async () => {
+    it("refuses a location from another site, on create and on update", async () => {
       const [other] = await db
         .insert(schema.sites)
         .values({ name: "Elsewhere" })
         .returning({ id: schema.sites.id });
-      const [group] = await db
-        .insert(schema.siteGroups)
-        .values({ name: "THEIRS" })
-        .returning({ id: schema.siteGroups.id });
-      await db.insert(schema.siteGroupSites).values({ groupId: group!.id, siteId: other!.id });
+      const theirs = await locationAt(other!.id, "Their yard");
 
-      expect((await repo.deliveryOptions(siteId)).groups).toEqual([]);
-    });
+      await expect(repo.create(input({ siteLocationId: theirs }), ACTOR)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
 
-    it("does not offer a deleted group", async () => {
-      const [group] = await db
-        .insert(schema.siteGroups)
-        .values({ name: "GONE", isDeleted: true })
-        .returning({ id: schema.siteGroups.id });
-      await db.insert(schema.siteGroupSites).values({ groupId: group!.id, siteId });
-
-      expect((await repo.deliveryOptions(siteId)).groups).toEqual([]);
-    });
-
-    it("refuses a site that does not exist", async () => {
+      const created = await repo.create(input(), ACTOR);
       await expect(
-        repo.deliveryOptions("99999999-9999-9999-9999-999999999999"),
-      ).rejects.toBeInstanceOf(NotFoundException);
+        repo.update(created.id, patch({ siteLocationId: theirs }), ACTOR),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("refuses moving an order to another site while it keeps this site's location", async () => {
+      const blockA = await locationAt(siteId, "Block A");
+      const [other] = await db
+        .insert(schema.sites)
+        .values({ name: "Elsewhere" })
+        .returning({ id: schema.sites.id });
+      const created = await repo.create(input({ siteLocationId: blockA }), ACTOR);
+
+      await expect(
+        repo.update(created.id, patch({ siteId: other!.id }), ACTOR),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("recopies the billing address when the site is sent, and not otherwise", async () => {
+      const created = await repo.create(input(), ACTOR);
+      await db
+        .update(schema.sites)
+        .set({ address: "New office, Ring Road" })
+        .where(eq(schema.sites.id, siteId));
+
+      const notesOnly = await repo.update(created.id, patch({ buyersPurchaseNo: "X" }), ACTOR);
+      expect(notesOnly.billingAddress).toBe("Plot 12, Akwada Lake Front");
+
+      const resent = await repo.update(created.id, patch({ siteId }), ACTOR);
+      expect(resent.billingAddress).toBe("New office, Ring Road");
+    });
+
+    it("keeps an old order's delivery split when the update does not mention it", async () => {
+      const created = await repo.create(
+        input({ deliveryAddresses: [{ kind: "site", address: "Gate 1", quantity: "3" }] }),
+        ACTOR,
+      );
+      const updated = await repo.update(created.id, patch({ buyersPurchaseNo: "X" }), ACTOR);
+      expect(updated.deliveryAddresses).toHaveLength(1);
+
+      const cleared = await repo.update(created.id, patch({ deliveryAddresses: [] }), ACTOR);
+      expect(cleared.deliveryAddresses).toEqual([]);
     });
   });
 });

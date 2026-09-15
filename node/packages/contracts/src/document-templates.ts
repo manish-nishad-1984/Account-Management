@@ -146,7 +146,7 @@ export const DOCUMENT_FIELD_LABELS: Record<DocumentField, string> = {
   "dispatch-by": "Dispatched by",
   "payment-terms": "Payment terms",
   site: "Site",
-  "site-group": "Site group",
+  "site-group": "Site location",
   contact: "Contact",
 };
 
@@ -562,7 +562,7 @@ export const printDocumentSchema = z.object({
     dispatchBy: nullableText,
     paymentTerms: nullableText,
     siteName: nullableText,
-    siteGroupName: nullableText,
+    siteLocationName: nullableText,
     contactName: nullableText,
     contactNumber: nullableText,
   }),

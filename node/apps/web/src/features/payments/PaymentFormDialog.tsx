@@ -95,7 +95,7 @@ export function PaymentFormDialog({
       // An opening balance carries no site — the server refuses one on a
       // payment and accepts its absence here, which is the source's own rule.
       siteId: row.kind === "opening_balance" ? null : row.siteId || null,
-      siteGroupId: null,
+      siteLocationId: null,
       paymentDate: row.paymentDate || null,
       amount: row.amount,
       description: row.description || null,

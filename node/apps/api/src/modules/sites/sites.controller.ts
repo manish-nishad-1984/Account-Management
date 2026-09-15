@@ -17,13 +17,13 @@ import {
   listQuerySchema,
   saveSiteAddressSchema,
   updateSiteSchema,
-  type AddressChoicesResponse,
   type CreateSite,
   type ListResponse,
   type SaveSiteAddress,
   type SiteAddress,
   type SiteAddressesResponse,
   type SiteDetail,
+  type SiteDocumentOptions,
   type SiteRow,
   type SiteScopeResponse,
   type UpdateSite,
@@ -112,7 +112,7 @@ export class SitesController {
     return this.sites.update(id, body, actorId(caller));
   }
 
-  /** Soft delete. 409 naming the users or groups still attached. */
+  /** Soft delete. 409 naming the users or locations still attached. */
   @Delete(":id")
   @Permissions("site.delete")
   @HttpCode(204)
@@ -142,17 +142,18 @@ export class SitesController {
   }
 
   /**
-   * Where a delivery can go for this site, for a document's address picker.
+   * The billing address, shipping choices and location names an order or
+   * invoice form needs for this site.
    *
    * NO `@Permissions`, like `assignable` above and for the same reason: the
    * people who raise invoices hold `sales-invoice.add`, not `site.view`, and a
-   * picker they cannot load is a screen they cannot finish. It answers with
-   * addresses for one named site and nothing else — no names, no contacts, no
-   * ids beyond the choice keys.
+   * form they cannot load is a screen they cannot finish. It answers with
+   * addresses and location names for one named site and nothing else — no
+   * contacts, no counts.
    */
-  @Get(":id/address-choices")
-  addressChoices(@Param("id", ParseUUIDPipe) id: string): Promise<AddressChoicesResponse> {
-    return this.sites.addressChoices(id).then((rows) => ({ rows }));
+  @Get(":id/document-options")
+  documentOptions(@Param("id", ParseUUIDPipe) id: string): Promise<SiteDocumentOptions> {
+    return this.sites.documentOptions(id);
   }
 
   @Post(":id/addresses")

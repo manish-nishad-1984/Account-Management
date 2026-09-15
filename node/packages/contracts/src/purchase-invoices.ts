@@ -98,8 +98,8 @@ export const purchaseInvoiceRowSchema = z.object({
   supplierName: z.string(),
   companyId: z.string(),
   companyName: z.string(),
-  siteGroupId: z.string().nullable(),
-  siteGroupName: z.string().nullable(),
+  siteLocationId: z.string().nullable(),
+  siteLocationName: z.string().nullable(),
 
   documentDate: z.string().nullable(),
 
@@ -130,7 +130,7 @@ export const purchaseInvoiceDetailSchema = purchaseInvoiceRowSchema
     siteName: true,
     supplierName: true,
     companyName: true,
-    siteGroupName: true,
+    siteLocationName: true,
     lineCount: true,
   })
   .extend({
@@ -147,6 +147,8 @@ export const purchaseInvoiceDetailSchema = purchaseInvoiceRowSchema
 
     contactName: z.string().nullable(),
     contactNumber: z.string().nullable(),
+    /** Our site's address, copied by the server on save. */
+    billingAddress: z.string().nullable(),
     shippingAddress: z.string().nullable(),
     groupAddress: z.string().nullable(),
 
@@ -226,7 +228,8 @@ export const createPurchaseInvoiceSchema = z.object({
   siteId: optionalUuidId,
   supplierId: uuidId,
   companyId: uuidId,
-  siteGroupId: optionalUuidId,
+  /** A location of the invoice's site. The server refuses one from another site. */
+  siteLocationId: optionalUuidId,
   purchaseOrderId: optionalUuidId,
 
   documentDate: optionalDate,
@@ -240,8 +243,8 @@ export const createPurchaseInvoiceSchema = z.object({
 
   contactName: optionalText(200),
   contactNumber: optionalText(20),
+  /** ONE shipping address, chosen from the site's addresses. Billing is set by the server. */
   shippingAddress: optionalText(500),
-  groupAddress: optionalText(500),
 
   /**
    * Tax deducted at source, SUBTRACTED from the total.

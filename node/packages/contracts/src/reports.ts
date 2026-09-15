@@ -63,8 +63,8 @@ export const ledgerRowSchema = z.object({
   partyName: z.string(),
   siteId: z.string().nullable(),
   siteName: z.string().nullable(),
-  siteGroupId: z.string().nullable(),
-  siteGroupName: z.string().nullable(),
+  siteLocationId: z.string().nullable(),
+  siteLocationName: z.string().nullable(),
   companyId: z.string(),
   companyName: z.string(),
 
@@ -147,8 +147,8 @@ export const pendingLedgerRowSchema = z.object({
   partyName: z.string(),
   siteId: z.string().nullable(),
   siteName: z.string().nullable(),
-  siteGroupId: z.string().nullable(),
-  siteGroupName: z.string().nullable(),
+  siteLocationId: z.string().nullable(),
+  siteLocationName: z.string().nullable(),
   companyId: z.string(),
   companyName: z.string(),
 
@@ -216,7 +216,7 @@ export const reportFilterSchema = z.object({
   companyId: z.string().uuid().optional(),
   siteId: z.string().uuid().optional(),
   partyId: z.string().uuid().optional(),
-  siteGroupId: z.string().uuid().optional(),
+  siteLocationId: z.string().uuid().optional(),
   fromDate: z.string().optional(),
   toDate: z.string().optional(),
 });

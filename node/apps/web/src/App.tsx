@@ -12,7 +12,7 @@ import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { UsersPage } from "./features/users/UsersPage";
 import { CompaniesPage } from "./features/companies/CompaniesPage";
 import { SitesPage } from "./features/sites/SitesPage";
-import { SiteGroupsPage } from "./features/site-groups/SiteGroupsPage";
+import { SiteLocationsPage } from "./features/site-locations/SiteLocationsPage";
 import { SuppliersPage } from "./features/suppliers/SuppliersPage";
 import { ItemsPage } from "./features/items/ItemsPage";
 import { PurchaseRequestsPage } from "./features/purchase-requests/PurchaseRequestsPage";
@@ -47,7 +47,7 @@ const IMPLEMENTED: Record<string, React.ComponentType> = {
   "/permissions": PermissionsPage,
   "/companies": CompaniesPage,
   "/sites": SitesPage,
-  "/site-groups": SiteGroupsPage,
+  "/site-locations": SiteLocationsPage,
   "/suppliers": SuppliersPage,
   "/items": ItemsPage,
   "/purchase-requests": PurchaseRequestsPage,
@@ -130,6 +130,8 @@ export function App() {
                 </RequireAuth>
               }
             />
+            {/* Site Groups was renamed Site Location on 15 Sep 2026; old links still land. */}
+            <Route path="/site-groups" element={<Navigate to="/site-locations" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AuthProvider>

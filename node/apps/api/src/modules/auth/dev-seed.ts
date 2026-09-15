@@ -23,9 +23,12 @@ import {
   inventoryInward,
   inwardChallans,
   inwardChallanDocuments,
+  siteContacts,
   siteGroupAddresses,
   siteGroupSites,
   siteGroups,
+  siteLocationAddresses,
+  siteLocations,
   sites,
   suppliers,
   units,
@@ -189,30 +192,54 @@ export class DevSeed implements OnModuleInit {
       .values(siteValues)
       .returning({ id: sites.id, name: sites.name });
 
-    // Groups own their sites and their addresses independently — the shape SQL
-    // Server stores as a single cross-product table.
-    const insertedGroups = await db
-      .insert(siteGroups)
-      .values(GROUP_NAMES.map((name) => ({ name })))
-      .returning({ id: siteGroups.id, name: siteGroups.name });
-
-    await db.insert(siteGroupSites).values(
-      insertedGroups.flatMap((group, index) =>
-        insertedSites
-          .filter((_site, siteIndex) => siteIndex % insertedGroups.length === index)
-          .slice(0, 2 + (index % 4))
-          .map((site) => ({ groupId: group.id, siteId: site.id })),
-      ),
-    );
-
-    await db.insert(siteGroupAddresses).values(
-      insertedGroups.flatMap((group, index) =>
-        Array.from({ length: 1 + (index % 3) }, (_unused, a) => ({
-          groupId: group.id,
-          address: group.name + " depot " + (a + 1) + ", " + AREAS[(index + a) % AREAS.length],
+    /**
+     * CONTACTS, LOCATIONS AND LOCATION ADDRESSES — what replaced site groups on
+     * 15 Sep 2026.
+     *
+     * Each count is keyed off the site index with a modulus that shares no factor
+     * with 45 sites (4 and 7), so every count appears across the list rather than
+     * being pinned to some sites — the §5r/§5t seed trap. Some sites get NO
+     * locations and NO location addresses, because an empty Location select and
+     * a shipping list of the site's own addresses only are real states the forms
+     * have to show.
+     *
+     * The first contact repeats the site's own two contact columns, as the
+     * repository keeps them.
+     */
+    await db.insert(siteContacts).values(
+      siteValues.flatMap((site, i) =>
+        Array.from({ length: 1 + (i % 4) }, (_unused, c) => ({
+          siteId: insertedSites[i]!.id,
+          name:
+            c === 0
+              ? site.contactPersonName
+              : FIRST_NAMES[(i + c * 3) % FIRST_NAMES.length] + " " + LAST_NAMES[(i + c) % LAST_NAMES.length],
+          phone: c === 0 ? site.contactPersonPhoneNo : "98" + String(25000000 + i * 10 + c),
+          lineNumber: c + 1,
         })),
       ),
     );
+
+    const locationRows = insertedSites.flatMap((site, i) =>
+      Array.from({ length: i % 4 }, (_unused, l) => ({
+        siteId: site.id,
+        name: LOCATION_NAMES[(i + l * 5) % LOCATION_NAMES.length]!,
+      })),
+    );
+    if (locationRows.length > 0) {
+      await db.insert(siteLocations).values(locationRows);
+    }
+
+    const locationAddressRows = insertedSites.flatMap((site, i) =>
+      Array.from({ length: (i + 2) % 7 === 0 ? 0 : 1 + ((i + 1) % 3) }, (_unused, a) => ({
+        siteId: site.id,
+        address: `${LOCATION_NAMES[(i + a) % LOCATION_NAMES.length]} gate ${a + 1}, ${AREAS[(i + a) % AREAS.length]}`,
+        lineNumber: a + 1,
+      })),
+    );
+    if (locationAddressRows.length > 0) {
+      await db.insert(siteLocationAddresses).values(locationAddressRows);
+    }
 
     /**
      * Form names match the .NET `[FormPermissionAttribute]` strings exactly —
@@ -1272,8 +1299,8 @@ export class DevSeed implements OnModuleInit {
         " companies, " +
         insertedSites.length +
         " sites and " +
-        insertedGroups.length +
-        " site groups. Sign in as 'devuser' / '" +
+        locationRows.length +
+        " site locations. Sign in as 'devuser' / '" +
         DEV_PASSWORD +
         "'.",
     );
@@ -1333,6 +1360,9 @@ export class DevSeed implements OnModuleInit {
       ["site_groups", siteGroups as unknown as Record<string, unknown>],
       ["site_group_sites", siteGroupSites as unknown as Record<string, unknown>],
       ["site_group_addresses", siteGroupAddresses as unknown as Record<string, unknown>],
+      ["site_contacts", siteContacts as unknown as Record<string, unknown>],
+      ["site_locations", siteLocations as unknown as Record<string, unknown>],
+      ["site_location_addresses", siteLocationAddresses as unknown as Record<string, unknown>],
       ["purchase_order_delivery_addresses", purchaseOrderDeliveryAddresses as unknown as Record<string, unknown>],
       ["user_sites", userSites as unknown as Record<string, unknown>],
       ["user_companies", userCompanies as unknown as Record<string, unknown>],
@@ -1534,19 +1564,19 @@ const SITE_NAMES = [
   "Tharad Border Road",
 ];
 
-const GROUP_NAMES = [
-  "North Gujarat",
-  "South Gujarat",
-  "Saurashtra",
-  "Kutch Region",
-  "Ahmedabad Metro",
-  "Industrial Corridor",
-  "Coastal Belt",
-  "Highway Projects",
-  "Government Contracts",
-  "Private Housing",
-  "Solar Division",
-  "Port Works",
+/** Places inside a site. Eleven, a prime, so no seeded index lines up with it. */
+const LOCATION_NAMES = [
+  "Block A",
+  "Block B",
+  "Tower C",
+  "Store Yard",
+  "Batching Plant",
+  "Site Office",
+  "Labour Camp",
+  "North Gate",
+  "Clubhouse",
+  "Parking Level 1",
+  "Pump House",
 ];
 
 /**

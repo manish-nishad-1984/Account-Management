@@ -1194,6 +1194,21 @@ try {
    * and clearing it is correct — every session is invalidated when the user rows
    * are replaced — but it should be visible, not a surprise.
    */
+  /**
+   * WARNING — SINCE MIGRATION 0019 (15 Sep 2026) A RE-IMPORT LOSES DATA NOTHING REBUILDS.
+   *
+   * The truncate is CASCADE, so emptying `sites` also empties `site_contacts`,
+   * `site_locations` and `site_location_addresses`. Migration 0019 built those
+   * ONCE from the site columns and the site groups, and this importer does not
+   * write them. Re-running it against a database people have used since would
+   * throw away every contact list and location entered on the new screens, and
+   * every document's `site_location_id` with the transactional tables.
+   *
+   * Before re-importing: either re-run the data half of
+   * `apps/api/drizzle/0019_site_contacts_and_locations.sql` afterwards (it rebuilds
+   * from the imported groups, not from what people entered), or teach this tool
+   * the new tables. See SESSION-HANDOFF §5w.
+   */
   const TRUNCATE_ORDER = [
     "document_counters",
     "inward_challan_documents",

@@ -7,7 +7,6 @@ import type {
   ListQuery,
   PurchaseOrderDeliveryAddressInput,
   PurchaseOrderDeliveryAddressRow,
-  PurchaseOrderDeliveryOptions,
   PurchaseOrderDetail,
   PurchaseOrderItemRow,
   PurchaseOrderLineInput,
@@ -21,13 +20,15 @@ import {
   purchaseOrderDeliveryAddresses,
   purchaseOrderItems,
   purchaseOrders,
-  siteGroupAddresses,
-  siteGroupSites,
-  siteGroups,
   sites,
   suppliers,
   units,
 } from "../../db/schema";
+import {
+  assertLocationAtSite,
+  billingAddressOf,
+  placementPatch,
+} from "../sites/site-document-rules";
 import { sanitiseTerms } from "../../common/sanitise-terms";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
@@ -84,33 +85,13 @@ const templateKey = (value: string | null): PurchaseOrderDetail["termsTemplate"]
     ? (value as PurchaseOrderDetail["termsTemplate"])
     : null;
 
-/**
- * One line of address from the columns a site actually has.
- *
- * The legacy version is `Address + " , " + Area + ", " + City + ", " + State +
- * ", " + Country` — string concatenation with no null handling at all, so a site
- * missing its area reads ", , Surat," with the gap left in. Empty parts are
- * dropped here, and null comes back when there is nothing to compose, because
- * an address of ", ," is not an address and should not be offered as one.
- *
- * City, state and country are absent by necessity, not by choice: they are bare
- * integer ids with no lookup table until the census runs (PLAN.md §1.4).
- */
-const composeAddress = (...parts: (string | null)[]): string | null => {
-  const line = parts
-    .map((part) => part?.trim() ?? "")
-    .filter((part) => part.length > 0)
-    .join(", ");
-  return line.length > 0 ? line : null;
-};
-
 const HEADER_COLUMNS = {
   id: purchaseOrders.id,
   poNo: purchaseOrders.poNo,
   siteId: purchaseOrders.siteId,
   supplierId: purchaseOrders.supplierId,
   companyId: purchaseOrders.companyId,
-  siteGroupId: purchaseOrders.siteGroupId,
+  siteLocationId: purchaseOrders.siteLocationId,
   documentDate: purchaseOrders.documentDate,
   deliveryDate: purchaseOrders.deliveryDate,
   deliveryImmediate: purchaseOrders.deliveryImmediate,
@@ -118,6 +99,7 @@ const HEADER_COLUMNS = {
   termsTemplate: purchaseOrders.termsTemplate,
   description: purchaseOrders.description,
   billingAddress: purchaseOrders.billingAddress,
+  shippingAddress: purchaseOrders.shippingAddress,
   groupAddress: purchaseOrders.groupAddress,
   buyersPurchaseNo: purchaseOrders.buyersPurchaseNo,
   contactName: purchaseOrders.contactName,
@@ -326,77 +308,6 @@ export class PurchaseOrdersRepository extends BaseRepository {
     return rows.map((row) => ({ ...row, kind: row.kind === "group" ? "group" : "site" }));
   }
 
-  /**
-   * What the two address panels offer for a given site.
-   *
-   * The site's own addresses and every group that site belongs to, with each
-   * group's addresses, in one query pair — see the contract for why they are not
-   * three separate endpoints.
-   *
-   * NO `group.view` PERMISSION IS INVOLVED, deliberately, and for the reason
-   * §5h gives about `/sites/assignable`: `group.view` guards the site group
-   * MASTER screen. A clerk who may raise a purchase order but not administer
-   * groups would otherwise get an empty Group dropdown they cannot save past.
-   * The route is guarded by `purchase-orders.view`, which is the right that
-   * gets you to this screen at all.
-   */
-  async deliveryOptions(siteId: string): Promise<PurchaseOrderDeliveryOptions> {
-    const [site] = await this.db
-      .select({
-        address: sites.address,
-        area: sites.area,
-        pincode: sites.pincode,
-        shippingAddress: sites.shippingAddress,
-        shippingArea: sites.shippingArea,
-        shippingPincode: sites.shippingPincode,
-      })
-      .from(sites)
-      .where(and(eq(sites.id, siteId), eq(sites.isDeleted, false)))
-      .limit(1);
-
-    if (!site) {
-      throw new NotFoundException("Site not found");
-    }
-
-    /**
-     * Shipping first, because that is what the panel is for. Deduplicated,
-     * because a site whose shipping address equals its main address would
-     * otherwise offer the same line twice and a user ticking both would allocate
-     * the same delivery to one place under two rows.
-     */
-    const siteAddresses = [
-      composeAddress(site.shippingAddress, site.shippingArea, site.shippingPincode),
-      composeAddress(site.address, site.area, site.pincode),
-    ].filter((address, index, all): address is string => address !== null && all.indexOf(address) === index);
-
-    /**
-     * The groups this site is in, each with its addresses.
-     *
-     * `array_agg` with a LEFT JOIN, so a group with no addresses still appears —
-     * it is a real group and the Group select must be able to name it. The
-     * filter on the aggregate is what keeps a null from the outer join becoming
-     * an empty-string address in the list.
-     */
-    const groups = await this.db
-      .select({
-        id: siteGroups.id,
-        name: siteGroups.name,
-        addresses: sql<string[]>`coalesce(
-          array_agg(${siteGroupAddresses.address} order by ${siteGroupAddresses.address})
-            filter (where ${siteGroupAddresses.address} is not null),
-          '{}'
-        )`,
-      })
-      .from(siteGroups)
-      .innerJoin(siteGroupSites, eq(siteGroupSites.groupId, siteGroups.id))
-      .leftJoin(siteGroupAddresses, eq(siteGroupAddresses.groupId, siteGroups.id))
-      .where(and(eq(siteGroupSites.siteId, siteId), eq(siteGroups.isDeleted, false)))
-      .groupBy(siteGroups.id, siteGroups.name)
-      .orderBy(siteGroups.name);
-
-    return { siteAddresses, groups };
-  }
-
   async findById(id: string): Promise<PurchaseOrderDetail> {
     const [header] = await this.db
       .select(HEADER_COLUMNS)
@@ -442,6 +353,19 @@ export class PurchaseOrdersRepository extends BaseRepository {
     if (message) {
       throw new BadRequestException(message);
     }
+  }
+
+  /** The site and location an order is filed under now, for a partial update. */
+  private async placementOf(
+    db: Database,
+    id: string,
+  ): Promise<{ siteId: string | null; siteLocationId: string | null }> {
+    const [row] = await db
+      .select({ siteId: purchaseOrders.siteId, siteLocationId: purchaseOrders.siteLocationId })
+      .from(purchaseOrders)
+      .where(eq(purchaseOrders.id, id))
+      .limit(1);
+    return { siteId: row?.siteId ?? null, siteLocationId: row?.siteLocationId ?? null };
   }
 
   /** The delivery rows as they are stored, numbered by their position. */
@@ -554,11 +478,14 @@ export class PurchaseOrdersRepository extends BaseRepository {
         });
 
         const { items: _lines, deliveryAddresses, ...header } = input;
+        await assertLocationAtSite(handle, header.siteLocationId, header.siteId);
 
         const [created] = await tx
           .insert(purchaseOrders)
           .values({
             ...header,
+            // Our site's address, whatever the client sent — the business rule.
+            billingAddress: await billingAddressOf(handle, header.siteId),
             terms,
             poNo,
             documentDate: header.documentDate ? new Date(header.documentDate) : null,
@@ -638,7 +565,12 @@ export class PurchaseOrdersRepository extends BaseRepository {
 
     await writing(() =>
       this.db.transaction(async (tx) => {
-        const patch: Record<string, unknown> = { ...header, ...updatedBy(actorId) };
+        const handle = tx as unknown as Database;
+        const patch: Record<string, unknown> = {
+          ...header,
+          ...(await placementPatch(handle, header, () => this.placementOf(handle, id))),
+          ...updatedBy(actorId),
+        };
 
         if (header.documentDate !== undefined) {
           patch.documentDate = header.documentDate ? new Date(header.documentDate) : null;

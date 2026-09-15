@@ -58,7 +58,7 @@ export const NAV: NavSection[] = [
     items: [
       { label: "Companies", to: "/companies", icon: Building2, permission: "company", status: "ready", legacy: "/Company/CreateCompany" },
       { label: "Sites", to: "/sites", icon: MapPin, permission: "site", status: "ready", legacy: "/SiteMaster/SiteListView" },
-      { label: "Site Groups", to: "/site-groups", icon: Layers, permission: "group", status: "ready", legacy: "/SiteMaster/CreateGroup" },
+      { label: "Site Location", to: "/site-locations", icon: Layers, permission: "group", status: "ready", legacy: "/SiteMaster/CreateGroup" },
       { label: "Suppliers", to: "/suppliers", icon: Truck, permission: "supplier", status: "ready", legacy: "/Supplier/SupplierList" },
       { label: "Items", to: "/items", icon: Package, permission: "item", status: "ready", legacy: "/ItemMaster/ItemListView" },
       { label: "Users", to: "/users", icon: Users, permission: "user", status: "ready", legacy: "/User/UserListView" },

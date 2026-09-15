@@ -24,8 +24,8 @@ const ledgerRow = (overrides: Partial<LedgerRow> = {}): LedgerRow => ({
   partyName: "Om Sagar Traders",
   siteId: "s1",
   siteName: "Akwada Lake Front",
-  siteGroupId: "g1",
-  siteGroupName: "COMMUNITY HALL",
+  siteLocationId: "g1",
+  siteLocationName: "COMMUNITY HALL",
   companyId: "c1",
   companyName: "D H Infra",
   effect: "credit",
@@ -58,7 +58,7 @@ describe("report sheet columns", () => {
       "Date",
       "Supplier",
       "Site",
-      "Group",
+      "Location",
       "Credit",
       "Debit",
       "Balance",
@@ -108,7 +108,7 @@ describe("ledgerSheetRow", () => {
   });
 
   it("renders a null site and group as empty cells rather than the word null", () => {
-    const row = ledgerSheetRow(ledgerRow({ siteName: null, siteGroupName: null }));
+    const row = ledgerSheetRow(ledgerRow({ siteName: null, siteLocationName: null }));
     expect(row[3]).toBe("");
     expect(row[4]).toBe("");
   });

@@ -260,6 +260,7 @@ DONE     PO delivery addresses + T&C editor              (9 Sep 2026, §5s)
          Pending Ledger (client trial)                   (14 Sep 2026, §5v)
          item price change log (item_price_changes)      (14 Sep 2026, §5v)
          Document Layouts: templates, defaults, print    (15 Sep 2026, §5v)
+         Site Location, site contacts, billing/shipping  (15 Sep 2026, §5w)
 NOW      master-detail ANSWER                            <- with the business now, doc 19 Q12
 NEXT     Document Layouts block editor                   <- step 3 of the layout master, §5v
 NEXT     the OTHER 4 exports                             <- see below; purchase invoice list, item history

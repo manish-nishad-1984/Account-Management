@@ -14,7 +14,8 @@ const row = (name: string, overrides: Record<string, unknown> = {}) => ({
   area: "Navrangpura",
   pincode: "380001",
   userCount: 2,
-  groupCount: 1,
+  contactCount: 1,
+  locationCount: 1,
   capabilities: { canEdit: true, canDelete: true, canApprove: false },
   ...overrides,
 });
@@ -60,12 +61,11 @@ describe("SitesPage", () => {
     expect(lastRequestUrl().searchParams.get("limit")).toBe("25");
   });
 
-  it("shows the user and group counts as separate numbers", async () => {
-    // The source stores group membership as a cross product; two counts that are
-    // actually independent must render as two independent numbers.
+  it("shows the user and location counts as separate numbers", async () => {
+    // Two counts that are independent must render as two independent numbers.
     vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
       json({
-        rows: [row("Site A", { userCount: 3, groupCount: 2 })],
+        rows: [row("Site A", { userCount: 3, locationCount: 2 })],
         nextCursor: null,
         total: 1,
       }),
@@ -76,6 +76,15 @@ describe("SitesPage", () => {
     const table = screen.getByRole("table");
     expect(within(table).getByText("3")).toBeInTheDocument();
     expect(within(table).getByText("2")).toBeInTheDocument();
+  });
+
+  it("shows how many more contacts a site has beyond the first", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(
+      json({ rows: [row("Site A", { contactCount: 3 })], nextCursor: null, total: 1 }),
+    ));
+    renderPage();
+
+    expect(await screen.findByText("Amit Patel +2 more")).toBeInTheDocument();
   });
 
   it("marks an inactive site rather than hiding it", async () => {

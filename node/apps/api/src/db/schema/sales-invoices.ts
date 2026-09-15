@@ -132,6 +132,8 @@ export const salesInvoices = pgTable(
     contactName: text("contact_name"),
     contactNumber: text("contact_number"),
     shippingAddress: text("shipping_address"),
+    /** Our site's address, copied by the server. See `purchase_orders.billing_address`. */
+    billingAddress: text("billing_address"),
 
     /**
      * TOTALS — computed by `invoiceTotal.corrected()`, the same function the

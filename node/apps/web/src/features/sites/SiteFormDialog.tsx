@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
 import { Plus, Trash2 } from "lucide-react";
@@ -85,11 +85,22 @@ export function SiteFormDialog({
     handleSubmit,
     reset,
     setError,
+    control,
     formState: { errors },
   } = useForm<FormValues, unknown, Submitted>({
     resolver: zodResolver(createSiteSchema),
     defaultValues: EMPTY,
   });
+
+  /**
+   * Contacts ARE fields of the site — unlike the delivery addresses below, they
+   * are saved in the same request, as one list that replaces what is stored.
+   */
+  const {
+    fields: contactRows,
+    append: appendContact,
+    remove: removeContact,
+  } = useFieldArray({ control, name: "contacts" });
 
   useEffect(() => {
     if (!open) return;
@@ -158,24 +169,67 @@ export function SiteFormDialog({
               error={errors.name?.message}
               {...register("name")}
             />
-            <TextField
-              label="Contact person"
-              error={errors.contactPersonName?.message}
-              {...register("contactPersonName")}
-            />
-            <TextField
-              label="Contact phone"
-              inputMode="tel"
-              hint="More than one is fine, separated by commas"
-              error={errors.contactPersonPhoneNo?.message}
-              {...register("contactPersonPhoneNo")}
-            />
             <CheckboxField
               label="Active"
               hint="Inactive sites stay on the list but are marked"
               className="self-end pb-2.5"
               {...register("isActive")}
             />
+          </FormSection>
+
+          {/*
+            AS MANY CONTACTS AS THE SITE HAS, each a name and a number — asked
+            for on 15 Sep 2026, "the same way addresses are multiple". The first
+            one is the site's main contact: the Sites list shows it.
+          */}
+          <FormSection
+            title="Contacts"
+            description="The first contact is shown on the Sites list"
+            columns={1}
+          >
+            <div className="space-y-2">
+              {contactRows.length === 0 && (
+                <p className="text-sm text-slate-500">No contacts yet.</p>
+              )}
+
+              {contactRows.map((row, index) => (
+                <div key={row.id} className="flex items-start gap-2">
+                  <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
+                    <TextField
+                      label={`Contact ${index + 1} name`}
+                      labelHidden
+                      placeholder="Name"
+                      error={errors.contacts?.[index]?.name?.message}
+                      {...register(`contacts.${index}.name`)}
+                    />
+                    <TextField
+                      label={`Contact ${index + 1} phone`}
+                      labelHidden
+                      inputMode="tel"
+                      placeholder="Phone number"
+                      error={errors.contacts?.[index]?.phone?.message}
+                      {...register(`contacts.${index}.phone`)}
+                    />
+                  </div>
+                  <Button
+                    variant="ghost"
+                    icon={Trash2}
+                    className="px-2 py-2 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                    aria-label={`Remove contact ${index + 1}`}
+                    title={`Remove contact ${index + 1}`}
+                    onClick={() => removeContact(index)}
+                  />
+                </div>
+              ))}
+
+              <Button
+                variant="secondary"
+                icon={Plus}
+                onClick={() => appendContact({ name: "", phone: "" })}
+              >
+                Add contact
+              </Button>
+            </div>
           </FormSection>
 
           <FormSection title="Address">
@@ -256,6 +310,7 @@ const EMPTY: FormValues = {
   shippingStateId: null,
   shippingCountryId: null,
   shippingPincode: "",
+  contacts: [],
 };
 
 /**
@@ -282,4 +337,8 @@ const toFormValues = (detail: SiteDetail): FormValues => ({
   shippingStateId: detail.shippingStateId,
   shippingCountryId: detail.shippingCountryId,
   shippingPincode: text(detail.shippingPincode),
+  contacts: detail.contacts.map((contact) => ({
+    name: text(contact.name),
+    phone: text(contact.phone),
+  })),
 });

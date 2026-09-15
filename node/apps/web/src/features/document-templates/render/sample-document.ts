@@ -74,7 +74,7 @@ export function sampleDocument(documentType: DocumentType): PrintDocument {
       dispatchBy: "Road",
       paymentTerms: "30 days",
       siteName: "Sample Site",
-      siteGroupName: null,
+      siteLocationName: null,
       contactName: "Site Office",
       contactNumber: "98250 00000",
     },

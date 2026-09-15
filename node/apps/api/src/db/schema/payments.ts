@@ -2,6 +2,7 @@ import { boolean, index, numeric, pgTable, text, timestamp, uuid } from "drizzle
 import { companies, sites } from "./users";
 import { suppliers } from "./masters";
 import { siteGroups } from "./site-groups";
+import { siteLocations } from "./site-locations";
 
 /**
  * Payments — the modelling decision this module was blocked on.
@@ -92,6 +93,9 @@ export const payments = pgTable(
 
     /** See `purchase_orders.site_group_id` — the same text match, made real. */
     siteGroupId: uuid("site_group_id").references(() => siteGroups.id),
+
+    /** See `purchase_orders.site_location_id`. */
+    siteLocationId: uuid("site_location_id").references(() => siteLocations.id),
 
     /** The date the money moved, as typed. Distinct from `created_at`. */
     paymentDate: timestamp("payment_date", { withTimezone: true }),

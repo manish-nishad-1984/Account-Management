@@ -12,7 +12,7 @@ import { HealthModule } from "./modules/health/health.module";
 import { UsersModule } from "./modules/users/users.module";
 import { CompaniesModule } from "./modules/companies/companies.module";
 import { SitesModule } from "./modules/sites/sites.module";
-import { SiteGroupsModule } from "./modules/site-groups/site-groups.module";
+import { SiteLocationsModule } from "./modules/site-locations/site-locations.module";
 import { SuppliersModule } from "./modules/suppliers/suppliers.module";
 import { ItemsModule } from "./modules/items/items.module";
 import { PurchaseRequestsModule } from "./modules/purchase-requests/purchase-requests.module";
@@ -48,7 +48,7 @@ const env = loadEnv();
     UsersModule,
     CompaniesModule,
     SitesModule,
-    SiteGroupsModule,
+    SiteLocationsModule,
     SuppliersModule,
     ItemsModule,
     PurchaseRequestsModule,

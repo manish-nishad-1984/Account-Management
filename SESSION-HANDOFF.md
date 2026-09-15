@@ -1,15 +1,15 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
 **Written:** 2 September 2026, after the unblocking session. **Last extended
-15 September 2026** (§5v). Supersedes all earlier handoffs of the same name.
+15 September 2026** (§5w). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `b0f728b3`.** If `git log` shows commits after
+> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
 
 **Sections §3, §4, §8, §10 and §11 describe _now_ and are re-measured on every
-handoff. Sections §5, §5b … §5v are a log of days that already happened and are
+handoff. Sections §5, §5b … §5w are a log of days that already happened and are
 never edited.** If the two disagree, the numbered sections win — run
 `/handoff check` and it will say which have drifted.
 
@@ -117,7 +117,7 @@ AC/
         └── web/                   React 19 + Vite + Tailwind (489 tests)
 ```
 
-**1582 tests pass** — 1563 Node (135 contracts + 90 domain + 849 API + 489 web)
+**1563 tests pass** — 1544 Node (135 contracts + 90 domain + 845 API + 474 web)
 plus 19 .NET. **Both figures were RUN on 15 Sep 2026**, against `154d5405`:
 Node exit 0, 48 of 48 API files and 51 of 51 web files, zero failures; .NET
 `Passed! - Failed: 0, Passed: 19`. `npm run typecheck` was run the same day:
@@ -181,11 +181,11 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 ## 4. Repository state
 
 Branch **`main`**, working tree clean, pushed to `origin/main`. Typechecks, and
-all **1582 tests pass** — 1563 Node (135 contracts + 90 domain + 849 API + 489
+all **1563 tests pass** — 1544 Node (135 contracts + 90 domain + 845 API + 474
 web) + 19 .NET.
 
-Both suites were last measured at **`154d5405`**, the final code commit of
-15 Sep 2026, and both were RUN rather than proved. Anything after that on `main`
+The Node suite was last measured on the §5w code commit (15 Sep 2026) and RUN;
+the .NET figure is proved by the diff since `154d5405`, which touches no .NET file. Anything after that on `main`
 is documentation — a handoff always commits after its own measurement, so the
 newest hash is never the one the numbers were taken at, and naming it here would
 be a lie that looks precise.
@@ -221,6 +221,10 @@ be a lie that looks precise.
   reload, per-person grid columns, the width and phone fixes, and the client's
   requests of 14–15 Sep through Document Layouts. **Migrations 0013 to 0018**
   are among them, and all six are applied on the live database.
+- The §5w commit replaced Site Groups with **Site Location**, made site contacts
+  a list, and put one billing and one shipping address on POs and both invoice
+  types. **Migration `0019` converts live data** — see §5w before re-running the
+  importer, which would now destroy what people entered.
 - **`main` is pushed to `origin/main`** and the working tree is clean.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
   credential is in the HISTORY, not the working tree. Rotation is the fix.
@@ -3665,3 +3669,124 @@ Tests: **1582** — 1563 Node (135 contracts + 90 domain + 849 API + 489 web) +
 19 .NET, up 424 from §5u. **Both suites RUN** on 15 Sep 2026 against `154d5405`,
 and `npm run typecheck` clean. The per-commit figures in the messages (1,190 …
 1,382) are Node-only or partial counts and were not re-derived one by one.
+
+---
+
+## 5w. Site Location replaces Site Groups; several contacts per site; one billing address and one shipping address on every document (15 Sep 2026)
+
+Commit `<COMMIT>`. Carries **migration `0019_site_contacts_and_locations`**, which
+CONVERTS live data, not only adds tables.
+
+### What the client asked for, and the answers that shaped it
+
+In the client's words (Hinglish, paraphrased): contacts on the Site master should
+be a list like the addresses; "Site Groups" becomes **"Site Location"**; that form
+starts with a type-to-search site picker, then location-name boxes added with a
+**+**, then addresses; and wherever an invoice is made the user picks ONE of those
+addresses as the shipping address, while the billing address is always the site's
+own.
+
+Asked before building, and answered:
+
+| Question | Answer |
+|---|---|
+| A location owns addresses, or names and addresses are two lists? | **Two separate lists per site.** A location is just a name. |
+| The 35 existing site groups? | **Every (group, member site) becomes a location**, and documents keep pointing at theirs. |
+| Shipping: one address or several? | **One.** |
+| Which screens? | **Purchase Order, Purchase Invoice, Sales Invoice.** |
+| The PO quantity-split delivery panel (§5s)? | **Removed** — one shipping address. Old POs keep their split rows, readable, until someone clears them. |
+| Location addresses vs the site's delivery addresses (§5v)? | **Separate list**; the invoice offers both, combined. |
+
+### The model
+
+- `site_contacts` (site, name, phone, line). The FIRST contact is still written to
+  `sites.contact_person_name/phone_no`, because the Sites grid, the exports and
+  the print data read those columns and changing all of them was not the request.
+- `site_locations` (site, name, soft delete; unique per site on `lower(name)`
+  among live rows) and `site_location_addresses` (site, address, line).
+- `purchase_orders`, `purchase_invoices`, `payments` gain `site_location_id`.
+  POs gain `shipping_address`; PIs and SIs gain `billing_address`.
+- **`site_group_id` and the `site_groups*` tables are KEPT, and no longer
+  written.** They are the only record of what the conversion started from; drop
+  them in a later migration once nobody has asked about a location for a while.
+- `GET /sites/:id/address-choices` became **`GET /sites/:id/document-options`**:
+  `{ billingAddress, shippingAddresses, locations }` in one round trip. Order:
+  site address, site shipping address, the §5v extra addresses, then the location
+  addresses; duplicates dropped.
+- `/site-locations` replaces `/site-groups` (the web route redirects). The
+  permission subject is **still `group`** — the legacy form row — so nobody's
+  rights changed; the permissions matrix still labels it "Group".
+
+### Rules the SERVER enforces, not the form
+
+- **Billing is copied from the site on create, and re-copied only when `siteId`
+  is sent.** A billing address in the body is ignored. It is a snapshot on
+  purpose: an invoice printed next year must show the address it was raised
+  with, not the site's address after a move. (`site-document-rules.ts`)
+- **A location must belong to the document's site** — on create, on update, and
+  when an update moves the document to another site while keeping the location.
+  400 "That location does not belong to the chosen site".
+- Shipping is free text (max 500), not a foreign key: it is a snapshot for the
+  same reason, and a stored address that is no longer in the list shows as
+  "Saved on this document" rather than vanishing.
+
+### The migration, and how it was checked
+
+Five hand-written statements after the generated DDL: contacts from the site
+columns; a location per live (group, member site), names trimmed of CR/LF
+(**four live group names end in a carriage return**, and plain `btrim` removes
+only spaces); a location for every document whose group its site was never a
+member of, or whose group is deleted (deleted → deleted location, kept for the
+document, not offered); the three `site_location_id` backfills; and the live
+groups' addresses copied to every member site.
+
+`src/db/site-locations-migration.test.ts` applies 0000–0018 to PGlite, writes
+old-world rows (a CR-ended name, a deleted group, a document at a non-member
+site), applies 0019 and asserts every one. That is the only way to test a data
+migration here: the ordinary test database is built from the final schema, where
+the old data cannot exist.
+
+### Traps
+
+1. **The create schema's `.default([])` wiped old PO splits on update.** The edit
+   form submits through the create schema's resolver, which fills
+   `deliveryAddresses: []`, and the update treats an empty array as "clear". Every
+   edited old PO would have lost its split. The form now strips the defaulted
+   field and sends `[]` only when "Remove the old split when saving" was pressed.
+   Found by the PO form test, not by reading.
+2. **Do not clear the location/shipping by watching `siteId`.** The split
+   (side-panel) layout reuses the mounted form when another row is opened, so an
+   effect on `siteId` clears the newly loaded document's own values. Clearing is
+   in the Site select's `onChange`, i.e. only when a PERSON changes the site.
+3. **Refetches overwrote typing in the Site Location form.** The form applied
+   `detail.data` on every change; React Query hands over a new object on each
+   refetch (window focus is enough), so edits vanished. It passed alone and failed
+   under the full suite's load. Now applied once per chosen site.
+4. **All rows of one save share `created_at`** — PostgreSQL `now()` is the
+   transaction start — so ordering locations by it is arbitrary. Ordered by name.
+5. **THE IMPORTER NOW DESTROYS DATA NOTHING REBUILDS.** Its truncate is
+   `CASCADE`: emptying `sites` empties `site_contacts`, `site_locations`,
+   `site_location_addresses`, and the documents' `site_location_id`. A WARNING
+   block sits above `MASTER_TRUNCATE` (apply-snapshot.mjs) and `TRUNCATE_ORDER`
+   (import.mjs). Before any re-import: teach it the new tables, or re-run the data
+   half of 0019 afterwards — which rebuilds from groups, NOT from what people
+   entered on the new screens.
+
+### The honest cost
+
+- Tests went DOWN: web 489 → 474 and API 849 → 845. The site-groups tests, the
+  address picker and the PO delivery-panel tests were deleted with the code they
+  tested; the replacements (13 site-location repository tests, 4 migration tests,
+  the billing/shipping/location PO tests, 7 new web tests) are fewer and narrower.
+- The print data has no billing block yet; templates still show the site address
+  they showed before.
+- Two copies of history: `site_group_id` and `site_location_id` on the same rows
+  until the old columns are dropped.
+
+Tests: **1563** — 1544 Node (135 contracts + 90 domain + 845 API + 474 web) + 19
+.NET. The Node suite was RUN on 15 Sep 2026; three failures in that run (two
+stale fixtures, trap 3) were fixed and their workspaces re-run green (contracts
+135, web 474). No .NET file changed since `154d5405`, so its 19 are proved by the
+diff, not re-run. `npm run build` clean.
+
+Deployed: <RELEASE>.

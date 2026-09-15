@@ -43,8 +43,8 @@ export const paymentRowSchema = z.object({
   /** Null on an opening balance, which belongs to the party and not to a site. */
   siteId: z.string().nullable(),
   siteName: z.string().nullable(),
-  siteGroupId: z.string().nullable(),
-  siteGroupName: z.string().nullable(),
+  siteLocationId: z.string().nullable(),
+  siteLocationName: z.string().nullable(),
 
   paymentDate: z.string().nullable(),
 
@@ -64,7 +64,7 @@ export const paymentDetailSchema = paymentRowSchema.omit({
   partyName: true,
   companyName: true,
   siteName: true,
-  siteGroupName: true,
+  siteLocationName: true,
   capabilities: true,
 });
 export type PaymentDetail = z.infer<typeof paymentDetailSchema>;
@@ -86,7 +86,7 @@ export const createPaymentSchema = z
     partyId: uuidId,
     companyId: uuidId,
     siteId: optionalUuidId,
-    siteGroupId: optionalUuidId,
+    siteLocationId: optionalUuidId,
 
     paymentDate: optionalDate,
 
@@ -140,7 +140,7 @@ export type CreatePaymentBatch = z.infer<typeof createPaymentBatchSchema>;
 
 export const updatePaymentSchema = z.object({
   siteId: optionalUuidId.optional(),
-  siteGroupId: optionalUuidId.optional(),
+  siteLocationId: optionalUuidId.optional(),
   paymentDate: optionalDate.optional(),
   amount: money("Amount").optional(),
   description: optionalText(500).optional(),

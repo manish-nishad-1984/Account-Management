@@ -19,7 +19,7 @@ import {
   type ReportSheetColumn,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
-import { companies, sites, siteGroups, suppliers } from "../../db/schema";
+import { companies, sites, siteLocations, suppliers } from "../../db/schema";
 import { renderTablePdf } from "../../common/pdf/table-pdf";
 import { writeReportWorkbook, type ReportSheetBlock } from "../../common/spreadsheet/report-workbook";
 import { ReportsRepository } from "./reports.repository";
@@ -106,7 +106,7 @@ export class ReportExportService {
       this.nameOf(companies, filter.companyId),
       this.nameOf(sites, filter.siteId),
       this.nameOf(suppliers, filter.partyId),
-      this.nameOf(siteGroups, filter.siteGroupId),
+      this.nameOf(siteLocations, filter.siteLocationId),
     ]);
 
     const period =
@@ -120,7 +120,7 @@ export class ReportExportService {
       { label: "Company", value: company ?? "All companies" },
       { label: "Site", value: site ?? "All sites" },
       { label: labels.party, value: party ?? `All ${labels.party.toLowerCase()}s` },
-      { label: "Group", value: group ?? "All groups" },
+      { label: "Location", value: group ?? "All locations" },
       { label: "Period", value: period },
       { label: "Showing", value: filter.show === "outstanding" ? "Outstanding only" : "" },
     ];
@@ -128,7 +128,7 @@ export class ReportExportService {
 
   /** One name, or null when the filter was not set. */
   private async nameOf(
-    table: typeof companies | typeof sites | typeof suppliers | typeof siteGroups,
+    table: typeof companies | typeof sites | typeof suppliers | typeof siteLocations,
     id: string | undefined,
   ): Promise<string | null> {
     if (!id) return null;

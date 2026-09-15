@@ -229,7 +229,7 @@ export function LedgerPage() {
                     <th className="px-3 py-2 text-left font-medium">Date</th>
                     <th className="px-3 py-2 text-left font-medium">{partyLabel}</th>
                     <th className="px-3 py-2 text-left font-medium">Site</th>
-                    <th className="px-3 py-2 text-left font-medium">Group</th>
+                    <th className="px-3 py-2 text-left font-medium">Location</th>
                     <th className="px-3 py-2 text-right font-medium">Credit</th>
                     <th className="px-3 py-2 text-right font-medium">Debit</th>
                     <th className="px-3 py-2 text-right font-medium">Balance</th>
@@ -251,12 +251,12 @@ export function LedgerPage() {
                       </td>
                       <td className="px-3 py-2 text-slate-600">
                         {/*
-                          Sales invoices carry no site group at all — the legacy
+                          Sales invoices carry no location (formerly site group) at all — the legacy
                           sales ledger renders this column bound to a property
                           its own model does not have, so it has never shown
                           anything. Said, rather than drawn empty.
                         */}
-                        {row.siteGroupName ?? (
+                        {row.siteLocationName ?? (
                           <span className="text-xs text-slate-400">
                             {direction === "in" ? "Not recorded on sales" : "—"}
                           </span>

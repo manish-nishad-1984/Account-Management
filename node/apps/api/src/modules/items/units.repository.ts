@@ -59,7 +59,7 @@ export class UnitsRepository extends BaseRepository {
     // Drizzle renders a bare column reference UNQUALIFIED inside an `sql`
     // template, so `${units.id}` becomes `"id"` and PostgreSQL binds it to the
     // subquery's own table: the correlation silently becomes `unit_id = id`,
-    // matches nothing, and raises no error. See site-groups.repository.ts.
+    // matches nothing, and raises no error. See site-locations.repository.ts and handoff §7.1.
     const itemCount = sql<number>`(
       select count(*)::int from ${items}
       where ${items.unitId} = ${units}.id and ${items.isDeleted} = false

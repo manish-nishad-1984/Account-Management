@@ -24,11 +24,10 @@ import {
   useCompanyOptions,
   useCreatePurchaseOrder,
   usePurchaseOrder,
-  usePurchaseOrderDeliveryOptions,
   useSupplierOptions,
   useUpdatePurchaseOrder,
 } from "./api";
-import { DeliveryAddressPanels } from "./DeliveryAddressPanels";
+import { SiteAddressFields } from "../sites/SiteAddressFields";
 import { TermsField } from "./TermsField";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { todayInput } from "../../lib/dates";
@@ -68,7 +67,7 @@ const EMPTY: FormValues = {
   siteId: "",
   supplierId: "",
   companyId: "",
-  siteGroupId: "",
+  siteLocationId: "",
   documentDate: "",
   deliveryDate: "",
   deliveryImmediate: false,
@@ -79,13 +78,13 @@ const EMPTY: FormValues = {
   otherContactNumber: "",
   dispatchBy: "",
   paymentTerms: "",
-  billingAddress: "",
-  groupAddress: "",
+  shippingAddress: "",
   terms: "",
   termsTemplate: null,
   description: "",
   items: [EMPTY_LINE],
-  deliveryAddresses: [],
+  // No `deliveryAddresses`: the form does not send the old quantity split, so an
+  // update leaves an old order's rows alone unless someone clears them.
 };
 
 const dateInput = (value: string | null): string => (value ? value.slice(0, 10) : "");
@@ -125,7 +124,7 @@ const toFormValues = (detail: PurchaseOrderDetail): FormValues => ({
   siteId: detail.siteId,
   supplierId: detail.supplierId,
   companyId: detail.companyId,
-  siteGroupId: text(detail.siteGroupId),
+  siteLocationId: text(detail.siteLocationId),
   documentDate: dateInput(detail.documentDate),
   deliveryDate: dateInput(detail.deliveryDate),
   deliveryImmediate: detail.deliveryImmediate,
@@ -136,8 +135,7 @@ const toFormValues = (detail: PurchaseOrderDetail): FormValues => ({
   otherContactNumber: text(detail.otherContactNumber),
   dispatchBy: text(detail.dispatchBy),
   paymentTerms: text(detail.paymentTerms),
-  billingAddress: text(detail.billingAddress),
-  groupAddress: text(detail.groupAddress),
+  shippingAddress: text(detail.shippingAddress),
   terms: text(detail.terms),
   termsTemplate: detail.termsTemplate,
   description: text(detail.description),
@@ -150,13 +148,6 @@ const toFormValues = (detail: PurchaseOrderDetail): FormValues => ({
     unitPrice: line.unitPrice,
     gstPercent: text(line.gstPercent),
     discount: "",
-  })),
-  // The stored rows, minus their ids: the panels address a row by kind and
-  // address text, which is what a checkbox over a fixed option list can match.
-  deliveryAddresses: detail.deliveryAddresses.map((row) => ({
-    kind: row.kind,
-    address: row.address,
-    quantity: row.quantity,
   })),
 });
 
@@ -197,9 +188,13 @@ export function PurchaseOrderFormDialog({
 
   const { fields, append, remove } = useFieldArray({ control, name: "items" });
 
+  /** Set when someone clears an old order's quantity split; sent as an empty list. */
+  const [clearSplit, setClearSplit] = useState(false);
+
   useEffect(() => {
     if (!open) return;
     setFormError(null);
+    setClearSplit(false);
     if (!isEdit) {
       // Dated today unless the person says otherwise, which is what the
       // legacy screens did and what a day of data entry wants. Computed on
@@ -248,7 +243,16 @@ export function PurchaseOrderFormDialog({
       setFormError(null);
       try {
         if (isEdit) {
-          await update.mutateAsync({ id: orderId, body: values });
+          /**
+           * `deliveryAddresses` IS TAKEN OUT, not just left unset. The resolver
+           * parses with the CREATE schema, whose default turns a missing list
+           * into `[]` — so sending `values` as they come would clear every old
+           * order's quantity split on its first save after 15 Sep 2026, silently.
+           * Found by a test asserting what the form posts.
+           */
+          const { deliveryAddresses: _defaulted, ...rest } = values;
+          const body = clearSplit ? { ...rest, deliveryAddresses: [] } : rest;
+          await update.mutateAsync({ id: orderId, body });
         } else {
           await create.mutateAsync(values);
         }
@@ -279,41 +283,21 @@ export function PurchaseOrderFormDialog({
   const immediate = watch("deliveryImmediate");
 
   /**
-   * The delivery panels, the Group select and the terms editor.
+   * The site, location, shipping address and terms editor.
    *
    * `useWatch`, not `watch`, for every one of them — the same lesson the totals
    * cost a browser session to learn. `watch` does not re-render reliably for a
    * value that is written with `setValue` rather than by a registered input, so
-   * a ticked address or a loaded template would update the form state and not
+   * a chosen address or a loaded template would update the form state and not
    * the screen: the click would appear to do nothing at all.
    */
   const chosenSiteId = useWatch({ control, name: "siteId" });
-  const chosenGroupId = useWatch({ control, name: "siteGroupId" });
-  const deliveryAddresses = useWatch({ control, name: "deliveryAddresses" }) ?? [];
+  const chosenLocationId = useWatch({ control, name: "siteLocationId" });
+  const shippingAddress = useWatch({ control, name: "shippingAddress" });
   const terms = useWatch({ control, name: "terms" }) ?? "";
   const termsTemplate = useWatch({ control, name: "termsTemplate" }) ?? null;
 
-  const options = usePurchaseOrderDeliveryOptions(open && chosenSiteId ? chosenSiteId : null);
-  const groups = options.data?.groups ?? [];
-  const groupOptions = groups.map((group) => ({ value: group.id, label: group.name }));
-  const chosenGroup = groups.find((group) => group.id === chosenGroupId);
-
-  /**
-   * Per-row validation messages, dug out of the array errors by hand.
-   *
-   * §7.7's trap: an error on an array ELEMENT lands at `deliveryAddresses.0.quantity`
-   * and the field component only reads `errors.deliveryAddresses.message`, which
-   * is undefined — so a ticked address with no quantity would refuse to save with
-   * no message anywhere on the screen. `unshownValidationMessage` is the backstop
-   * for the form as a whole; this puts the message on the row that caused it.
-   */
-  // `errors.deliveryAddresses` is an array of per-row errors OR a single object
-  // carrying a root-level message, depending on which rule failed. Only the
-  // first shape has rows to attribute messages to.
-  const rowErrors = errors.deliveryAddresses;
-  const deliveryErrors = Array.isArray(rowErrors)
-    ? Object.fromEntries(rowErrors.map((entry, index) => [index, entry?.quantity?.message]))
-    : {};
+  const oldSplit = isEdit && !clearSplit ? (detail.data?.deliveryAddresses ?? []) : [];
 
   return (
     <FormDialog
@@ -370,19 +354,21 @@ export function PurchaseOrderFormDialog({
               placeholder={scope.isReady ? "Choose a site" : "Loading sites…"}
               options={siteOptions}
               error={errors.siteId?.message}
-              {...register("siteId")}
+              {...register("siteId", {
+                // The location and shipping address belonged to the site chosen
+                // before. Cleared HERE, on the person's change, and not by
+                // watching the value — see SiteAddressFields.
+                onChange: () => {
+                  setValue("siteLocationId", "");
+                  setValue("shippingAddress", "");
+                },
+              })}
             />
             <TextField
               label="Order date"
               type="date"
               error={errors.documentDate?.message}
               {...register("documentDate")}
-            />
-            <TextAreaField
-              label="Billing address"
-              rows={2}
-              error={errors.billingAddress?.message}
-              {...register("billingAddress")}
             />
 
             {/*
@@ -632,53 +618,51 @@ export function PurchaseOrderFormDialog({
           </FormSection>
 
           {/*
-            The two address panels, and the Group they depend on.
-
-            `columns={1}` for the same reason Products carries it: the panels are
-            a wide two-up layout of their own and must not become one cell of a
-            two-column grid.
+            ONE SHIPPING ADDRESS, and the billing address that is always the
+            site's own — the rules of 15 Sep 2026, which replaced the legacy
+            panels that split the order's quantity across several addresses.
           */}
-          <FormSection title="Delivery addresses" columns={1}>
-            <div className="sm:max-w-xs">
-              <SelectField
-                label="Group"
-                placeholder={
-                  options.isLoading
-                    ? "Loading groups…"
-                    : groupOptions.length === 0
-                      ? "This site is in no groups"
-                      : "No group"
-                }
-                options={groupOptions}
-                hint="Its addresses appear in the Group panel below"
-                error={errors.siteGroupId?.message}
-                {...register("siteGroupId")}
-              />
-            </div>
-
-            <DeliveryAddressPanels
-              siteAddresses={options.data?.siteAddresses ?? []}
-              groupAddresses={chosenGroup?.addresses ?? []}
-              groupChosen={Boolean(chosenGroupId)}
-              value={deliveryAddresses}
-              onChange={(next) => setValue("deliveryAddresses", next, { shouldValidate: false })}
-              orderedQuantity={totals.totalQuantity}
-              loading={options.isLoading}
-              errors={deliveryErrors}
+          <FormSection title="Location and addresses" columns={1}>
+            <SiteAddressFields
+              siteId={chosenSiteId}
+              shippingAddress={shippingAddress}
+              onShippingChange={(address) =>
+                setValue("shippingAddress", address, { shouldDirty: true })
+              }
+              shippingError={errors.shippingAddress?.message}
+              location={{
+                value: chosenLocationId,
+                onChange: (locationId) =>
+                  setValue("siteLocationId", locationId, { shouldDirty: true }),
+                error: errors.siteLocationId?.message,
+              }}
             />
 
             {/*
-              Said on screen rather than left as a silently short list. The
-              legacy panel reads its options from a `SiteAddresses` TABLE this
-              port does not have, and ends each address with city, state and
-              country names that are bare integer ids here until the census runs.
+              An order raised before the change may carry the old split. It is
+              shown, not edited, and can be cleared — which it may need to be: the
+              server still refuses a save whose split adds up to more than the
+              order, so reducing a quantity on such an order needs this.
             */}
-            <p className="text-[11px] text-slate-500">
-              The old screen lists every address recorded against a site, each ending with its city,
-              state and country. Those live in a separate table and three unmapped id columns, so
-              only the site's own two addresses are offered here, without the geography. PLAN.md
-              §1.4.
-            </p>
+            {oldSplit.length > 0 && (
+              <Alert tone="info">
+                <div className="font-medium">Delivery split from the old screen</div>
+                <ul className="mt-1 space-y-0.5 text-xs">
+                  {oldSplit.map((row) => (
+                    <li key={row.id}>
+                      <span className="tabular">{formatQuantity(row.quantity)}</span> to {row.address}
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  variant="secondary"
+                  className="mt-2"
+                  onClick={() => setClearSplit(true)}
+                >
+                  Remove the old split when saving
+                </Button>
+              </Alert>
+            )}
           </FormSection>
 
           {/* Same reason as Products: these stack, they do not sit side by side. */}

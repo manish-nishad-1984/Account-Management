@@ -11,7 +11,7 @@ import {
 } from "@accountmanagement/contracts";
 import { amountInWords, money, summariseTax } from "@accountmanagement/domain";
 import { DATABASE, type Database } from "../../db/database";
-import { cities, companies, items, siteGroups, sites, states, suppliers } from "../../db/schema";
+import { cities, companies, items, siteLocations, sites, states, suppliers } from "../../db/schema";
 import { BaseRepository } from "../../common/base.repository";
 import { SalesInvoicesRepository } from "../sales-invoices/sales-invoices.repository";
 import { PurchaseInvoicesRepository } from "../purchase-invoices/purchase-invoices.repository";
@@ -69,7 +69,7 @@ export class PrintDocumentsRepository extends BaseRepository {
         dispatchBy: invoice.dispatchBy,
         paymentTerms: invoice.paymentTerms,
         siteName: site,
-        siteGroupName: null,
+        siteLocationName: null,
         contactName: invoice.contactName,
         contactNumber: invoice.contactNumber,
       },
@@ -89,7 +89,7 @@ export class PrintDocumentsRepository extends BaseRepository {
       this.company(invoice.companyId),
       this.party(invoice.supplierId),
       this.siteName(invoice.siteId),
-      this.siteGroupName(invoice.siteGroupId),
+      this.siteLocationName(invoice.siteLocationId),
       this.hsnCodes(invoice.items.map((line) => line.itemId)),
     ]);
 
@@ -108,7 +108,7 @@ export class PrintDocumentsRepository extends BaseRepository {
         dispatchBy: invoice.dispatchBy,
         paymentTerms: invoice.paymentTerms,
         siteName: site,
-        siteGroupName: group,
+        siteLocationName: group,
         contactName: invoice.contactName,
         contactNumber: invoice.contactNumber,
       },
@@ -279,12 +279,12 @@ export class PrintDocumentsRepository extends BaseRepository {
     return row?.name ?? null;
   }
 
-  private async siteGroupName(id: string | null): Promise<string | null> {
+  private async siteLocationName(id: string | null): Promise<string | null> {
     if (!id) return null;
     const [row] = await this.db
-      .select({ name: siteGroups.name })
-      .from(siteGroups)
-      .where(eq(siteGroups.id, id))
+      .select({ name: siteLocations.name })
+      .from(siteLocations)
+      .where(eq(siteLocations.id, id))
       .limit(1);
     return row?.name ?? null;
   }

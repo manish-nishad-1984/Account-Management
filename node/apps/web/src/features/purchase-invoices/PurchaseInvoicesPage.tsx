@@ -89,7 +89,7 @@ export function PurchaseInvoicesPage() {
             <div className="tabular font-medium text-slate-900">{row.original.displayNo}</div>
             <div className="text-xs text-slate-500">
               {formatDate(row.original.documentDate) || "No date"}
-              {row.original.siteGroupName && ` · ${row.original.siteGroupName}`}
+              {row.original.siteLocationName && ` · ${row.original.siteLocationName}`}
             </div>
           </div>
         ),

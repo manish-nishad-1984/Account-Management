@@ -293,7 +293,7 @@ export function PendingLedgerPage() {
                     <th className="px-3 py-2 text-left font-medium">Date</th>
                     <th className="px-3 py-2 text-left font-medium">{partyLabel}</th>
                     <th className="px-3 py-2 text-left font-medium">Site</th>
-                    <th className="px-3 py-2 text-left font-medium">Group</th>
+                    <th className="px-3 py-2 text-left font-medium">Location</th>
                     <th className="px-3 py-2 text-right font-medium">Invoice amount</th>
                     <th className="px-3 py-2 text-right font-medium">Pending</th>
                     <th className="px-3 py-2 text-right font-medium">Balance</th>
@@ -316,7 +316,7 @@ export function PendingLedgerPage() {
                           {row.siteName ?? <span className="text-xs text-slate-400">No site</span>}
                         </td>
                         <td className="px-3 py-2 text-slate-600">
-                          {row.siteGroupName ?? <span className="text-xs text-slate-400">—</span>}
+                          {row.siteLocationName ?? <span className="text-xs text-slate-400">—</span>}
                         </td>
                         <td className="tabular px-3 py-2 text-right text-slate-600">
                           {formatMoney(row.amount)}

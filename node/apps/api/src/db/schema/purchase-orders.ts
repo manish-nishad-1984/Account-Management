@@ -11,6 +11,7 @@ import {
 import { companies, sites } from "./users";
 import { items, suppliers, units } from "./masters";
 import { siteGroups } from "./site-groups";
+import { siteLocations } from "./site-locations";
 
 /**
  * Purchase orders — `PurchaseOrder` and `PurchaseOrderDetail` in SQL Server.
@@ -79,6 +80,13 @@ export const purchaseOrders = pgTable(
     siteGroupId: uuid("site_group_id").references(() => siteGroups.id),
 
     /**
+     * The location at the order's site — what replaced the site group on
+     * 15 Sep 2026. Migration 0019 filled it from `site_group_id` by name, at the
+     * order's own site; `site_group_id` is no longer written.
+     */
+    siteLocationId: uuid("site_location_id").references(() => siteLocations.id),
+
+    /**
      * DELIVERY SCHEDULE — one legacy column, two meanings, split deliberately.
      *
      * `DeliveryShedule` (sic) is a single nullable string holding either a date or
@@ -138,8 +146,22 @@ export const purchaseOrders = pgTable(
 
     description: text("description"),
 
-    /** Snapshots, as the source holds them. */
+    /**
+     * Snapshots, as the source holds them.
+     *
+     * Since 15 Sep 2026 the BILLING address is not typed: the server copies the
+     * order's site address into it on every save that names a site. The business
+     * rule is that the bill goes to our own site, and only that.
+     */
     billingAddress: text("billing_address"),
+
+    /**
+     * ONE shipping address, chosen from the site's addresses and its location
+     * addresses, copied as text. Added 15 Sep 2026, when the business replaced
+     * the per-address quantity split with a single choice. Orders raised before
+     * keep their `purchase_order_delivery_addresses` rows.
+     */
+    shippingAddress: text("shipping_address"),
 
     /**
      * The source's `SiteGroup`-side snapshot, and it is LOSSY BY CONSTRUCTION.

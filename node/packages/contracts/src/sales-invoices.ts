@@ -119,6 +119,8 @@ export const salesInvoiceDetailSchema = salesInvoiceRowSchema
 
     contactName: z.string().nullable(),
     contactNumber: z.string().nullable(),
+    /** Our site's address, copied by the server on save. */
+    billingAddress: z.string().nullable(),
     shippingAddress: z.string().nullable(),
 
     items: z.array(salesInvoiceItemRowSchema),
@@ -197,6 +199,7 @@ export const createSalesInvoiceSchema = z.object({
 
   contactName: optionalText(200),
   contactNumber: optionalText(20),
+  /** ONE shipping address, chosen from the site's addresses. Billing is set by the server. */
   shippingAddress: optionalText(500),
 
   /**

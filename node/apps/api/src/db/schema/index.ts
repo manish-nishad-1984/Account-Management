@@ -1,6 +1,7 @@
 export * from "./geography";
 export * from "./users";
 export * from "./site-groups";
+export * from "./site-locations";
 export * from "./masters";
 export * from "./procurement";
 export * from "./inventory";

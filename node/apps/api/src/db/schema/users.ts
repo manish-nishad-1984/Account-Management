@@ -179,6 +179,37 @@ export const siteAddresses = pgTable(
   (table) => [index("site_addresses_site_id_idx").on(table.siteId)],
 );
 
+/**
+ * The people to call at a site — as many as the site has, each a name and a
+ * number. Asked for by the business on 15 Sep 2026, "the same way addresses are
+ * multiple".
+ *
+ * `sites.contact_person_name` / `contact_person_phone_no` STAY, and hold the
+ * FIRST contact. The repository writes both in one transaction, so every reader
+ * that predates this table — the Sites grid, the importer, the print data —
+ * keeps showing the site's primary contact without learning about a list.
+ * Migration 0019 seeds one row per site from those two columns.
+ *
+ * Either half may be blank, not both: a site office often knows a number before
+ * it knows whose it is. Phone numbers keep the loose rule of `mobileNo` — the
+ * live data holds several numbers in one field and twelve-digit ones.
+ */
+export const siteContacts = pgTable(
+  "site_contacts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id),
+    name: text("name"),
+    phone: text("phone"),
+    /** Position in the list, so a reopened site shows them in the order keyed. */
+    lineNumber: integer("line_number").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("site_contacts_site_id_idx").on(table.siteId)],
+);
+
 export const users = pgTable(
   "users",
   {

@@ -32,7 +32,7 @@ import {
 } from "./api";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { todayInput } from "../../lib/dates";
-import { AddressPicker } from "../sites/AddressPicker";
+import { SiteAddressFields } from "../sites/SiteAddressFields";
 
 /**
  * The purchase invoice form — the screen `11-create-purchase-invoice.md` calls
@@ -73,7 +73,7 @@ const EMPTY: FormValues = {
   siteId: "",
   supplierId: "",
   companyId: "",
-  siteGroupId: "",
+  siteLocationId: "",
   purchaseOrderId: "",
   documentDate: "",
   challanNo: "",
@@ -85,7 +85,6 @@ const EMPTY: FormValues = {
   contactName: "",
   contactNumber: "",
   shippingAddress: "",
-  groupAddress: "",
   tds: "",
   roundOff: "",
   items: [EMPTY_LINE],
@@ -101,7 +100,7 @@ const toFormValues = (detail: PurchaseInvoiceDetail): FormValues => ({
   siteId: text(detail.siteId),
   supplierId: detail.supplierId,
   companyId: detail.companyId,
-  siteGroupId: text(detail.siteGroupId),
+  siteLocationId: text(detail.siteLocationId),
   purchaseOrderId: text(detail.purchaseOrderId),
   documentDate: dateInput(detail.documentDate),
   challanNo: text(detail.challanNo),
@@ -113,7 +112,6 @@ const toFormValues = (detail: PurchaseInvoiceDetail): FormValues => ({
   contactName: text(detail.contactName),
   contactNumber: text(detail.contactNumber),
   shippingAddress: text(detail.shippingAddress),
-  groupAddress: text(detail.groupAddress),
   tds: detail.tds,
   roundOff: detail.roundOff,
   items: detail.items.map((line) => ({
@@ -261,8 +259,11 @@ export function PurchaseInvoiceFormDialog({
   // order the SAME supplier raised, and offering all of them invites exactly the
   // mismatch the legacy text match makes silently.
   const chosenSupplierId = watch("supplierId");
-  // Watched, so the address picker follows the chosen site.
+  // Watched, so the location and addresses follow the chosen site. `useWatch`
+  // for the two written by `setValue`, which `watch` does not re-render for.
   const chosenSiteId = watch("siteId") as string | undefined;
+  const chosenLocationId = useWatch({ control, name: "siteLocationId" });
+  const shippingAddress = useWatch({ control, name: "shippingAddress" });
   const orders = usePurchaseOrderOptions(chosenSupplierId || null);
   const orderChoices = (orders.data?.rows ?? []).map((row) => ({
     value: row.id,
@@ -333,7 +334,15 @@ export function PurchaseInvoiceFormDialog({
               options={siteOptions}
               hint="Optional — the source allows an invoice with no site"
               error={errors.siteId?.message}
-              {...register("siteId")}
+              {...register("siteId", {
+                // The location and shipping address belonged to the site chosen
+                // before. Cleared HERE, on the person's change, and not by
+                // watching the value — see SiteAddressFields.
+                onChange: () => {
+                  setValue("siteLocationId", "");
+                  setValue("shippingAddress", "");
+                },
+              })}
             />
             <SelectField
               label="Type"
@@ -477,24 +486,26 @@ export function PurchaseInvoiceFormDialog({
             />
           </FormSection>
 
-          <FormSection title="Addresses and notes" columns={1}>
+          <FormSection title="Location, addresses and notes" columns={1}>
             {/*
-              The site’s own addresses, offered rather than retyped. Choosing
-              one COPIES it into the field below: the document keeps the words
-              it was raised with, so correcting the site later cannot rewrite
+              Billing is the site's own address; shipping is ONE of the site's
+              addresses, chosen — the rules of 15 Sep 2026. Either is copied onto
+              the invoice as text, so correcting the site later cannot rewrite
               where a delivery already went.
             */}
-            <AddressPicker
-              siteId={chosenSiteId ?? null}
-              onChoose={(address) =>
+            <SiteAddressFields
+              siteId={chosenSiteId}
+              shippingAddress={shippingAddress}
+              onShippingChange={(address) =>
                 setValue("shippingAddress", address, { shouldDirty: true })
               }
-            />
-            <TextAreaField
-              label="Shipping address"
-              rows={2}
-              error={errors.shippingAddress?.message}
-              {...register("shippingAddress")}
+              shippingError={errors.shippingAddress?.message}
+              location={{
+                value: chosenLocationId,
+                onChange: (locationId) =>
+                  setValue("siteLocationId", locationId, { shouldDirty: true }),
+                error: errors.siteLocationId?.message,
+              }}
             />
             <TextAreaField
               label="Notes"
