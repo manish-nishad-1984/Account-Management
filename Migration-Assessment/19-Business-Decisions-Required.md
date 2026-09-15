@@ -677,7 +677,7 @@ from a row in the `Form` table that merely exists.
 | 12 | Record over the list, or beside it | **Gets dearer weekly** | |
 | 13 | Does uploading a spreadsheet approve the items? | No | |
 | 14 | **A purchase order can be sent out twice over** — should the two delivery lists be added together? | Changes what saves | |
-| 15 | **Three permission names guard one screen** — which one do your people have? | Before cutover | |
+| 15 | ~~Three permission names guard one screen~~ — **answered from the source, 10 Sep 2026; nothing needed** | No | Answered |
 
 **Updated 9 Sep 2026.** The invoicing rebuild is no longer waiting on these — the
 purchase invoice and sales invoice screens are both built, and both calculate
@@ -693,6 +693,8 @@ than before the reports.
 screens. It needs no decision about the business — only a look at who currently
 holds which of three permissions — but it needs it **before cutover**, or the
 person who runs your payments may find the screen closed to them.
+**Update, 10 Sep 2026: answered from the code — see the end of Question 15.
+Nothing is needed from you on it.**
 
 **Question 3 has been sharpened rather than answered.** The reports are now built
 and they calculate correctly, so this no longer blocks the work; what it decides

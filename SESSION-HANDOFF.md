@@ -1,15 +1,15 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
 **Written:** 2 September 2026, after the unblocking session. **Last extended
-9 September 2026** (§5u). Supersedes all earlier handoffs of the same name.
+15 September 2026** (§5v). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `bd007742`.** If `git log` shows commits after
+> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
 
 **Sections §3, §4, §8, §10 and §11 describe _now_ and are re-measured on every
-handoff. Sections §5, §5b … §5s are a log of days that already happened and are
+handoff. Sections §5, §5b … §5v are a log of days that already happened and are
 never edited.** If the two disagree, the numbered sections win — run
 `/handoff check` and it will say which have drifted.
 
@@ -22,54 +22,44 @@ direction from whether the session has done anything yet.
 Read this first, then `README.md`, then `Migration-Assessment/01-Executive-Summary.md`
 and `18-GO-NO-GO-Assessment.md`.
 
-**The new app is live at https://avfast.in** with real master data — read §5e
-before touching nginx or the server. The live ASP.NET app now answers on
-**https://www.avfast.in**, and it is **broken for reasons that predate this
-work** (§5e, "The live MVC app is down").
+**The new app is live at https://avfast.in** with real master data AND the
+transactional history — read §5e before touching nginx or the server. The live
+ASP.NET app answers on **https://www.avfast.in**. §5e recorded it broken on
+every page; on 15 Sep 2026 it served its login page with a 200 and no
+exception text, so that fault appears to have been cleared by someone. Who and
+when is not recorded anywhere in this repository.
 
-**Live release is `20260908-184331`, which is commit `6b1164ae`** — purchase
-orders and the permission-subject fix, and nothing after them. Verified on the
-server, not carried forward: `current` points at that release, its
-`api/drizzle/` stops at `0008_purchase_orders.sql`, and its web bundle carries
-only the "planned" nav placeholders for the two invoice screens. The record
-layouts of §5m, the Item Master Excel pair of §5o and the dashboard queues of
-§5p all shipped with it.
+**Live release is `20260915-134850`, which is commit `154d5405`** — Document
+Layouts, the newest code commit, so **nothing committed is waiting to deploy**.
+Verified on the server on 15 Sep 2026, not carried forward: `current` points at
+that release, its `api/drizzle/` ends at `0018_document_templates.sql`,
+`applied_migrations` holds 19 rows (0000 to 0018), and the public web bundle
+carries the "Document Layout" and "Pending Ledger" strings. Five releases are
+kept, all from 14 and 15 Sep.
 
-**Seven commits are built, tested and NOT deployed** — `1212f12a`, `3f863c72`,
-`b296085c`, `17304ea7` (§5r: the purchase order grid fixes, the dialog layout fix
-and both invoice modules), `98fe1b46` (§5s: the purchase order delivery
-addresses, the terms editor with its sanitiser, and a compact pass over every
-form), `f28737d2` (§5t: item price history, two pre-existing typecheck failures,
-and the dev seed) and `5003319d` (§5u: payments, the ledger and the sales report).
-`c77268a3` is also unshipped and touches only skills and this file.
+**The live database holds the history, not just masters.** Read-only counts
+on 15 Sep 2026: 194 suppliers, 2,371 purchase invoices, 583 payments, 180
+inward challans, 24 purchase orders, 24 site addresses, 603 cities. The
+transactional loaders of §5v put them there.
 
-**The deploy was AUTHORISED on 9 Sep 2026 and still did not happen.** The user
-asked for the work to be shipped in the same breath as asking for it to be
-built, so the decision that had been outstanding since §5r is made — what
-stopped it was the session's own tooling, not a question. Every `ssh` to the VPS
-was refused by the permission classifier, so `/deploy` could not run a single
-step. **Nothing is wrong with the release**; it is staged-ready and the suites
-are green. The next session should be able to run `/deploy` directly, and if the
-same refusal appears, the user has to allow `Bash(ssh:*)` before it can proceed.
+> **This file was 25 commits behind for six days** (9 to 15 Sep 2026). Every
+> commit in that window was written up in its own message and none of it
+> reached this file, so a `/handoff start` on 15 Sep read a header saying seven
+> commits were undeployed and `ssh` was refused, when both had stopped being
+> true days before. §5v reconstructs that week from the commit messages. The
+> header's `current as of` line is what exposed it — which is what it is for.
 
-**FOUR of them carry migrations — `0009_purchase_invoices`,
-`0010_sales_invoices`, `0011_purchase_order_delivery_addresses` and
-`0012_payments`** — so this is not a static-only deploy. Read step 5 of
-`/deploy` before shipping it: the migration runner has printed *"Already
-migrated. Nothing to do."* while silently skipping every new migration, and
-`0 applied` after shipping a new one means something is wrong. Expect
-**`4 applied`** on the next deploy.
+**`ssh` to the VPS works from a session again** (it was refused by the
+permission classifier on 9 Sep). But on 15 Sep, right after one read-only
+query against the production database succeeded, the same classifier refused
+the next command as a "production read" — and that command only read a local
+test log. So production reads are allowed until they suddenly are not. **Ask
+the user before querying the live database**, even read-only.
 
-**`sanitize-html` is a new runtime dependency of the API** (§5s). `npm ci` on the
-server picks it up from the lockfile, so there is nothing to do by hand — but a
-deploy that skips the install step now ships an API that cannot boot.
-
-**Deploying was offered and not answered**, twice, so it was not done. Nothing
-about it is blocked — no new environment variable and no nginx change — it needs
-a decision, not work. Note that §5p's dev seed grants `item.approve` and
-`supplier.approve`; on the LIVE database those are real permission rows an
-administrator has to tick, and until then the Items and Suppliers queues are
-read-only there. See doc 19 Question 11.
+Note that §5p's dev seed grants `item.approve` and `supplier.approve`; on the
+LIVE database those are real permission rows an administrator has to tick, and
+until then the Items and Suppliers queues are read-only there. See doc 19
+Question 11.
 
 ---
 
@@ -118,17 +108,20 @@ AC/
 ├── .github/workflows/ci.yml       build + test + gitleaks + node job
 ├── Migration-Assessment/          the 18-doc assessment + tools/ + db-extract/
 └── node/                          npm workspaces
-    ├── packages/domain/           shared business rules (65 tests)
-    ├── packages/contracts/        Zod schemas shared by API and web (63 tests)
+    ├── packages/domain/           shared business rules (90 tests)
+    ├── packages/contracts/        Zod schemas shared by API and web (135 tests)
+    ├── tools/import-masters/      the ETL: masters, geography, transactions, apply-snapshot
+    ├── tools/deploy/
     └── apps/
-        ├── api/                   NestJS + Fastify + Drizzle (665 tests)
-        └── web/                   React 19 + Vite + Tailwind (346 tests)
+        ├── api/                   NestJS + Fastify + Drizzle (849 tests)
+        └── web/                   React 19 + Vite + Tailwind (489 tests)
 ```
 
-**1158 tests pass** — 1139 Node (63 contracts + 65 domain + 665 API + 346 web)
-plus 19 .NET. **Both figures were RUN on 9 Sep 2026**, against the tree that
-became `5003319d`: Node exit 0, 36 of 36 API files and 32 of 32 web files, zero
-failures; .NET `Passed! - Failed: 0, Passed: 19`.
+**1582 tests pass** — 1563 Node (135 contracts + 90 domain + 849 API + 489 web)
+plus 19 .NET. **Both figures were RUN on 15 Sep 2026**, against `154d5405`:
+Node exit 0, 48 of 48 API files and 51 of 51 web files, zero failures; .NET
+`Passed! - Failed: 0, Passed: 19`. `npm run typecheck` was run the same day:
+exit 0, zero `error TS`.
 
 **EVERY LEGACY SCREEN IS NOW PORTED.** `nav.ts` carries no `"planned"` item —
 Payments, the Ledger and the Sales Report were the last three (§5u). What remains
@@ -187,12 +180,12 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 
 ## 4. Repository state
 
-Branch **`main`**, working tree clean, pushed to `origin/main`. Builds,
-typechecks, and all **1158 tests pass** — 1139 Node (63 contracts + 65 domain +
-665 API + 346 web) + 19 .NET.
+Branch **`main`**, working tree clean, pushed to `origin/main`. Typechecks, and
+all **1582 tests pass** — 1563 Node (135 contracts + 90 domain + 849 API + 489
+web) + 19 .NET.
 
-Both suites were last measured at **`5003319d`**, the final code commit of
-9 Sep 2026, and both were RUN rather than proved. Anything after that on `main`
+Both suites were last measured at **`154d5405`**, the final code commit of
+15 Sep 2026, and both were RUN rather than proved. Anything after that on `main`
 is documentation — a handoff always commits after its own measurement, so the
 newest hash is never the one the numbers were taken at, and naming it here would
 be a lie that looks precise.
@@ -223,6 +216,11 @@ be a lie that looks precise.
 - `5003319d` ported the last three screens — Payments, the Ledger and the Sales
   Report — and decided the payments model (§5u). **It carries migration
   `0012_payments`**, the first new table since `0011`.
+- `c8cc38c8` to `154d5405`, 9–15 Sep 2026, are the 24 code commits of §5v:
+  the report exports, the transactional and geography ETL, sessions across a
+  reload, per-person grid columns, the width and phone fixes, and the client's
+  requests of 14–15 Sep through Document Layouts. **Migrations 0013 to 0018**
+  are among them, and all six are applied on the live database.
 - **`main` is pushed to `origin/main`** and the working tree is clean.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
   credential is in the HISTORY, not the working tree. Rotation is the fix.
@@ -451,6 +449,8 @@ Three things worth knowing for the next person who does this:
 1. **`page.goto` signs you out.** The token is in memory only by design, so every
    full navigation returns the login page. Navigate by clicking nav links, not by
    `goto`, or you will "discover" that all seven screens render a login form.
+   **No longer true since `97d32bba` (10 Sep 2026, §5v):** the refresh token is
+   now an HttpOnly cookie and a reload restores the session.
 2. **`ERR_ABORTED` on every list request is correct, not a bug.** React
    `StrictMode` double-mounts in dev and `list-query.ts` forwards TanStack Query's
    abort signal to `fetch`, so the first request is cancelled and the second
@@ -1585,7 +1585,7 @@ the screens whose UI is gated on `usePermission`.
 
 | Blocker | Detail |
 |---|---|
-| **`Migration-Assessment/db-extract/` is empty** | The 3 read-only scripts have never been run. Until then the orphan volume across ~62 unconstrained FK columns is unknown, and no schema can be *finalised*. **This is the binding constraint.** No longer a day in SSMS — it is now one command, `tools/run-db-extract.ps1` (§5c). It still needs the rotated credential. **As of §5o this blocker now stops ordinary feature work, not just schema work:** Supplier's Excel import resolves State and City by NAME against tables that have never been extracted, so it cannot be written until the census runs. |
+| **`Migration-Assessment/db-extract/` is empty** | The 3 read-only scripts have never been run. Until then the orphan volume across ~62 unconstrained FK columns is unknown, and no schema can be *finalised*. **This is the binding constraint.** No longer a day in SSMS — it is now one command, `tools/run-db-extract.ps1` (§5c). It still needs the rotated credential. **As of §5o this blocker now stops ordinary feature work, not just schema work:** Supplier's Excel import resolves State and City by NAME against tables that have never been extracted, so it cannot be written until the census runs. **Update, 15 Sep 2026 (§5v): PARTLY CLEARED.** A geography census HAS run against the client's live database — all thirteen geography references, ZERO orphans — and `Countries`, `States`, `Cities` and `SiteAddress` are ported and populated, so the Supplier Excel import is no longer blocked on this. The transactional import also ran and reported zero dangling references. **What still stands:** `db-extract/` holds only its README, so the three-script extract (schema, DMV performance, full census) has never been run and its output is not in the repository. |
 | **14 business-rule questions unanswered** | 2-4 week lead time — the longest pole. The money calculator cannot start without them. They are now written to be sent: `Migration-Assessment/19-Business-Decisions-Required.md` (§5c). **The clock does not start until someone sends it.** |
 | **Credentials not rotated** | The `sa` account on `srv1925876.hstgr.cloud` is still live, and its password is still in git history in earlier commits of `appsettings.json`. Removing it from the file did not remove it from history. `gitleaks` in CI will fail on the first push, correctly. **Rotation is the fix, not a history rewrite.** |
 | **Which of 3 jQuery money calculators is correct** | **No longer blocks building — it now decides what happens to invoices ALREADY ISSUED.** Doc 19 Question 2. All three screens are built (§5r) and only the purchase invoice was ever genuinely behind B-2; the arithmetic they use is `invoice-total.ts`, derived by running the source rather than reading it. What is unanswered is historical remediation. The Items screen still stores the GST amount as entered rather than deriving it, precisely so this stays an open question rather than being answered by implication. |
@@ -1662,6 +1662,11 @@ the screens whose UI is gated on `usePermission`.
   exist, `POST /api/v1/auth/login` does. And the login field is **`userName`**,
   not `username`; the wrong one returns a Zod `Required` error naming the right
   one, which is the fastest way to spot it.
+- **Production access from a session (15 Sep 2026):** `ssh -i
+  ~/.ssh/accountbook_deploy root@89.116.122.175` worked, and so did one
+  read-only `psql "$DATABASE_URL"` sourced from the release's `api/.env`. The
+  permission classifier then refused a later, unrelated command as a
+  "production read". Ask before touching the live database.
 - Node v24.15.0 locally; CI pins 22 LTS.
 - `git clone` of this repo needs `-c core.longpaths=true` — some
   `AccountManegments.Web/wwwroot` paths exceed MAX_PATH.
@@ -1670,56 +1675,42 @@ the screens whose UI is gated on `usePermission`.
 
 ## 11. Suggested next steps
 
-Masters, purchase requests, inventory inward and inward challans are all built
-(§5f — §5l), Item Master's Excel import/export shipped in §5o, and **Phase 4 —
-purchase orders, purchase invoices and sales invoices — is built too** (§5r).
-Everything up to and including purchase orders is deployed; both invoice modules
-are not (see the header).
+Every legacy screen is ported (§5u), **everything committed is deployed**
+(header), and the live database carries the transactional history (§5v). The
+work has changed shape: since 10 Sep 2026 it is driven by **requests from the
+client using the live site**, not by the port plan.
 `Migration-Assessment/legacy-screens/PLAN.md` holds the authoritative sequencing;
 its rows currently read:
 
 ```
-DONE     PO delivery addresses + T&C editor   (9 Sep 2026, §5s)
-         item price history                   (9 Sep 2026, §5t)
-NOW      master-detail ANSWER             <- with the business, doc 19 Q12
-NEXT     per-site address list            <- from §5s; needs the census
-BLOCKED  Supplier Excel import            <- needs the States/Cities census
-BLOCKED  Reports, payments, supplier balances  <- needs D7 and the payments model
+DONE     … per-site address list, site group CRUD, Pending Ledger,
+         item price change log, Document Layouts steps 1-2   (14-15 Sep, §5v)
+NOW      master-detail ANSWER                <- with the business, doc 19 Q12
+NEXT     Document Layouts block editor       <- step 3 of the layout master
+NEXT     the OTHER 4 exports                 <- purchase invoice list, item history
+NEXT     Supplier Excel import               <- UNBLOCKED: States/Cities are ported
+WAITING  Print button on the invoice screens <- needs the client's yes
 ```
 
-**Every legacy SCREEN is ported as of 9 Sep 2026 (§5u).** Payments, the ledger
-and the sales report were the last three, and neither of the things that blocked
-them survived contact: D7 turned out to be a defect in one of the two report
-panels rather than an open question, and the payments model was a decision to
-make rather than information to wait for.
+**What is left, in rough order:**
 
-**What is left is not screens.** In rough order:
-
-1. **The six report exports** — Excel and PDF across three panels, plus a
-   supplier-specific Excel. Deliberately not built (§5u); the Excel ones reuse
-   §5o's `common/spreadsheet/` cheaply, PDF is a new dependency and a new
-   decision.
-2. **The ETL for `payments`** — every sentinel row across two tables, split by
-   three magic strings into `direction` and `kind`. The invoice tables have no
-   `is_deleted`, so removing them afterwards is a hard delete on production data.
-3. **The per-site address list**, still behind the census.
-4. **Everything in §8**, which is the user's.
-
-**Both purchase order carve-outs closed on 9 Sep 2026 (§5s).** The delivery
-address panels and the terms editor are built, and the terms column now holds
-sanitised HTML rather than plain text. Two things came out of it that change what
-is written elsewhere: the three "templates" were never stored anywhere and are
-constants, and **the legacy column holding the terms is `PaymentTerms`, not
-`Terms`** — an ETL that reads the two names the obvious way round loses every
-imported order's terms.
-
-**A NEW next item, from the same session: the per-site address list.** The legacy
-Shipping Addresses panel reads a `SiteAddresses` TABLE, many rows per site, which
-this port does not have — `sites` carries one main address and one shipping
-address, so at most two are offered where the legacy screen may show several, and
-the geography each address ends with is still bare integer ids. The form says so
-on screen. Building it needs a `site_addresses` table, an editor on the Site
-master, and the census (§1.4).
+1. **The Document Layouts block editor.** `154d5405` built the templates, the
+   list screen, per-company defaults and a print page, and said in its own
+   message that the editor comes next. Today the only template is the built-in
+   Classic (`document_templates` holds 1 row on live).
+2. **A Print button on the purchase and sales invoice screens.** Deliberately
+   not added, because it touches those screens and the client has not said yes.
+   The print page is reachable only from a template's preview until then.
+3. **The other four exports** — Excel and PDF on the purchase invoice list and
+   on the item price history panel. The machinery from `c8cc38c8` is in place.
+4. **The Supplier Excel import**, now unblocked (§8's census row).
+5. **Declare the geography foreign keys.** The live data would satisfy them
+   (zero orphans), but the DEV SEED invents geography ids no lookup row backs,
+   so the seed has to be fixed first. The schema comments say exactly this.
+6. **Is the Pending Ledger staying?** It was added "for the client to try",
+   beside the ordinary ledger. Like the record-layout switch, a trial copy left
+   in place becomes two screens to maintain; ask once the client has used it.
+7. **Everything in §8**, which is the user's.
 
 **The NOW row is not code.** Both layouts are built (§5m); what is missing is a
 decision, and the answer deletes the loser and the switch.
@@ -1730,14 +1721,13 @@ only ever happened through the source's single `Dashboard` permission (§5p, §9
 Until an administrator grants it, the Suppliers queue ships read-only. It is in
 doc 19 Question 11.
 
-**Supplier's Excel pair is blocked on the census, not on effort**, and it is the
-first piece of ordinary feature work that blocker has actually stopped.
+**Supplier's Excel pair is no longer blocked.**
 `SupplierMasterRepo.ImportSupplierListFromExcel` resolves a State NAME and a City
-NAME against the `States` and `Cities` tables; those tables have never been
-extracted, and our `suppliers.city_id` / `state_id` are bare integers with
-nothing behind them. Everything it would reuse — `common/spreadsheet/`, the
+NAME against `States` and `Cities`, and since `6c23754f` (10 Sep 2026) those are
+ported and populated. Everything it would reuse — `common/spreadsheet/`, the
 shared column list, the all-or-nothing import with per-row errors — is generic
-and already in place, so it is a short job the day the census lands.
+and already in place. Remember that city names are unique only WITHIN a state
+(§5v), so the lookup must take both names.
 
 Everything below is either blocked on the business or is the next tranche of
 build. **The first items are still on the user — but most are now cheap, which
@@ -1757,19 +1747,24 @@ was the point of §5c.**
     `accountbook-deploy` (id `571616`) that can be deleted — attaching a key
     only takes effect on VM *recreate*, so it never did anything.
 
-0c. **Decide about `avfast-web`.** It has been throwing on every page since
-    28 Aug (§5e). A restart is very likely the whole fix, but it is production.
+0c. ~~**Decide about `avfast-web`.**~~ **Appears done.** On 15 Sep 2026
+    `https://www.avfast.in/` returned 200 with its "Login - Account Book" page
+    and no exception text, where §5e recorded a 302 loop on every page. Not
+    investigated further; nothing in this repository records who fixed it.
+
+    **0a is still open as of 15 Sep 2026:** `ss -ltn` shows `0.0.0.0:1433`
+    listening and `ufw status` is `inactive`.
 
 1. **Rotate the SQL Server password.** Still the top item, and now the one that
    gates step 2 as well. It is live, it is in git history, and the repository has
    been pushed to GitHub — the exposure is wider than it was. Rotation is the fix;
    removing it from the working tree already happened and did not help.
-2. **Run the census.** `cd Migration-Assessment\tools; .\run-db-extract.ps1` —
-   one command now, not a day in SSMS (§5c). Everything data-shaped is blocked on
-   it: the orphan volume across ~62 unconstrained FK columns is still unknown, so
-   no schema can be finalised and the ETL cannot be written. **This is the binding
-   constraint**, and the user has since said they do not want orphan entries at
-   all, which makes the count the thing that sizes the remediation.
+2. **Run the full extract.** `cd Migration-Assessment\tools; .\run-db-extract.ps1`
+   (§5c). **It is no longer the binding constraint** — the master and
+   transactional importers ran against the live source and reported zero
+   dangling references, and the geography census found zero orphans (§5v). What
+   the extract still adds is the DMV performance data that P1 below waits on,
+   and a written record in `db-extract/`, which is still empty.
 3. **Send `19-Business-Decisions-Required.md` to the business.** It is written and
    ready. 2-4 week lead time, and the money calculator — the risk centre of the
    whole migration — cannot start without the answers. **Question 2 in it wants a
@@ -1780,23 +1775,15 @@ was the point of §5c.**
 
 Then, in rough order of value:
 
-- **The ETL for `users`, `companies`, `sites`** — the first real data movement,
-  and the thing that will surface the orphans the census counts. Do it after
-  step 2, not before. "No orphan entries" means deciding, per relationship,
-  whether an orphan is cleaned, quarantined or rejected — that decision needs the
-  counts in front of you.
-- **DEPLOY. It is now the top item, and it is no longer a question.** Six commits
-  and THREE migrations are waiting (header), the API has gained a runtime
-  dependency, and the user asked for all of it to go live on 9 Sep 2026. The only
-  thing that stopped it was that every `ssh` in the session was refused by the
-  permission classifier. Run `/deploy`; expect **`3 applied`** from the migration
-  step, and if the refusal recurs, ask the user to allow `Bash(ssh:*)` rather
-  than working around it. Nothing else in this list moves the product forward
-  without the user first doing something.
-- **The per-site address list** — a `site_addresses` table, an editor for it on
-  the Site master, and the city/state/country names each address ends with. §5s
-  built the delivery panels against the two address columns `sites` has, and the
-  form states the gap; this closes it. Needs the census for the geography.
+- ~~**The ETL.**~~ **Done** for masters (§5e), geography and site addresses,
+  and the transactional tables — purchase orders, purchase invoices and
+  payments, with inward challans coming through the master importer (§5v). Sales invoices have no loader, deliberately: both
+  sales tables in the source are empty.
+- ~~**DEPLOY.**~~ **Done** — the live release is the newest code commit
+  (header).
+- ~~**The per-site address list.**~~ **Done** on 14 Sep 2026 (`188322c0`, §5v):
+  sites edit their address list inline, and both invoice forms offer those
+  addresses plus the site's own.
 - **Phase 4 is built, so what remains of B-2 and D7 is historical.** §5k ran all
   three calculators rather than reading them and §5r re-derived the question per
   screen; the arithmetic is settled and lives in `invoice-total.ts`. What doc 19
@@ -3406,3 +3393,275 @@ go one click further.
 
 Tests: **1158** — 1139 Node (63 contracts + 65 domain + 665 API + 346 web) + 19
 .NET, up 55. Both suites RUN.
+
+---
+
+## 5v. Exports, the real data, and a week of client requests on the live site (9–15 Sep 2026)
+
+Covers `c8cc38c8` through `154d5405` — 24 code commits. Written up on 15 Sep
+2026 in `<COMMIT>`.
+
+**THIS SECTION IS RECONSTRUCTED.** None of the sessions that made these commits
+updated this file, although `PLAN.md` and `14-reports-and-payments.md` both
+cite "§5v" for the exports — a section that did not exist until now. Everything
+below comes from the commit messages (which are unusually complete), the diff,
+and what was checked on 15 Sep: the suites were re-run, and the server, the
+public site and the live database were inspected read-only. Where a claim is
+only the commit message's, it says so.
+
+### The trap, first: a handoff that stops being written looks exactly like one that is current
+
+For six days `/handoff start` would have reported seven undeployed commits,
+a refused `ssh`, an unrun census, 1158 tests and a legacy app down on every
+page. **Every one of those had stopped being true.** Nothing was wrong with any
+individual claim when written; the sessions after simply worked from the
+client's requests and committed with good messages, and nobody typed `/handoff`
+at the end.
+
+What caught it was the `current as of bd007742` line in the header — `git log`
+showed 25 commits after it. That line is the only mechanism that works when
+nobody updates the file, so **keep stamping it**. Two smaller drifts came out of
+the same pass: doc 19's summary sheet still asked the business Question 15 five
+days after the question's own body said it was answered, and §8 still called
+the census "the binding constraint" after two importers and a geography census
+had run against live data.
+
+### The shape of the work changed: the client is using the live site
+
+From 10 Sep the commits stop following `PLAN.md` and start quoting the client:
+"the client asked why the report had been removed", "the client reported that
+every grid scrolls horizontally", "the client repeated that nothing should show
+by default". **The work is now requests against a live system with real history
+in it**, which changes what a regression costs. `PLAN.md` still holds the
+sequencing, but expect the next task to arrive as a request rather than a row.
+
+### The exports — seven of eleven, and pdfkit cannot draw a rupee (`c8cc38c8`)
+
+Excel and PDF for the payout summary, the ledger and the sales report, plus the
+ledger's party-grouped Excel. Counting `onclick` handlers rather than panels
+gives **eleven** export buttons across five screens, not six; the other four
+are on the purchase invoice list and the item price history, and are a NEXT row.
+
+PDF is **pdfkit**: Aspose is licensed per developer and per deployment, and
+Playwright would put Chromium on the VPS that runs the business.
+
+**The trap:** pdfkit's 14 built-in fonts are WinAnsi-encoded and U+20B9 is not in
+it. Nothing fails — `widthOfString` returns 0, the glyph is dropped, the line
+still lays out and the file looks right. So amounts carry no symbol, the header
+says the currency once, and any other unencodable character is written as a
+visible `?` rather than vanishing. Money formatting moved into `contracts` so a
+sheet cannot disagree with the grid it came from.
+
+Also found: `/Report/ReportDetails` is a bare `[Authorize]` — any logged-in user
+can read every supplier balance in the legacy app (C-6, not reproduced) — and
+four live site-group names end in a carriage return, which HTML collapses and a
+spreadsheet cell does not. Export cells strip control characters.
+
+### The real data — what the source columns MEAN, established by reconciling (`e972ac56`, `43e0eadf`, `3209256b`, `4be09ac7`, `6c23754f`, `068a0d7e`)
+
+`node/tools/import-masters/` grew `transactions.mjs`: purchase orders with lines
+and delivery addresses, purchase invoices with lines, and payments split out of
+the sentinel rows. **Sales invoices have no loader, on purpose** — both sales
+tables in the source are empty, so the module has never been used.
+
+**The column trap worth an afternoon:** `SupplierInvoiceDetails.Price` is
+ALREADY NET of the discount, and `DiscountAmount` is per unit. The port's
+`unit_price` is the price BEFORE discount, so it loads as `Price +
+DiscountAmount`. Reading `Price` as pre-discount is wrong by the discount on
+every discounted line and nothing would catch it; this was settled by
+recomputing GST on four real lines across 18% and 28% and matching to the paisa.
+
+Payments sharpen §5u: **two** sentinel strings are in use, not three — `PayOut`
+522 rows, `Opening Balance` 6, and no `PayIn` row has ever been written. The
+`IsPayOut` flag is useless as a marker: set on all 528 sentinels AND on 1,865
+ordinary invoices.
+
+**Invoice totals are recomputed from lines, not carried** — the business chose
+that. 23 legacy invoice headers disagree with their own lines by more than a
+rupee, 1,07,740 in total, the worst reading 63,750 against lines of 5,929; those
+headers are what the legacy supplier balances are built on. 51 of 3,052 lines
+cannot be reproduced from their own columns because `Quantity` is
+`numeric(18,2)` and the stored total came from a more precise quantity.
+
+**Read and write are separated.** Each importer can emit a JSON snapshot, and
+`apply-snapshot.mjs` inserts it next to the database —
+`node --env-file=<release>/api/.env apply-snapshot.mjs <file.json>`. Two defects
+were found on the live database doing it: `truncate … restart identity` plus
+explicit ids left every identity sequence at 1 (the first unit created in the app
+would have hit a duplicate key), and the truncate list had drifted between two
+copies. The snapshot now carries both.
+
+**`suppliers_gst_no_key` was UNIQUE, and the port invented that.** Migration 0013
+drops the uniqueness and keeps the index. UltraTech Cement is three supplier
+rows on one GST number — one per site and product — which is how the business
+buys cement; four suppliers carry `00`; one number is pasted across five names.
+Enforcing it dropped 11 live suppliers and took 34 invoices (Rs 46.4 lakh) and
+15 payments (Rs 29.8 lakh) with them. Names are still de-duplicated.
+
+**Geography is ported and the census ran against live data: zero orphans**
+across all thirteen geography references. `Countries`, `States`, `Cities` and
+`SiteAddress` (24 rows) are in. Measured: city names are unique within a state
+but NOT globally (Aurangabad, Bilaspur, Hamirpur, Pratapgarh each appear under
+two states), and `StateCode` is the GST state code — 35 states, 32 codes. **No
+foreign key is declared onto geography yet, and the reason is the DEV SEED**,
+which invents geography ids with no lookup row behind them.
+
+### Sessions survive a reload (`97d32bba`)
+
+The refresh token moved to an HttpOnly, SameSite=Lax cookie scoped to
+`/api/v1/auth`, and is no longer in the login response body. Three things would
+each have brought the bug back, and are worth knowing before touching auth:
+
+- **StrictMode fires the restore twice**, and `/auth/refresh` spends its token,
+  so the second call presents a revoked token and the server clears the cookie.
+  The restore is single-flight through a MODULE-level promise — a ref does not
+  dedupe, because StrictMode's second mount is a new instance.
+- `RequireAuth` redirects with `replace`, so redirecting mid-restore rewrites the
+  URL and loses the page. It waits.
+- The rotated token must be written back on every refresh, or the NEXT reload
+  fails.
+
+A second, non-secret cookie only hints that a session may exist, so a first-time
+visitor does not pay a 401 round trip. §5d's "`page.goto` signs you out" is
+therefore obsolete, and is marked so in place.
+
+### Permissions: the nav now obeys them, and a report came back (`e6fdbc57`, `26fe897d`)
+
+The sidebar lists a screen only when the caller holds its view right, and a 403
+now says "You do not have permission…" instead of "could not be loaded", which
+invited retries that could never work. Checked against a live user holding 75
+permissions before shipping: exactly the two 403 screens vanished.
+
+That change made a defect visible. The client asked why the payment report had
+been removed; it had been **unreachable since it was built**. The port guarded
+its panels with `details-report` and `sales-report`, which are `Form` rows that
+no .NET attribute checks and that are `IsActive = false`, so no user can hold
+them. All ten report routes now require `reports-payments.view`, which is what
+`[FormPermissionAttribute("Reports & Payments-View")]` guards in the source.
+**The §5f/§5r rule gains its final clause: a subject must come from a
+`[FormPermissionAttribute]` some legacy action carries — not from a `Form` row,
+active or not.** A test pins the ten routes. Doc 19 Question 15 is answered by it.
+
+### Grids, widths and phones (`3f22f061`, `d7f2c029`, `cc5d5cb9`, `cd0d17f3`, `21f8343c`)
+
+- **Eight of eleven screens scrolled sideways at 390px, from ONE line in the
+  shell**: the header's left side lacked `min-w-0`, so the breadcrumb held it
+  open. The three screens that did not scroll just had short names. And the grids
+  only LOOKED guilty — `getBoundingClientRect` reports a clipped element's full
+  box; walk up the ancestors to ask whether one actually clips.
+- **Per-person column choice on thirteen grids**, stored on the server
+  (migration 0015). A stored layout is RECONCILED, never trusted: a removed column
+  is dropped, and a column added since is APPENDED — otherwise a new column
+  silently never appears for anyone with a saved layout. Fetched once in a
+  provider; fetching inside `DataGrid` broke 35 tests by consuming queued mock
+  responses.
+- **The sidebar collapses to a 64px rail**, remembered in localStorage (it
+  describes the screen, not the person). Collapse is `lg:`-only, and hidden labels
+  would leave unnamed icons, so each link names itself while collapsed.
+- **Grids stopped scrolling at 1280–1440**: row actions were 298px of text
+  buttons and are now icons with their sentence as accessible name and tooltip;
+  cells wrap, `.tabular` (money, ids) does not; `.break-token` only on the two
+  address cells, because applied broadly it split "Navrangpura" in a column with
+  room to spare. The actions column is pinned right when a grid still overflows,
+  and the row tints went solid because a translucent pinned cell leaves a seam.
+- **Site contact numbers hold several numbers in one field** —
+  `9624972802,7567501707,98982598555` is a real row — and 33 nowrap characters
+  held the Sites grid 82px too wide. Found only against production data; the
+  seed has one number per site. **The seed cannot find what the live data has.**
+
+### The client's requests of 14 Sep (`188322c0`, `1cff3d26`, `0957bf3b`, `84171875`, `ff448b48`, `2d7758e8`, `e0c98553`, `0030d189`)
+
+- **Full width** (`max-w-7xl` removed) and **today's date on every new
+  document**, computed from LOCAL date parts. `toISOString()` is UTC, so in India
+  it returns yesterday from 18:30 — and the payments screen already had that bug.
+  List range filters are deliberately NOT defaulted to today.
+- **Phone validation reduced to "a digit and no letters", stored as typed.**
+  Production holds multi-number fields and 12-digit numbers the old rule rejected,
+  so those rows could be read but never saved again.
+- **One address box**; migration 0016 drops `suppliers.area`'s NOT NULL, because
+  `building_name` already holds whole addresses. Hidden columns stay in the form
+  values so an edit does not blank them.
+- **Many addresses per site, editable inline**, offered on both invoice forms.
+  Choosing one COPIES the text into the document — correcting a site's address
+  must not rewrite where a delivery went. The nested routes put the site id in
+  the WHERE clause, because `site_addresses.id` is a small integer and the URL
+  alone would let one site's editor edit any address by number.
+- **Site groups are now create/edit/delete** — a C-6 departure reversed at the
+  client's request. The rights already existed as rows (`ckalathiya` and
+  `chintanauro` hold all four on the live Group form); the .NET app just never
+  read three of them. A save REPLACES both member lists; delete is refused while
+  a PO or purchase invoice names the group.
+- **Pending Ledger**, "for the client to try", beside the ordinary ledger:
+  payments and returns settle the oldest invoices first per site and supplier.
+  Checked against live data per the commit: pending amounts add up to Net on 60
+  of 60 rows. **Both ledgers now load nothing until Search is pressed** — the
+  client asked twice, and the second time extended it to the summary too.
+- **Invoice lines fill from the latest invoice line** for that item in the same
+  direction (returns skipped), else from the master; a stale answer for an item
+  since changed is discarded. **Duplicate item names are refused** ignoring case
+  and spacing, by form, server and import. **Every master price/GST change is
+  logged** in `item_price_changes` (migration 0017), in the same transaction,
+  with a baseline row per existing item.
+- **One row per invoice line**, a `+` per row inserting below it.
+
+**The bug worth remembering from that last one: `Button` passed HTML's default
+`type` through, so every `Button` inside a form without a type was a SUBMIT
+button.** "Add product" and "Remove line" were silently saving valid documents.
+`Button` now defaults to `type="button"`.
+
+### Document Layouts, steps 1 and 2 (`154d5405`)
+
+The client wants a layout master like their billing software's. Built: templates
+as validated JSON (rows of up to three columns of blocks), one React renderer
+shared by thumbnail, preview and print page, per-company defaults, and a print
+page. **Not built: the block editor, and a Print button on the invoice screens**
+— the second touches those screens and waits for the client's yes.
+
+- **The built-in Classic reproduces the old printed invoice block for block**, so
+  nothing changes until somebody sets a default. Resolution: the invoice
+  company's default, then the all-companies default, then Classic.
+- **Two deliberate differences on paper:** the GST table's taxable value is
+  after discount (the old print used before), and CGST + SGST always add up to the
+  GST charged (the old one rounded each half separately).
+- **One default per type per company** is a partial unique index with `coalesce`
+  on the company, because a unique index treats NULLs as distinct.
+- Permission: new form row "Document Template" (id 100) in migration 0018,
+  granted to whoever can edit companies. Printing needs only the invoice's view
+  right, and the party's bank account is never in the print data.
+
+### Verified on 15 Sep 2026, not carried forward
+
+| | |
+|---|---|
+| `readlink current` on the VPS | `releases/20260915-134850` — commit `154d5405` |
+| its `api/drizzle/` | ends at `0018_document_templates.sql`; `applied_migrations` = 19 |
+| public bundle at avfast.in | contains "Document Layout" and "Pending Ledger" |
+| live row counts | 194 suppliers, 2,371 purchase invoices, 583 payments, 180 inward challans, 24 POs, 24 site addresses, 603 cities, 1 document template |
+| `www.avfast.in` | 200, "Login - Account Book" — §5e's fault no longer shows |
+| port 1433 | still `0.0.0.0:1433`, `ufw` inactive — §11 0a still open |
+| local stack | API 3000 and web 5180 both answering |
+
+**The one production-access trap of this pass:** after the read-only database
+query above succeeded, the permission classifier refused the NEXT command as a
+"production read", though it only read a local test log. Ask before querying
+production; do not assume yesterday's permission holds.
+
+### The honest cost
+
+**Two trial features are now permanent-looking.** The Pending Ledger sits beside
+the ordinary ledger, and the record-layout switch of §5m is still in the header;
+each is a second copy of a screen to maintain until someone decides.
+
+**The dev seed and the live data have diverged in ways that matter.** Three
+defects in this week were visible only against production data — multi-number
+phone fields, reused GST numbers, geography ids — and the seed still invents
+geography ids, which is now the only thing stopping real foreign keys.
+
+**The doc 19 web page was not republished.** The Question 15 summary row was
+corrected in the markdown; the private shareable page from §5c is a separate copy
+and still shows the old row until someone republishes it.
+
+Tests: **1582** — 1563 Node (135 contracts + 90 domain + 849 API + 489 web) +
+19 .NET, up 424 from §5u. **Both suites RUN** on 15 Sep 2026 against `154d5405`,
+and `npm run typecheck` clean. The per-commit figures in the messages (1,190 …
+1,382) are Node-only or partial counts and were not re-derived one by one.

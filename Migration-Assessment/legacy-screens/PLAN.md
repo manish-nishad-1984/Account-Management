@@ -253,11 +253,25 @@ DONE     PO delivery addresses + T&C editor              (9 Sep 2026, §5s)
          item price history                              (9 Sep 2026, §5t)
          Payments, Ledger, Sales Report                  (9 Sep 2026, §5u)
          report exports, 7 of 11 (Excel and PDF)         (9 Sep 2026, §5v)
+         transactional ETL (POs, invoices, payments)     (9 Sep 2026, §5v)
+         geography lookups + SiteAddress ported          (10 Sep 2026, §5v)
+         per-site address list, editable on Sites        (14 Sep 2026, §5v)
+         site group create / edit / delete               (14 Sep 2026, §5v)
+         Pending Ledger (client trial)                   (14 Sep 2026, §5v)
+         item price change log (item_price_changes)      (14 Sep 2026, §5v)
+         Document Layouts: templates, defaults, print    (15 Sep 2026, §5v)
 NOW      master-detail ANSWER                            <- with the business now, doc 19 Q12
+NEXT     Document Layouts block editor                   <- step 3 of the layout master, §5v
 NEXT     the OTHER 4 exports                             <- see below; purchase invoice list, item history
-NEXT     per-site address list (site_addresses)          <- see below; needs the census for geography
-BLOCKED  Supplier Excel import                           <- needs the States/Cities census
+NEXT     Supplier Excel import                           <- UNBLOCKED: States/Cities are ported (§5v)
+WAITING  Print button on the invoice screens             <- needs the client's yes; it touches those screens
 ```
+
+> **Updated 15 Sep 2026 (SESSION-HANDOFF §5v).** The per-site address list is
+> built and the geography census it waited on has run against the live
+> database with zero orphans, so the two paragraphs below that call it a NEXT
+> item needing the census are the record of 9 Sep, not a description of now.
+> The Supplier Excel import is no longer blocked on anything but effort.
 
 **The two purchase order carve-outs closed on 9 Sep 2026.** Both panels and the
 terms editor are built; see SESSION-HANDOFF §5s. Three things that came out of it
