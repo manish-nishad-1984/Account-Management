@@ -1,15 +1,15 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
 **Written:** 2 September 2026, after the unblocking session. **Last extended
-15 September 2026** (§5w). Supersedes all earlier handoffs of the same name.
+21 September 2026** (§5x). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
+> **This file is current as of `9a11f463`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
 
 **Sections §3, §4, §8, §10 and §11 describe _now_ and are re-measured on every
-handoff. Sections §5, §5b … §5w are a log of days that already happened and are
+handoff. Sections §5, §5b … §5x are a log of days that already happened and are
 never edited.** If the two disagree, the numbered sections win — run
 `/handoff check` and it will say which have drifted.
 
@@ -29,25 +29,37 @@ every page; on 15 Sep 2026 it served its login page with a 200 and no
 exception text, so that fault appears to have been cleared by someone. Who and
 when is not recorded anywhere in this repository.
 
-**Live release is `20260915-134850`, which is commit `154d5405`** — Document
-Layouts, the newest code commit, so **nothing committed is waiting to deploy**.
-Verified on the server on 15 Sep 2026, not carried forward: `current` points at
-that release, its `api/drizzle/` ends at `0018_document_templates.sql`,
-`applied_migrations` holds 19 rows (0000 to 0018), and the public web bundle
-carries the "Document Layout" and "Pending Ledger" strings. Five releases are
-kept, all from 14 and 15 Sep.
+**Live release is `20260921-185238`, which is commit `9a11f463`** — the newest
+code commit, so **nothing committed is waiting to deploy**. Verified on the
+server on 21 Sep 2026: `current` points at that release, its
+`applied_migrations` holds 21 rows (0000 to 0020), and a browser check against
+`https://avfast.in/` showed the new PO supplier summary rendering. Five
+releases are kept, spanning 18–21 Sep.
+
+**Read this before trusting the "nothing committed is waiting to deploy"
+line next time: it was false for six days, silently.** Every one of the four
+releases this session shipped (`20260918-194212`, `-204419`, `-211858`,
+`20260921-185238`) was built and deployed straight from an **uncommitted**
+working tree — `npm run build` reads the working tree, not `HEAD`, and the
+deploy skill never checks `git status`. By the time this was committed as
+`9a11f463`, 179 files and six days of client-requested changes (18–21 Sep)
+had been live in production without a single line of it in git — recoverable
+only because the working tree itself was never wiped. **Commit before
+deploying, or at the very latest before the session ends**, or the gap does
+this again.
 
 **The live database holds the history, not just masters.** Read-only counts
 on 15 Sep 2026: 194 suppliers, 2,371 purchase invoices, 583 payments, 180
-inward challans, 24 purchase orders, 24 site addresses, 603 cities. The
-transactional loaders of §5v put them there.
+inward challans, 24 purchase orders, 24 site addresses, 603 cities. Not
+re-measured on 21 Sep — this session's work was UI-only and touched no data.
+The transactional loaders of §5v put them there.
 
-> **This file was 25 commits behind for six days** (9 to 15 Sep 2026). Every
-> commit in that window was written up in its own message and none of it
-> reached this file, so a `/handoff start` on 15 Sep read a header saying seven
-> commits were undeployed and `ssh` was refused, when both had stopped being
-> true days before. §5v reconstructs that week from the commit messages. The
-> header's `current as of` line is what exposed it — which is what it is for.
+> **This file was 25 commits behind for six days** (9 to 15 Sep 2026), and then
+> **six commits and 179 uncommitted files behind for another six** (15 to 21
+> Sep 2026, closed by `9a11f463` — see the box above). Both times the work was
+> real and shipped; neither time did it reach this file until someone ran
+> `/handoff write` and actually scrolled up. The header's `current as of` line
+> is what exposes this — which is what it is for.
 
 **`ssh` to the VPS works from a session again** (it was refused by the
 permission classifier on 9 Sep). But on 15 Sep, right after one read-only
@@ -109,19 +121,22 @@ AC/
 ├── Migration-Assessment/          the 18-doc assessment + tools/ + db-extract/
 └── node/                          npm workspaces
     ├── packages/domain/           shared business rules (90 tests)
-    ├── packages/contracts/        Zod schemas shared by API and web (135 tests)
+    ├── packages/contracts/        Zod schemas shared by API and web (157 tests)
     ├── tools/import-masters/      the ETL: masters, geography, transactions, apply-snapshot
     ├── tools/deploy/
     └── apps/
-        ├── api/                   NestJS + Fastify + Drizzle (849 tests)
-        └── web/                   React 19 + Vite + Tailwind (489 tests)
+        ├── api/                   NestJS + Fastify + Drizzle (883 tests)
+        └── web/                   React 19 + Vite + Tailwind (577 tests)
 ```
 
-**1579 tests pass** — 1560 Node (135 contracts + 90 domain + 855 API + 480 web)
-plus 19 .NET. **Both figures were RUN on 15 Sep 2026**, against `154d5405`:
-Node exit 0, 48 of 48 API files and 51 of 51 web files, zero failures; .NET
-`Passed! - Failed: 0, Passed: 19`. `npm run typecheck` was run the same day:
-exit 0, zero `error TS`.
+**1726 tests pass** — 1707 Node (157 contracts + 90 domain + 883 API + 577 web)
+plus 19 .NET. **Both figures were RUN on 21 Sep 2026**, against `9a11f463`:
+Node exit 0 (`npm test` piped to a file and grepped per workspace, not just the
+last screenful — see the note in `/handoff`'s own instructions about why that
+matters), zero failures; the .NET figure is proved by the diff since
+`154d5405`, which touches no `.cs` file, rather than re-run. `npm run
+typecheck` and `npm run build` were both run the same day, against the same
+commit: exit 0, zero `error TS`, clean build in all four workspaces.
 
 **EVERY LEGACY SCREEN IS NOW PORTED.** `nav.ts` carries no `"planned"` item —
 Payments, the Ledger and the Sales Report were the last three (§5u). What remains
@@ -180,12 +195,14 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 
 ## 4. Repository state
 
-Branch **`main`**, working tree clean, pushed to `origin/main`. Typechecks, and
-all **1579 tests pass** — 1560 Node (135 contracts + 90 domain + 855 API + 480
-web) + 19 .NET.
+Branch **`main`**, working tree clean (as of this write — it held 179
+uncommitted files, six days of shipped work, until this handoff; see the
+header box), pushed to `origin/main`. Typechecks, and all **1726 tests pass**
+— 1707 Node (157 contracts + 90 domain + 883 API + 577 web) + 19 .NET.
 
-The Node suite was last measured on the §5w code commit (15 Sep 2026) and RUN;
-the .NET figure is proved by the diff since `154d5405`, which touches no .NET file. Anything after that on `main`
+The Node suite was measured on the `9a11f463` code commit (21 Sep 2026) and
+RUN; the .NET figure is proved by the diff since `154d5405`, which touches no
+.NET file. Anything after `9a11f463` on `main`
 is documentation — a handoff always commits after its own measurement, so the
 newest hash is never the one the numbers were taken at, and naming it here would
 be a lie that looks precise.
@@ -225,6 +242,19 @@ be a lie that looks precise.
   a list, and put one billing and one shipping address on POs and both invoice
   types. **Migration `0019` converts live data** — see §5w before re-running the
   importer, which would now destroy what people entered.
+- `b1b38f30` (same day, 15 Sep) renamed "Invoice no" to "Challan No." on Inward
+  Challans and made its Receiver a pick from the site's contacts. Small, and
+  never got its own §5x — the commit message is the full account.
+- `b3c05aee` (same day) is the "contact person is picked, not typed" follow-up
+  described inside §5w itself.
+- **`9a11f463`, 21 Sep 2026, is the §5x commit** — six days of client-driven UI
+  work (reports, dashboard, page chrome, the mockup form redesign, the PO
+  supplier summary) plus a backlog of already-live-but-uncommitted code from
+  the Site Location follow-ups, committed in one shot because none of it had
+  been committed incrementally. **No migration of its own**; it ships
+  `0020_site_location_address_pairs.sql`, which had already been applied to
+  production for days before this commit added the file to git — see §5x for
+  the full account of the gap.
 - **`main` is pushed to `origin/main`** and the working tree is clean.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
   credential is in the HISTORY, not the working tree. Rotation is the fix.
@@ -1682,19 +1712,31 @@ the screens whose UI is gated on `usePermission`.
 Every legacy screen is ported (§5u), **everything committed is deployed**
 (header), and the live database carries the transactional history (§5v). The
 work has changed shape: since 10 Sep 2026 it is driven by **requests from the
-client using the live site**, not by the port plan.
+client using the live site**, not by the port plan. §5x (18–21 Sep) is six
+more days of exactly that — reports, dashboard, page chrome, a mockup-driven
+form redesign, and the PO supplier summary — none of which touched the NOW/NEXT
+items below; they are unchanged from 15 Sep.
 `Migration-Assessment/legacy-screens/PLAN.md` holds the authoritative sequencing;
 its rows currently read:
 
 ```
 DONE     … per-site address list, site group CRUD, Pending Ledger,
          item price change log, Document Layouts steps 1-2   (14-15 Sep, §5v)
+         Site Location, challan receiver picker              (15 Sep, §5w)
+         Reports/dashboard/chrome redesign, form redesign,
+         PO supplier summary                                 (18-21 Sep, §5x)
 NOW      master-detail ANSWER                <- with the business, doc 19 Q12
 NEXT     Document Layouts block editor       <- step 3 of the layout master
 NEXT     the OTHER 4 exports                 <- purchase invoice list, item history
 NEXT     Supplier Excel import               <- UNBLOCKED: States/Cities are ported
 WAITING  Print button on the invoice screens <- needs the client's yes
 ```
+
+**Commit before you deploy, or before the session ends — see the header box.**
+§5x found 179 files and six days of live production code that had never
+reached git. Nothing broke because of it this time, but the next session that
+needs to `git diff` against what is actually running would have found nothing
+there to diff against.
 
 **What is left, in rough order:**
 
@@ -3674,7 +3716,8 @@ and `npm run typecheck` clean. The per-commit figures in the messages (1,190 …
 
 ## 5w. Site Location replaces Site Groups; several contacts per site; one billing address and one shipping address on every document (15 Sep 2026)
 
-Commit `<COMMIT>`. Carries **migration `0019_site_contacts_and_locations`**, which
+Commit `d49a1dc5`, with the contact-picker follow-up in `b3c05aee` the same
+day. Carries **migration `0019_site_contacts_and_locations`**, which
 CONVERTS live data, not only adds tables.
 
 ### What the client asked for, and the answers that shaped it
@@ -3806,4 +3849,222 @@ Tests: **1579** — 1560 Node (135 contracts + 90 domain + 855 API + 480 web) + 
 the run before it had three failures (two stale fixtures, trap 3), fixed first. No .NET file changed since `154d5405`, so its 19 are proved by the
 diff, not re-run. `npm run build` clean.
 
-Deployed: <RELEASE>.
+Deployed: confirmed live via `20260921-185238` (its migration `0019` shows
+"already applied" in every migrate run since). This section's own commit,
+`d49a1dc5`, was written 15 Sep 2026 and this stamp was never filled in until
+the §5x cleanup on 21 Sep — which release it first shipped on is not
+recorded.
+
+---
+
+## 5x. Six days of client requests — reports, dashboard, page chrome, a mockup form redesign, PO supplier summary — and the commit that closed a six-day gap (18–21 Sep 2026)
+
+Commit `9a11f463`. No migration of its own; it adds
+`0020_site_location_address_pairs.sql` to git, which had already been applied
+to production for several days.
+
+### The gap this section exists to explain
+
+None of this session's work was committed as it happened. By the time
+`/handoff write` ran on 21 Sep, `git status` showed **179 uncommitted files**
+— 151 modified, 28 new — and four production deploys (`20260918-194212`,
+`-204419`, `-211858`, `20260921-185238`) had each shipped straight from that
+uncommitted tree, because `npm run build` reads the working directory and the
+`/deploy` skill has no step that checks `git status`. The repository's
+`main` branch, for six days, did not contain the code that was actually
+running at `https://avfast.in`. Nothing was lost — the working tree survived
+intact — but a `git diff` against production during that window would have
+shown nothing, and a fresh clone would have been six days of real, shipped
+work behind. **The fix going forward is procedural, not code: commit before a
+deploy, or at the very least before the session that did the work ends.**
+
+### What shipped, across the four releases
+
+All client requests, in Hinglish, against the live site — the working mode
+§5v and §5w already described, continuing.
+
+**Reports (`20260918-194212`).** Ledger & Balances and Pending Ledger became
+two tabs of one page instead of two separate screens, with the tabs standing
+in for the page title. The "Search to see pending invoices…" prompts and the
+footnote sentences explaining Net and the pending-balance rule were removed —
+the client asked for them gone, not reworded. Every report grid now measures
+its own available height (`lib/use-fit-height.ts`) instead of producing a
+double scrollbar (an outer page scroll plus an inner grid scroll); the hook
+finds the nearest scrolling ancestor and only counts siblings that do not sit
+beside the grid, so a paired-column layout does not squeeze the grid to fit a
+sibling that is actually beside it, not below it. Hovering a grid row
+highlights it (transparent dark overlay, not a flat color, per the client's
+own phrasing "dark color but should be transparent"). Toolbar buttons
+(exports, the ledger direction toggle) moved above the filter row rather than
+competing with it for space. Sales Report and the shared `ReportGrid`/
+`ReportFilters`/`ReportTabs` components got the same pass, so "apply this to
+Sales Report too" and "apply this to every report" were one change each
+rather than three.
+
+**Grids and dashboard (`20260918-204419`).** Every grid outside the Reports
+section now defaults to 5 rows instead of 20 (`DEFAULT_GRID_PAGE_SIZE` in
+`lib/page-size.ts`) — report grids were deliberately excluded, since a report
+is read for its totals across many rows, not browsed 5 at a time. The
+dashboard's six approval queues, which used to render as expandable tables,
+became flat count tiles with a light background color per queue
+(`DashboardPage.tsx`'s `TONES` map); clicking a tile opens the queue's full
+list. Fixing this queue view uncovered the same double-scroll bug the
+reports had, from a different cause — `Permissions` had a hard-coded `32rem`
+list height, and a short browser window hit the same "grid floor" (240px)
+the report grids did. Both were general causes, not report-specific, so the
+fix (measure-don't-guess via `use-fit-height`) went in once and applies
+everywhere.
+
+**Page chrome and inline toolbars (`20260918-211858`).** The
+title-and-description block every screen opened with ("Purchase Orders /
+What has been ordered from a supplier, and for how much") is gone; the
+breadcrumb is the only page title now, and its current-page crumb is
+highlighted (`AppShell.tsx`) so removing the old heading does not remove all
+visual weight from "where am I". `PageHeader` now renders an `sr-only`
+`<h1>` — the accessible name survives even though nothing is drawn.
+Separately, wherever a screen had one control above the grid (a "New"
+button) and another below or beside it (a status filter), they were pulled
+onto one row — the client's example was Purchase Requests, where "New
+request" sat above the grid and the status filter sat below it; `DataGrid`
+gained `filters`/`actions` toolbar slots so a screen composes both into the
+same row instead of two.
+
+**The mockup form redesign and PO supplier summary (`20260921-185238`, this
+session).** The client sent a screenshot mockup of "Edit purchase invoice"
+and asked for it. Rather than redesign only that one dialog, three things
+from the mockup were pulled out as reusable pieces and applied to Purchase
+Invoice, Purchase Order, Sales Invoice and — for the section-card treatment
+only — Payments, since the client's own answer named "forms that are
+currently different" as in scope:
+
+- **`SummaryStrip`** (new) replaces the "six bordered tiles in a two-column
+  grid" totals panel with one ruled line — Sub total, Discount, Total GST,
+  TDS, Adjustment, ending in a boxed, larger **Total amount**. It lives inside
+  the Products card now, directly under the lines it sums, rather than in a
+  "Totals" section of its own further down the page.
+- **Paired cards.** Forms that had two related, short sections stacked full
+  width (Supplier / Order on a PO, Invoice details / Against a purchase order
+  on a PI) now sit side by side above `xl` (1280px) and stack below it.
+  `FormSection`'s `columns={3}` got a real ceiling for the wide-card case
+  (`@xs:grid-cols-2 @lg:grid-cols-3`, where the existing 2-column ladder would
+  never have reached 3 columns inside a half-width card at any window size the
+  app is used at) — used for the paired Delivery card, which is six short
+  fields.
+- **`GstBreakdown` collapses to one line at a single tax rate.** Nearly every
+  document carries one GST rate, and a 5-column table with its own header row
+  for one row of numbers was disproportionate. At exactly one rate the
+  `<thead>` becomes `sr-only` (still announced, never drawn) and the column
+  names move into each cell as a quiet inline label — "Rate:
+  CGST 9% + SGST 9%", "Taxable value 2,525.00" — read off a `compact` flag
+  computed from `rows.length === 1`. At two or more rates the full table
+  returns, because a shared header is what makes the rates comparable to each
+  other.
+- **The shipping-address picker replaced the scrolling radio list.**
+  `SiteAddressFields` used to render every address as a `role="radiogroup"`
+  of up to several two- or three-line rows in a `max-h-56 overflow-y-auto`
+  panel — on a site with four addresses, 224px of scrolling inside a form
+  that was already too tall, with the chosen one often out of view. It is now
+  one `<select>`, grouped by source (`<optgroup>` per site/site-shipping/
+  extra/location, in server order) with the chosen address then shown in full
+  underneath as a preview, labelled by its source or "Saved on this document"
+  for an address the site's list no longer offers. What is POSTED did not
+  change — still the address text, one at a time, copied onto the document —
+  only the control.
+- **The invoice line grid got 8px shorter per row** (45px, was 53px):
+  `CONTROL_COMPACT` inputs are 32px, and the row height above that was
+  `py-2`/`py-3.5` inconsistently; tightened to `py-1` on the field cells and
+  `py-2.5` on the text-only cells (index, GST, amount), which have to be
+  padded to match the 32px control beside them rather than sized to their own
+  20px line of text.
+- **PO supplier summary**, the same-day follow-up request: choosing a
+  supplier on a Purchase Order shows their mobile, address (`area` +
+  `pincode` joined) and GST number in a strip under the Supplier field,
+  reading straight off the row `useSupplierOptions` already fetched for the
+  dropdown — no second request. Any of the three that is null on the record
+  is simply not shown, rather than shown as an empty field.
+
+### What was deliberately left alone
+
+Small single-field dialogs (Units, Upload items) were not given icon-and-card
+treatment — one field does not need a section header, and the client's own
+answer scoped this to forms that were "currently different" from each other,
+which those are not. List/grid pages were not given a `SummaryStrip` of
+totals: the client's answer did name list pages as in scope "jaha jarur lage"
+(where it's actually needed), but a list's summary would need a **server-side
+total across the whole filtered set**, which no list endpoint returns today —
+only `inwardChallanListResponseSchema` carries a `totalQuantity`. This needs
+API work, not a UI pass, and was reported to the user as a separate decision
+rather than built speculatively.
+
+### Traps
+
+1. **`GstBreakdown`'s own `sm:col-span-2` became a bug once its caller
+   changed shape.** The component originally hard-coded a 2-column span on
+   its root `<div>`, which was correct while every caller's totals section
+   was itself 2 columns. Once the Purchase Invoice form's totals moved inside
+   the (1-column) Products card, that span created an IMPLICIT second column
+   in a `grid-cols-1` parent and the Products card silently became 2 columns
+   for everything below the lines. `FormSection`'s own doc comment already
+   warned about exactly this class of bug for a different case ("EVERY CELL
+   MAY SHRINK BELOW ITS CONTENT…") and it was not enough to prevent this one.
+   Fixed by making `className` (and therefore the span) the CALLER's
+   decision, per `FormSection`'s existing convention that placement belongs
+   to the parent.
+2. **Prettier reformats this codebase, because there is no prettier config.**
+   Running it (even to "just fix formatting") rewrote working files at an
+   80-column width nobody chose. Caught before it was committed; the fix was
+   to not run prettier here at all, not to add a config to match it.
+3. **Windows Bash and apostrophes.** `node -e '...'` one-liners containing an
+   apostrophe inside the JS string (a possessive like "screen's own") broke
+   the outer single-quoting. Scripts that needed an apostrophe in their own
+   prose went into `.cjs`/`.mjs` files written with a file-write tool instead
+   of an inline `-e`.
+4. **A string-search-based edit silently corrupted two files.** An
+   end-marker search written against a LF assumption failed on a CRLF file,
+   the match returned "not found", and the "removal" pasted the whole file
+   into itself a second time (`PurchaseRequestsPage.tsx`, `InventoryPage.tsx`
+   during the inline-toolbar pass). Every scratchpad script in this session
+   now normalises `\r\n` to `\n` before matching and restores it before
+   writing — but the two corrupted files had to be rebuilt from the doubled
+   copy by slicing at the second occurrence's index, since neither was
+   caught until after the write.
+5. **`npm test | tail -40` at the repository root discards three of four
+   workspaces' results.** Piped output interleaves per-workspace summaries,
+   and `tail` keeps only the last one (web). The `/handoff` skill's own
+   instructions call this out; it cost nothing here only because the test
+   log was piped to a file and grepped instead, per that instruction —
+   included here as confirmation the warning is worth keeping, not as a new
+   finding.
+
+### The honest cost
+
+- **Six days of production code was unrecoverable from git** until this
+  commit — see the section's own opening. The working tree happened to
+  survive; nothing in the toolchain guaranteed it would.
+- **This commit is 179 files and cannot be usefully reviewed as one diff.**
+  Splitting it correctly, after the fact, would mean re-deriving which lines
+  belong to which of roughly five prior sessions' work — judged not worth the
+  time against just committing it now, correctly described, rather than
+  leaving it uncommitted for a sixth day while that happened.
+- **List/grid summary totals were asked for and not built** (see "what was
+  left alone" above) — needs a small API change (a `total` on the relevant
+  list endpoints) that was not in scope for a UI redesign session.
+- The GST-breakdown single-rate collapse changes what a screen reader
+  announces for the *shape* of the table (the header row is now `sr-only`
+  rather than visible) while keeping the same column associations — tested,
+  not just asserted, via the existing `GstBreakdown.test.tsx` suite, but
+  worth a second look if VoiceOver/NVDA behaviour on `sr-only` `<thead>` ever
+  becomes a concern for this application.
+
+Tests: **1726** — 1707 Node (157 contracts + 90 domain + 883 API + 577 web) +
+19 .NET. The Node suite was RUN on 21 Sep 2026 after the PO supplier summary,
+all green, piped to a file and grepped per workspace. No .NET file changed
+since `154d5405`, so its 19 are proved by the diff, not re-run. `npm run
+build` and `npm run typecheck` both clean, all four workspaces.
+
+Deployed: `20260921-185238`, verified with a real login and a browser check of
+the PO supplier summary against `https://avfast.in/` (screenshot taken, not
+just a status code). Rollback target recorded before the switch:
+`/opt/accountbook-next/releases/20260918-211858`. `www.avfast.in`,
+`api.avfast.in` (404 at its root, as always), and the live `8080`/`7251`/
+`1433` services were confirmed on their pre-deploy PIDs.
