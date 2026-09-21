@@ -209,13 +209,33 @@ const sameUser = (a: AuthenticatedUser | null, b: AuthenticatedUser) =>
  * loses the session: the cookie survives and `refreshSession` trades it for a
  * fresh access token on load.
  */
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({
+  children,
+  onSessionEnd,
+}: {
+  children: ReactNode;
+  /**
+   * Called whenever a person's session leaves this tab — Sign out, idle, expiry,
+   * another tab ending it — and again just before a new one begins.
+   *
+   * It exists to empty the query cache. Query keys are not scoped by user
+   * (`["sites", "assignable"]`, `["purchase-orders", "list", …]`), and the cache
+   * outlives the sign-out for five minutes. Without this, the next person to sign
+   * in on the same tab is shown the previous person's lists, straight from memory,
+   * before the server has been asked anything — and, if the server then refuses
+   * them (a 403 for a screen they may not open), the old rows stay on screen
+   * beside the error.
+   */
+  onSessionEnd?: () => void;
+}) {
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const [isRestoring, setIsRestoring] = useState(true);
   const [endedReason, setEndedReason] = useState<SessionEnd | null>(null);
   const [warningSeconds, setWarningSeconds] = useState<number | null>(null);
   const accessToken = useRef<string | null>(null);
   const lastRenewal = useRef(0);
+  const onSessionEndRef = useRef(onSessionEnd);
+  onSessionEndRef.current = onSessionEnd;
 
   const accept = useCallback((result: LoginResponse) => {
     accessToken.current = result.accessToken;
@@ -231,6 +251,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setWarningSeconds(null);
     setEndedReason(reason);
+    onSessionEndRef.current?.();
   }, []);
 
   const revokeOnServer = useCallback(async () => {
@@ -299,6 +320,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       lastActivityWritten = 0;
       markActivity();
       setEndedReason(null);
+      // Belt and braces: a session can also end without passing through `endHere`
+      // (a token already gone when the page loads), and nobody signing in should
+      // ever inherit what was fetched before them.
+      onSessionEndRef.current?.();
       accept(result);
     },
     [accept],

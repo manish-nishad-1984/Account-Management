@@ -113,7 +113,7 @@ export function App() {
     <LucideProvider strokeWidth={1.5}>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <AuthProvider>
+        <AuthProvider onSessionEnd={() => queryClient.clear()}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             {NAV.flatMap((section) => section.items).map((item) => {
