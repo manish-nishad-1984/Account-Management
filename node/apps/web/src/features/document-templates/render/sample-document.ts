@@ -1,5 +1,11 @@
 import { amountInWords, summariseTax } from "@accountmanagement/domain";
-import { printTitle, type DocumentType, type PrintDocument, type PrintLine } from "@accountmanagement/contracts";
+import {
+  TERMS_TEMPLATES,
+  printTitle,
+  type DocumentType,
+  type PrintDocument,
+  type PrintLine,
+} from "@accountmanagement/contracts";
 
 /**
  * A made-up invoice to draw thumbnails and previews with, before a real one is
@@ -55,31 +61,51 @@ const LINES: PrintLine[] = [
   },
 ];
 
+/**
+ * An order's lines: the same goods with no discount, because the order grid has
+ * none — so the first line's taxable value is the full 100 x 380.
+ */
+const ORDER_LINES: PrintLine[] = LINES.map((line) =>
+  line.lineNumber === 1
+    ? { ...line, discountPerUnit: "0.00", discountPercent: "0.00", netAmount: "38000.00", gstAmount: "10640.00", lineTotal: "48640.00" }
+    : line,
+);
+
+/** The first of the real terms templates, so the preview shows what orders carry. */
+const SAMPLE_TERMS = TERMS_TEMPLATES[0]?.html ?? null;
+
 export function sampleDocument(documentType: DocumentType): PrintDocument {
   const sales = documentType === "sales-invoice";
+  const order = documentType === "purchase-order";
+  const lines = order ? ORDER_LINES : LINES;
+  const invoiceType = sales ? "Sales" : order ? "Purchase Order" : "Purchase";
   return {
     documentType,
     id: "sample",
     companyId: "sample",
-    invoiceType: sales ? "Sales" : "Purchase",
-    title: printTitle(documentType, sales ? "Sales" : "Purchase"),
-    number: sales ? "DHP/26-27/0042" : "PI-0042",
+    invoiceType,
+    title: printTitle(documentType, invoiceType),
+    number: sales ? "DHP/26-27/0042" : order ? "DHP/PO/26-27/0107" : "PI-0042",
     date: "2026-09-14T00:00:00.000Z",
     fields: {
-      partyInvoiceNo: sales ? null : "GT-1022",
-      purchaseOrderNo: sales ? null : "PO-0107",
-      challanNo: "CH-318",
-      lrNo: "LR-7781",
-      vehicleNo: "GJ05 AB 1234",
+      partyInvoiceNo: sales || order ? null : "GT-1022",
+      purchaseOrderNo: sales || order ? null : "PO-0107",
+      challanNo: order ? null : "CH-318",
+      lrNo: order ? null : "LR-7781",
+      vehicleNo: order ? null : "GJ05 AB 1234",
       dispatchBy: "Road",
       paymentTerms: "30 days",
+      deliveryDate: order ? "2026-09-21T00:00:00.000Z" : null,
+      deliveryImmediate: false,
       siteName: "Sample Site",
-      siteLocationName: null,
+      siteLocationName: order ? "Tower B" : null,
       contactName: "Site Office",
       contactNumber: "98250 00000",
     },
     description: "Delivered at site gate 2.",
+    shippingName: order ? "Sample Site" : null,
     shippingAddress: "Sample Site, Plot 14, Ring Road, Surat 395002",
+    terms: order ? SAMPLE_TERMS : null,
     company: {
       name: "Your Company Name",
       address: "Ground Floor, Business Park, Surat, 395007",
@@ -101,18 +127,28 @@ export function sampleDocument(documentType: DocumentType): PrintDocument {
       mobile: "98790 00000",
       email: null,
     },
-    lines: LINES,
-    totals: {
-      totalQuantity: "114.5",
-      subtotal: "231000.00",
-      totalDiscount: "1000.00",
-      totalGstAmount: "38260.00",
-      tds: "0.00",
-      roundOff: "0.00",
-      totalAmount: "269260.00",
-    },
-    taxSummary: summariseTax(LINES),
-    amountInWords: amountInWords("269260.00"),
-    taxInWords: amountInWords("38260.00"),
+    lines,
+    totals: order
+      ? {
+          totalQuantity: "114.5",
+          subtotal: "232000.00",
+          totalDiscount: "0.00",
+          totalGstAmount: "38540.00",
+          tds: "0.00",
+          roundOff: "0.00",
+          totalAmount: "270540.00",
+        }
+      : {
+          totalQuantity: "114.5",
+          subtotal: "231000.00",
+          totalDiscount: "1000.00",
+          totalGstAmount: "38260.00",
+          tds: "0.00",
+          roundOff: "0.00",
+          totalAmount: "269260.00",
+        },
+    taxSummary: summariseTax(lines),
+    amountInWords: amountInWords(order ? "270540.00" : "269260.00"),
+    taxInWords: amountInWords(order ? "38540.00" : "38260.00"),
   };
 }

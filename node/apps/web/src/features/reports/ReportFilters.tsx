@@ -1,5 +1,6 @@
+import type { ReactNode } from "react";
 import { RotateCcw, Search } from "lucide-react";
-import { Button, SelectField, TextField } from "../../components/ui";
+import { Button, FILTER_ACTIONS, FILTER_ROW, SelectField, TextField } from "../../components/ui";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { useCompanyOptions, useSupplierOptions } from "../purchase-orders/api";
 import type { ReportQuery } from "./api";
@@ -63,6 +64,7 @@ export function ReportFilters({
   partyLabel,
   idPrefix,
   label,
+  actions,
 }: {
   value: FilterState;
   onChange: (next: FilterState) => void;
@@ -77,6 +79,8 @@ export function ReportFilters({
   idPrefix?: string;
   /** Names the form for a screen reader when there is more than one. */
   label?: string;
+  /** A screen's own buttons (the downloads), at the right-hand end of the date-shortcut line. */
+  actions?: ReactNode;
 }) {
   const scope = useSiteScope();
   const suppliers = useSupplierOptions();
@@ -88,13 +92,13 @@ export function ReportFilters({
   return (
     <form
       aria-label={label}
-      className="mb-4 rounded-xl border border-slate-200/80 bg-white p-3 shadow-card"
+      className="mb-4 rounded-xl border border-slate-200 bg-white p-3 shadow-card"
       onSubmit={(event) => {
         event.preventDefault();
         onApply();
       }}
     >
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className={FILTER_ROW}>
         <SelectField
           id={idOf("company")}
           label="Company"
@@ -149,7 +153,7 @@ export function ReportFilters({
           onChange={(event) => set({ toDate: event.target.value })}
         />
 
-        <div className="flex items-end gap-2">
+        <div className={FILTER_ACTIONS}>
           <Button type="submit" icon={Search}>
             Search
           </Button>
@@ -165,7 +169,7 @@ export function ReportFilters({
         shortcut that saves typing two dates on the screen where typing them is
         most tedious.
       */}
-      <div className="mt-2 flex flex-wrap gap-2 text-xs">
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
         <button
           type="button"
           className="rounded-full px-2.5 py-1.5 text-brand-700 ring-1 ring-inset ring-brand-200 hover:bg-brand-50 lg:px-2 lg:py-0.5"
@@ -180,6 +184,7 @@ export function ReportFilters({
         >
           All dates
         </button>
+        {actions && <div className="ml-auto text-sm">{actions}</div>}
       </div>
     </form>
   );

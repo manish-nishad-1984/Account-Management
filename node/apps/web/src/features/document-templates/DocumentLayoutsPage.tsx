@@ -102,7 +102,7 @@ export function DocumentLayoutsPage() {
               id="layout-company"
               value={companyFilter}
               onChange={(event) => setCompanyFilter(event.target.value)}
-              className="h-8 rounded-md border-0 bg-white px-2.5 pr-8 text-sm text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-brand-600"
+              className="h-8 rounded-md border-0 bg-white px-2.5 pr-8 text-sm text-slate-700 ring-1 ring-inset ring-slate-300 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
             >
               <option value="">All companies</option>
               {companyOptions.map((company) => (
@@ -167,8 +167,10 @@ export function DocumentLayoutsPage() {
               onClick={openCreate}
               className="flex min-h-64 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-white/60 p-6 text-slate-500 transition-colors hover:border-brand-400 hover:text-brand-700"
             >
-              <span className="flex size-11 items-center justify-center rounded-full border border-current">
-                <Plus aria-hidden className="size-5" />
+              {/* 36px ring, 16px mark. At 44/20 it was the largest icon left in
+                  the application, on a tile whose job is to be the quiet one. */}
+              <span className="flex size-9 items-center justify-center rounded-full border border-current">
+                <Plus aria-hidden className="size-4" />
               </span>
               <span className="text-sm font-semibold">Create new</span>
               <span className="text-xs">Start from a ready layout</span>
@@ -181,7 +183,7 @@ export function DocumentLayoutsPage() {
               className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card"
             >
               <div className="relative border-b border-slate-100 bg-slate-50 p-3">
-                <span className="absolute left-2 top-2 z-10 rounded-full bg-slate-700 px-2 py-0.5 text-[11px] font-semibold text-white">
+                <span className="absolute left-2 top-2 z-10 rounded-full bg-slate-700 px-2 py-0.5 text-xs font-semibold text-white">
                   Built in
                 </span>
                 <ScaledDocument

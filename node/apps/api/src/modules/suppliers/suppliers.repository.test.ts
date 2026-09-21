@@ -231,8 +231,21 @@ describe("SuppliersRepository (real PostgreSQL)", () => {
       ).not.toThrow();
     });
 
-    it("refuses a GST number that is not 15 characters", () => {
-      expect(() => createSupplierSchema.parse({ name: "Bad", area: "X", gstNo: "NOTAGST" })).toThrow();
+    /**
+     * LENGTH IS THE ONLY GST RULE LEFT, by the business's decision of 17 Sep
+     * 2026. A short value that the official GSTIN pattern rejects now saves;
+     * only one longer than the column saves is refused.
+     */
+    it("accepts a GST number that does not match the official format", () => {
+      expect(() =>
+        createSupplierSchema.parse({ name: "Odd", area: "X", gstNo: "NOTAGST" }),
+      ).not.toThrow();
+    });
+
+    it("refuses a GST number longer than 15 characters", () => {
+      expect(() =>
+        createSupplierSchema.parse({ name: "Too long", area: "X", gstNo: "1234567890123456" }),
+      ).toThrow();
     });
 
     /**

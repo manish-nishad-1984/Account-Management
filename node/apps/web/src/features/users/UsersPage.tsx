@@ -24,12 +24,14 @@ export function UsersPage() {
         header: "User",
         cell: ({ row }) => (
           <div className="flex items-center gap-2.5">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-100 to-slate-200 text-[11px] font-semibold text-slate-600 ring-1 ring-inset ring-slate-200">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200">
               {row.original.firstName.slice(0, 1)}
               {row.original.lastName.slice(0, 1)}
             </div>
             <div>
-              <div className="font-medium text-slate-900">{row.original.userName}</div>
+              <div className="font-medium text-slate-900">
+                {row.original.userName}
+              </div>
               <div className="text-xs text-slate-500">
                 {row.original.firstName} {row.original.lastName}
               </div>
@@ -43,12 +45,16 @@ export function UsersPage() {
         accessorKey: "email",
         // See `.break-token`: an address is one unbreakable word, and it was
         // holding this column wider than the address itself needs.
-        cell: ({ row }) => <span className="break-token">{row.original.email}</span>,
+        cell: ({ row }) => (
+          <span className="break-token">{row.original.email}</span>
+        ),
       },
       {
         id: "phoneNo",
         header: "Phone",
-        cell: ({ row }) => <span className="tabular text-slate-600">{row.original.phoneNo}</span>,
+        cell: ({ row }) => (
+          <span className="tabular text-slate-600">{row.original.phoneNo}</span>
+        ),
       },
       {
         id: "siteCount",
@@ -99,6 +105,11 @@ export function UsersPage() {
       <PageHeader
         title="Users"
         description="System users, their sites and permissions"
+      />
+
+      <DataGrid<UserRow>
+        // One row above the grid (client request, 18 Sep 2026): the screen's
+        // filters beside the search box and its actions at the right-hand end.
         actions={
           canAdd ? (
             <Button icon={Plus} onClick={screen.openCreate}>
@@ -106,9 +117,6 @@ export function UsersPage() {
             </Button>
           ) : undefined
         }
-      />
-
-      <DataGrid<UserRow>
         gridKey="users"
         columns={columns}
         searchPlaceholder="Search name, username or email"
@@ -134,7 +142,10 @@ export function UsersPage() {
           <>
             <p>
               Delete{" "}
-              <span className="font-medium text-slate-900">{screen.deleteTarget?.userName}</span>?
+              <span className="font-medium text-slate-900">
+                {screen.deleteTarget?.userName}
+              </span>
+              ?
             </p>
             {/*
               Say that sign-out is not immediate. A soft delete revokes the
@@ -144,7 +155,8 @@ export function UsersPage() {
             */}
             <p className="mt-2 text-xs text-slate-500">
               The account is deactivated and hidden, and its refresh tokens are
-              revoked. An access token already issued stays valid until it expires.
+              revoked. An access token already issued stays valid until it
+              expires.
             </p>
           </>
         }

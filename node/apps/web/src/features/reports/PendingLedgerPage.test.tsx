@@ -79,17 +79,25 @@ const requested = (path: string) =>
     .mock.calls.map((call) => new URL(String(call[0]), "http://localhost"))
     .filter((url) => url.pathname.endsWith(path));
 
+/** The two are tabs since 18 Sep 2026; the ledger shows first. */
+const openTab = async (name: "Ledger — pending invoices" | "Balance summary") =>
+  userEvent.click(await screen.findByRole("tab", { name }));
+
 /** The ledger loads nothing until its own Search is pressed. */
-const searchLedger = async () =>
-  userEvent.click(
+const searchLedger = async () => {
+  await openTab("Ledger — pending invoices");
+  await userEvent.click(
     within(await screen.findByRole("form", { name: "Ledger filters" })).getByRole("button", { name: "Search" }),
   );
+};
 
 /** The summary also loads nothing until its own Search is pressed. */
-const searchSummary = async () =>
-  userEvent.click(
+const searchSummary = async () => {
+  await openTab("Balance summary");
+  await userEvent.click(
     within(await screen.findByRole("form", { name: "Balance summary filters" })).getByRole("button", { name: "Search" }),
   );
+};
 
 describe("the pending ledger screen", () => {
   beforeEach(() => {
@@ -172,8 +180,8 @@ describe("the pending ledger screen", () => {
 
     await searchSummary();
     await screen.findByRole("table", { name: "Balance summary" });
+    await openTab("Ledger — pending invoices");
     const ledgerFilters = await screen.findByRole("form", { name: "Ledger filters" });
-    expect(screen.getByRole("form", { name: "Balance summary filters" })).toBeInTheDocument();
 
     await userEvent.type(within(ledgerFilters).getByLabelText("From"), "2026-04-01");
     await userEvent.click(within(ledgerFilters).getByRole("button", { name: "Search" }));
@@ -190,12 +198,11 @@ describe("the pending ledger screen", () => {
     withReports(pendingResponse([]));
     renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
 
-    await screen.findByRole("form", { name: "Balance summary filters" });
-
-    const summaryFrom = within(screen.getByRole("form", { name: "Balance summary filters" })).getByLabelText("From");
-    const ledgerFrom = within(screen.getByRole("form", { name: "Ledger filters" })).getByLabelText("From");
-    expect(summaryFrom).not.toBe(ledgerFrom);
-    expect(summaryFrom.id).not.toBe(ledgerFrom.id);
+    const ledgerFrom = within(await screen.findByRole("form", { name: "Ledger filters" })).getByLabelText("From");
+    const ledgerId = ledgerFrom.id;
+    await openTab("Balance summary");
+    const summaryFrom = within(await screen.findByRole("form", { name: "Balance summary filters" })).getByLabelText("From");
+    expect(summaryFrom.id).not.toBe(ledgerId);
   });
 
   /**
@@ -206,10 +213,11 @@ describe("the pending ledger screen", () => {
     withReports(pendingResponse([pendingRow()]));
     renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
 
-    expect(await screen.findByText("Search to see the balances")).toBeInTheDocument();
-    expect(screen.getByText("Search to see pending invoices")).toBeInTheDocument();
-    expect(screen.queryByRole("table", { name: "Balance summary" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("form", { name: "Ledger filters" })).toBeInTheDocument();
     expect(screen.queryByRole("table", { name: "Pending invoices" })).not.toBeInTheDocument();
+    await openTab("Balance summary");
+    expect(await screen.findByRole("form", { name: "Balance summary filters" })).toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "Balance summary" })).not.toBeInTheDocument();
     expect(requested("/reports/balances")).toHaveLength(0);
     expect(requested("/reports/pending-ledger")).toHaveLength(0);
 
@@ -234,8 +242,7 @@ describe("the pending ledger screen", () => {
       within(screen.getByRole("form", { name: "Balance summary filters" })).getByRole("button", { name: "Reset" }),
     );
 
-    expect(await screen.findByText("Search to see the balances")).toBeInTheDocument();
-    expect(screen.queryByRole("table", { name: "Balance summary" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("table", { name: "Balance summary" })).not.toBeInTheDocument());
   });
 
   it("goes back to an empty ledger when the ledger's Reset is pressed", async () => {
@@ -248,7 +255,49 @@ describe("the pending ledger screen", () => {
       within(screen.getByRole("form", { name: "Ledger filters" })).getByRole("button", { name: "Reset" }),
     );
 
-    expect(await screen.findByText("Search to see pending invoices")).toBeInTheDocument();
-    expect(screen.queryByRole("table", { name: "Pending invoices" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("table", { name: "Pending invoices" })).not.toBeInTheDocument());
+  });
+
+  /** Client request, 18 Sep 2026: no prompt before Search and no footnote under the grid. */
+  it("shows no prompt or footnote on the ledger tab", async () => {
+    withReports(pendingResponse([pendingRow()]));
+    renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
+    await screen.findByRole("form", { name: "Ledger filters" });
+    expect(screen.queryByText(/Search to see pending invoices/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Nothing is loaded until then/)).not.toBeInTheDocument();
+
+    await searchLedger();
+    await screen.findByRole("table", { name: "Pending invoices" });
+    expect(screen.queryByText(/pay off the oldest invoices first/)).not.toBeInTheDocument();
+  });
+
+  /** Switching tab to glance at the other must not throw away a search. */
+  it("keeps each tab's search when the other is opened and closed", async () => {
+    withReports(pendingResponse([pendingRow()]));
+    renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
+    await searchLedger();
+    await screen.findByRole("table", { name: "Pending invoices" });
+
+    await openTab("Balance summary");
+    await openTab("Ledger — pending invoices");
+
+    expect(await screen.findByRole("table", { name: "Pending invoices" })).toBeInTheDocument();
+    expect(requested("/reports/pending-ledger")).toHaveLength(1);
+  });
+
+  /** Part paid beside the type, so the Pending figure keeps a row to itself. */
+  it("keeps every amount on one line, with nothing stacked under it", async () => {
+    withReports(pendingResponse([pendingRow({ amount: "5000.00", pending: "3000.00", balance: "3000.00" })]));
+    renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
+    await searchLedger();
+
+    const table = await screen.findByRole("table", { name: "Pending invoices" });
+    const headers = within(table).getAllByRole("columnheader").map((cell) => cell.textContent);
+    const row = within(table).getAllByRole("row")[1]!;
+    const pendingCell = row.children[headers.indexOf("Pending")]!;
+
+    expect(pendingCell.textContent).toBe("3,000.00");
+    expect(pendingCell).toHaveClass("text-right", "tabular", "whitespace-nowrap");
+    expect(row.children[headers.indexOf("Type")]).toHaveTextContent("Part paid");
   });
 });

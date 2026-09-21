@@ -194,3 +194,30 @@ export const latestPriceQuery = (id: string, direction: "out" | "in") => ({
       signal,
     }),
 });
+
+/**
+ * Items for the item picker, narrowed by what the user has typed.
+ *
+ * SEARCH IS NOT A CONVENIENCE HERE, IT IS THE ONLY WAY TO REACH MOST ITEMS.
+ * Production holds 758 items against a 200-row cap, so for two years of this
+ * port's life the dropdown could not offer 558 of them at all — the forms said
+ * so in an Alert and fell back to free text, which put a real catalogue item in
+ * `item_name` as a typed string whenever its name began too late in the
+ * alphabet. `ItemCombobox` sends the term and the server does the narrowing, so
+ * the whole catalogue is reachable.
+ *
+ * Keyed by the term, so TanStack caches each search and every picker showing the
+ * unsearched list shares one request.
+ */
+export const useItemOptions = (search: string) =>
+  useQuery({
+    queryKey: ["items", "options", search],
+    queryFn: ({ signal }) => {
+      const params = new URLSearchParams({ limit: "200", sortBy: "name" });
+      if (search.trim()) params.set("search", search.trim());
+      return apiRequest<ListResponse<ItemRow>>(`/items?${params.toString()}`, {
+        schema: listResponseSchema(itemRowSchema) as never,
+        signal,
+      });
+    },
+  });

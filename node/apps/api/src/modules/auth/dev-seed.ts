@@ -375,7 +375,6 @@ export class DevSeed implements OnModuleInit {
           name,
           unitId: insertedUnits[i % insertedUnits.length]!.id,
           pricePerUnit: price,
-          isWithGst: withGst,
           /**
            * The GST amount is seeded as a plain percentage of the price, and that
            * is a seed convenience rather than a ruling. Which of the three jQuery

@@ -1,3 +1,4 @@
+import { LucideProvider } from "lucide-react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
@@ -94,8 +95,22 @@ function ScopedShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+/*
+ * EVERY ICON IN THE APPLICATION, AT ONE STROKE WEIGHT, FROM ONE PLACE.
+ *
+ * Lucide's default is 2, which at the 14px these screens use reads as a solid
+ * glyph rather than as a line drawing — and it was the single heaviest mark on a
+ * page otherwise built from hairlines. 1.5 is the approved weight.
+ *
+ * The provider rather than a prop on some two hundred icons: a prop is a thing
+ * to remember, and the one somebody forgets is the one that looks wrong. A
+ * deliberate override still works, because a per-icon `strokeWidth` beats the
+ * context. `index.css` carries the same rule as a backstop, for an icon rendered
+ * outside this tree.
+ */
 export function App() {
   return (
+    <LucideProvider strokeWidth={1.5}>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
@@ -137,5 +152,6 @@ export function App() {
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>
+    </LucideProvider>
   );
 }

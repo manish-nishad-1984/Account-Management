@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useForm, useWatch, type UseFormRegisterReturn } from "react-hook-form";
-import { List } from "lucide-react";
+import { List, PackageCheck, Paperclip, Truck } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
 import { createInwardChallanSchema, type InwardChallanDetail } from "@accountmanagement/contracts";
@@ -13,7 +13,7 @@ import {
 import { applyServerErrors, unshownValidationMessage } from "../../lib/crud";
 import { text } from "../../lib/form-values";
 import { useAllUnits } from "../items/api";
-import { useItemOptions } from "../purchase-requests/api";
+import { ItemCombobox } from "../items/ItemCombobox";
 import {
   useAttachChallanDocuments,
   useChallanReceivers,
@@ -49,7 +49,6 @@ export function InwardChallanFormDialog({
   const detail = useInwardChallan(open && isEdit ? challanId : null);
   const scope = useSiteScope();
   const units = useAllUnits();
-  const itemOptions = useItemOptions("");
   const suppliers = useSupplierOptions();
   const create = useCreateInwardChallan();
   const update = useUpdateInwardChallan();
@@ -73,7 +72,10 @@ export function InwardChallanFormDialog({
     resolver: zodResolver(createInwardChallanSchema),
     defaultValues: EMPTY,
   });
-  const [siteId, receiverName] = useWatch({ control, name: ["siteId", "receiverName"] });
+  const [siteId, receiverName, itemId] = useWatch({
+    control,
+    name: ["siteId", "receiverName", "itemId"],
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -136,7 +138,6 @@ export function InwardChallanFormDialog({
 
   const unitOptions = (units.data?.rows ?? []).map((u) => ({ value: u.id, label: u.name }));
   const supplierOptions = (suppliers.data?.rows ?? []).map((s) => ({ value: s.id, label: s.name }));
-  const items = itemOptions.data?.rows ?? [];
 
   /** A challan needs a site, and the site is the header's to choose. */
   const noSiteInScope = !isEdit && scope.isReady && scope.siteId === null;
@@ -167,16 +168,20 @@ export function InwardChallanFormDialog({
         </Alert>
       ) : (
         <>
-          <FormSection title="What arrived" columns={2}>
-            <SelectField
+          <FormSection icon={PackageCheck} title="What arrived" columns={2}>
+            {/*
+              NO `allowFreeText`: a challan's item is a required reference and
+              the document has no column for a typed name.
+            */}
+            <ItemCombobox
               label="Item"
               required
-              autoFocus
               className="sm:col-span-2"
-              placeholder={itemOptions.isLoading ? "Loading items…" : "Choose an item"}
-              options={items.map((item) => ({ value: item.id, label: item.name }))}
+              itemId={String(itemId ?? "")}
               error={errors.itemId?.message}
-              {...register("itemId")}
+              onPick={(picked) =>
+                setValue("itemId", picked, { shouldDirty: true, shouldValidate: true })
+              }
             />
             <TextField
               label="Quantity"
@@ -196,7 +201,7 @@ export function InwardChallanFormDialog({
             />
           </FormSection>
 
-          <FormSection title="Who from" columns={2}>
+          <FormSection icon={Truck} title="Who from" columns={2}>
             <SelectField
               label="Supplier"
               placeholder={suppliers.isLoading ? "Loading suppliers…" : "No supplier"}
@@ -238,7 +243,7 @@ export function InwardChallanFormDialog({
             />
           </FormSection>
 
-          <FormSection title="Attachments" columns={1}>
+          <FormSection icon={Paperclip} title="Attachments" columns={1}>
             {isEdit ? (
               <ChallanAttachments
                 challanId={challanId}

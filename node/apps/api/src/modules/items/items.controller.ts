@@ -58,6 +58,7 @@ import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { actorId } from "../../common/actor";
+import { approvalOnUpdate, approvedOnCreate } from "../../common/approval";
 import { contentDisposition } from "../../common/storage/content-disposition";
 import { readUploads } from "../../common/storage/multipart";
 import { assertSpreadsheet } from "../../common/spreadsheet/assert-spreadsheet";
@@ -182,7 +183,11 @@ export class ItemsController {
     assertSpreadsheet(file.fileName, file.bytes);
 
     try {
-      return await this.sheets.import(file.bytes, actorId(caller));
+      return await this.sheets.import(
+        file.bytes,
+        actorId(caller),
+        approvedOnCreate(caller, SUBJECT),
+      );
     } catch (error) {
       if (error instanceof ItemSheetRejected) {
         // The whole result, not just a sentence. The screen renders a table of
@@ -277,7 +282,10 @@ export class ItemsController {
     @Body(new ZodValidationPipe(createItemSchema)) body: CreateItem,
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<ItemDetail> {
-    return this.items.create(body, actorId(caller));
+    return this.items.create(
+      { ...body, isApproved: approvedOnCreate(caller, SUBJECT) },
+      actorId(caller),
+    );
   }
 
   @Patch(":id")
@@ -287,7 +295,11 @@ export class ItemsController {
     @Body(new ZodValidationPipe(updateItemSchema)) body: UpdateItem,
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<ItemDetail> {
-    return this.items.update(id, body, actorId(caller));
+    return this.items.update(
+      id,
+      { ...body, ...approvalOnUpdate(caller, SUBJECT) },
+      actorId(caller),
+    );
   }
 
   /**

@@ -26,9 +26,12 @@ import type { Env } from "../../config/env";
  *    plain HTTP, and the dev server runs on `http://localhost:5180`; forcing it
  *    everywhere would silently break local sign-in, which is exactly the kind of
  *    failure that gets "fixed" by weakening it in production.
- *  - `maxAge` — the refresh token's own lifetime, so the cookie and the row in
- *    `refresh_tokens` expire together rather than the browser holding a token
- *    the server has already stopped honouring.
+ *  - NO `maxAge` — a SESSION cookie, which the browser drops when it closes.
+ *    The business rule (18 Sep 2026) is a fresh sign-in whenever the browser is
+ *    reopened. It used to carry the token's 30-day lifetime. A browser set to
+ *    reopen its last tabs can keep session cookies across a restart, so this is
+ *    not the whole control: the token itself stops being honoured after
+ *    `REFRESH_TOKEN_IDLE_MINUTES` without use, whatever the browser kept.
  *
  * The value is an opaque random token, not a JWT: the server hashes it and looks
  * it up, so nothing is trusted from the cookie itself.
@@ -65,7 +68,7 @@ function options(env: Env) {
   };
 }
 
-/** The hint's attributes: readable by script, site-wide, same lifetime. */
+/** The hint's attributes: readable by script, site-wide, and a session cookie like the real one. */
 function hintOptions(env: Env) {
   return {
     httpOnly: false,
@@ -76,9 +79,9 @@ function hintOptions(env: Env) {
 }
 
 export function setRefreshCookie(reply: FastifyReply, env: Env, token: string): void {
-  const maxAge = env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60;
-  reply.setCookie(REFRESH_COOKIE, token, { ...options(env), maxAge });
-  reply.setCookie(SESSION_HINT_COOKIE, "1", { ...hintOptions(env), maxAge });
+  // Both session cookies, in lockstep: gone together when the browser closes.
+  reply.setCookie(REFRESH_COOKIE, token, options(env));
+  reply.setCookie(SESSION_HINT_COOKIE, "1", hintOptions(env));
 }
 
 /**

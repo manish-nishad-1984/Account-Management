@@ -15,6 +15,8 @@ import { cities, companies, items, siteLocations, sites, states, suppliers } fro
 import { BaseRepository } from "../../common/base.repository";
 import { SalesInvoicesRepository } from "../sales-invoices/sales-invoices.repository";
 import { PurchaseInvoicesRepository } from "../purchase-invoices/purchase-invoices.repository";
+import { PurchaseOrdersRepository } from "../purchase-orders/purchase-orders.repository";
+import { sanitiseTerms } from "../../common/sanitise-terms";
 
 /** "Ground Floor, Ring Road, Surat, Gujarat 395002" — the parts that exist. */
 const joinAddress = (...parts: Array<string | null | undefined>): string | null => {
@@ -41,6 +43,7 @@ export class PrintDocumentsRepository extends BaseRepository {
     @Inject(DATABASE) database: Database | null,
     private readonly salesInvoices: SalesInvoicesRepository,
     private readonly purchaseInvoices: PurchaseInvoicesRepository,
+    private readonly purchaseOrders: PurchaseOrdersRepository,
   ) {
     super(database);
   }
@@ -68,13 +71,17 @@ export class PrintDocumentsRepository extends BaseRepository {
         vehicleNo: invoice.vehicleNo,
         dispatchBy: invoice.dispatchBy,
         paymentTerms: invoice.paymentTerms,
+        deliveryDate: null,
+        deliveryImmediate: false,
         siteName: site,
         siteLocationName: null,
         contactName: invoice.contactName,
         contactNumber: invoice.contactNumber,
       },
       description: invoice.description,
+      shippingName: null,
       shippingAddress: invoice.shippingAddress,
+      terms: null,
       company,
       party,
       items: invoice.items,
@@ -107,18 +114,101 @@ export class PrintDocumentsRepository extends BaseRepository {
         vehicleNo: invoice.vehicleNo,
         dispatchBy: invoice.dispatchBy,
         paymentTerms: invoice.paymentTerms,
+        deliveryDate: null,
+        deliveryImmediate: false,
         siteName: site,
         siteLocationName: group,
         contactName: invoice.contactName,
         contactNumber: invoice.contactNumber,
       },
       description: invoice.description,
+      shippingName: null,
       shippingAddress: invoice.shippingAddress ?? invoice.groupAddress,
+      terms: null,
       company,
       party,
       items: invoice.items,
       hsn,
       charges: invoice,
+    });
+  }
+
+  /**
+   * A purchase order, in the invoices' shape — as the legacy order print
+   * (`POPrintDetails.cshtml`) laid it out.
+   *
+   * WHAT AN ORDER DOES NOT HAVE, filled so a template can treat it as any other
+   * document: no discount per line (the order grid has no discount column), no
+   * TDS and no round-off — its total is subtotal plus GST, exactly
+   * (`purchase-order-total.ts`). The order's stored `totalDiscount` is carried
+   * from the legacy data and never applied to its totals, so it is NOT printed:
+   * a discount row on paper that the total does not reflect is a sum that does
+   * not add up in front of the supplier.
+   *
+   * THE COMPANY'S ADDRESS IS THE ORDER'S BILLING ADDRESS when it has one, which
+   * is what the legacy print put under the company name; the company's own
+   * address otherwise.
+   *
+   * THE TERMS ARE SANITISED AGAIN HERE. The order module sanitises them on every
+   * write, but rows imported from the legacy database never went through a
+   * write, and the legacy screen rendered this column raw. Printing is the one
+   * place it becomes live markup, so the allowlist runs at that boundary too.
+   */
+  async purchaseOrder(id: string): Promise<PrintDocument> {
+    const order = await this.purchaseOrders.findById(id);
+    const [company, party, site, location, hsn] = await Promise.all([
+      this.company(order.companyId),
+      this.party(order.supplierId),
+      this.siteName(order.siteId),
+      this.siteLocationName(order.siteLocationId),
+      this.hsnCodes(order.items.map((line) => line.itemId)),
+    ]);
+
+    const zero = "0.00";
+    return this.assemble("purchase-order", {
+      id: order.id,
+      companyId: order.companyId,
+      invoiceType: "Purchase Order",
+      number: order.poNo,
+      date: order.documentDate,
+      fields: {
+        partyInvoiceNo: null,
+        purchaseOrderNo: null,
+        challanNo: null,
+        lrNo: null,
+        vehicleNo: null,
+        dispatchBy: order.dispatchBy,
+        paymentTerms: order.paymentTerms,
+        deliveryDate: order.deliveryImmediate ? null : order.deliveryDate,
+        deliveryImmediate: order.deliveryImmediate,
+        siteName: site,
+        siteLocationName: location,
+        contactName: order.contactName,
+        contactNumber: order.contactNumber,
+      },
+      description: order.description,
+      shippingName: site,
+      shippingAddress: order.shippingAddress ?? order.groupAddress,
+      terms: sanitiseTerms(order.terms),
+      company: { ...company, address: order.billingAddress ?? company.address },
+      party,
+      items: order.items.map((line) => ({
+        ...line,
+        discountPerUnit: zero,
+        discountPercent: zero,
+        // Quantity x rate. Derived rather than recomputed so it cannot differ
+        // from the stored line by a rounding of its own.
+        netAmount: money.format(money.subtract(money.decimal(line.lineTotal), money.decimal(line.gstAmount))),
+      })),
+      hsn,
+      charges: {
+        subtotal: order.subtotal,
+        totalDiscount: zero,
+        totalGstAmount: order.totalGstAmount,
+        tds: zero,
+        roundOff: zero,
+        totalAmount: order.totalAmount,
+      },
     });
   }
 
@@ -132,7 +222,9 @@ export class PrintDocumentsRepository extends BaseRepository {
       date: string | null;
       fields: PrintDocument["fields"];
       description: string | null;
+      shippingName: string | null;
       shippingAddress: string | null;
+      terms: string | null;
       company: PrintCompany;
       party: PrintParty;
       items: Array<Omit<PrintLine, "name" | "description" | "hsnCode"> & {
@@ -182,7 +274,9 @@ export class PrintDocumentsRepository extends BaseRepository {
       date: source.date,
       fields: source.fields,
       description: source.description,
+      shippingName: source.shippingName,
       shippingAddress: source.shippingAddress,
+      terms: source.terms,
       company: source.company,
       party: source.party,
       lines,
@@ -224,7 +318,7 @@ export class PrintDocumentsRepository extends BaseRepository {
       .where(eq(companies.id, id))
       .limit(1);
 
-    if (!row) throw new NotFoundException("The invoice's company was not found");
+    if (!row) throw new NotFoundException("The document's company was not found");
     return {
       name: row.name,
       address: joinAddress(row.address, row.area, row.cityName, row.pincode),
@@ -261,7 +355,7 @@ export class PrintDocumentsRepository extends BaseRepository {
       .where(eq(suppliers.id, id))
       .limit(1);
 
-    if (!row) throw new NotFoundException("The invoice's party was not found");
+    if (!row) throw new NotFoundException("The document's party was not found");
     return {
       name: row.name,
       address: joinAddress(row.buildingName, row.area, row.cityName, row.pincode),

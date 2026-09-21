@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SuppliersPage } from "./SuppliersPage";
 import { AuthProvider } from "../../contexts/AuthContext";
+import { DEFAULT_GRID_PAGE_SIZE } from "../../lib/page-size";
 
 /** Ids are slugged, not the raw name: a real id is a UUID and never has spaces. */
 const idFor = (name: string) => `id-${name.toLowerCase().replace(/\s+/g, "-")}`;
@@ -64,7 +65,7 @@ describe("SuppliersPage", () => {
 
     await screen.findByText("Ambica Steel Traders");
     expect(lastRequestUrl().pathname).toBe("/api/v1/suppliers");
-    expect(lastRequestUrl().searchParams.get("limit")).toBe("25");
+    expect(lastRequestUrl().searchParams.get("limit")).toBe(String(DEFAULT_GRID_PAGE_SIZE));
     // Keyset, not offset: there is no page number to send.
     expect(lastRequestUrl().searchParams.has("page")).toBe(false);
     expect(lastRequestUrl().searchParams.has("skip")).toBe(false);

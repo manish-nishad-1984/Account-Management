@@ -32,6 +32,7 @@ import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { actorId } from "../../common/actor";
+import { approvalOnUpdate, approvedOnCreate } from "../../common/approval";
 import type { AccessTokenClaims } from "../auth/token.service";
 
 /**
@@ -118,7 +119,10 @@ export class SuppliersController {
     @Body(new ZodValidationPipe(createSupplierSchema)) body: CreateSupplier,
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<SupplierDetail> {
-    return this.suppliers.create(body, actorId(caller));
+    return this.suppliers.create(
+      { ...body, isApproved: approvedOnCreate(caller, SUBJECT) },
+      actorId(caller),
+    );
   }
 
   @Patch(":id")
@@ -128,7 +132,11 @@ export class SuppliersController {
     @Body(new ZodValidationPipe(updateSupplierSchema)) body: UpdateSupplier,
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<SupplierDetail> {
-    return this.suppliers.update(id, body, actorId(caller));
+    return this.suppliers.update(
+      id,
+      { ...body, ...approvalOnUpdate(caller, SUBJECT) },
+      actorId(caller),
+    );
   }
 
   /**

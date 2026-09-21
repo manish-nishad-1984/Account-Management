@@ -1,10 +1,10 @@
+import { BookOpen, Building2, Home, Landmark } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
 import { createSupplierSchema, type SupplierDetail } from "@accountmanagement/contracts";
 import {
-  CheckboxField,
   FormDialog,
   FormSection,
   TextAreaField,
@@ -98,7 +98,7 @@ export function SupplierFormDialog({
         <p className="py-8 text-center text-sm text-slate-500">Loading supplier…</p>
       ) : (
         <>
-          <FormSection title="Identity">
+          <FormSection icon={Building2} title="Identity">
             <TextField
               label="Supplier name"
               required
@@ -108,7 +108,8 @@ export function SupplierFormDialog({
             />
             <TextField
               label="GST number"
-              hint="15 characters, e.g. 24AAACD1234A1Z5"
+              hint="Up to 15 characters"
+              maxLength={15}
               error={errors.gstNo?.message}
               {...register("gstNo")}
             />
@@ -134,7 +135,7 @@ export function SupplierFormDialog({
             name next to a required Area that repeated it. Area and PIN code
             stay in the form values so an edit preserves them.
           */}
-          <FormSection title="Address">
+          <FormSection icon={Home} title="Address">
             <TextAreaField
               label="Address"
               rows={2}
@@ -144,7 +145,7 @@ export function SupplierFormDialog({
             />
           </FormSection>
 
-          <FormSection title="Bank details" description="Not shown on the suppliers list">
+          <FormSection icon={Landmark} title="Bank details" description="Not shown on the suppliers list">
             <TextField
               label="Bank name"
               error={errors.bankName?.message}
@@ -168,7 +169,7 @@ export function SupplierFormDialog({
             />
           </FormSection>
 
-          <FormSection title="Ledger">
+          <FormSection icon={BookOpen} title="Ledger">
             <TextField
               label="Opening balance"
               inputMode="decimal"
@@ -182,18 +183,6 @@ export function SupplierFormDialog({
               hint="Required when an opening balance is given"
               error={errors.openingBalanceDate?.message}
               {...register("openingBalanceDate")}
-            />
-            {/*
-              `IsApproved` is carried, not enforced. Nothing in the repository
-              layer treats it as a gate — an unapproved supplier can still be
-              chosen on a purchase order — so the label says what it does rather
-              than implying a control that does not exist.
-            */}
-            <CheckboxField
-              label="Approved"
-              hint="Recorded on the supplier. It does not currently prevent use on a purchase order."
-              className="sm:col-span-2"
-              {...register("isApproved")}
             />
           </FormSection>
         </>
@@ -216,7 +205,6 @@ const EMPTY: FormValues = {
   bankBranch: "",
   accountNo: "",
   ifscCode: "",
-  isApproved: false,
   openingBalance: "",
   openingBalanceDate: "",
 };
@@ -235,7 +223,6 @@ const toFormValues = (detail: SupplierDetail): FormValues => ({
   bankBranch: text(detail.bankBranch),
   accountNo: text(detail.accountNo),
   ifscCode: text(detail.ifscCode),
-  isApproved: detail.isApproved,
   openingBalance: text(detail.openingBalance),
   // The API sends a full ISO timestamp; `<input type="date">` needs yyyy-mm-dd
   // and renders blank, with no error, for anything else.

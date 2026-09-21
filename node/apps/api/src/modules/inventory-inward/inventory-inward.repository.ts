@@ -225,7 +225,7 @@ export class InventoryInwardRepository extends BaseRepository {
    * because the source stores one. Nothing reads it: both the list and the form
    * take the name from the master, so the two can never disagree.
    */
-  async create(input: CreateInventoryInward, actorId: string): Promise<InventoryInwardDetail> {
+  async create(input: CreateInventoryInward & { isApproved?: boolean }, actorId: string): Promise<InventoryInwardDetail> {
     const row = await writing(() =>
       this.db.transaction(async (tx) => {
         const [item] = await tx
@@ -258,7 +258,7 @@ export class InventoryInwardRepository extends BaseRepository {
 
   async update(
     id: string,
-    input: UpdateInventoryInward,
+    input: UpdateInventoryInward & { isApproved?: boolean },
     actorId: string,
   ): Promise<InventoryInwardDetail> {
     const { documentDate, ...rest } = input;

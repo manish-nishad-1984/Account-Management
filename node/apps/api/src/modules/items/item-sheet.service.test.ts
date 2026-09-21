@@ -83,7 +83,6 @@ describe("ItemSheetService (real PostgreSQL)", () => {
         name: "OPC 53 Grade Cement",
         unitId: bag,
         pricePerUnit: "395.00",
-        isWithGst: true,
         gstPercent: "28",
         gstAmount: "110.60",
         hsnCode: "25232910",
@@ -98,7 +97,7 @@ describe("ItemSheetService (real PostgreSQL)", () => {
     const bytes = await h.sheets.export(undefined);
 
     const target = await harness();
-    const result = await target.sheets.import(bytes, ACTOR);
+    const result = await target.sheets.import(bytes, ACTOR, true);
 
     expect(result).toMatchObject({ rowCount: 2, created: 2, revived: 0, errors: [] });
 
@@ -112,20 +111,18 @@ describe("ItemSheetService (real PostgreSQL)", () => {
       gstPercent: "28.00",
       gstAmount: "110.60",
       hsnCode: "25232910",
-      isWithGst: true,
     });
     expect(sand).toMatchObject({
       unitName: "Ton",
       pricePerUnit: "1234.56",
       gstPercent: null,
       gstAmount: null,
-      isWithGst: false,
     });
   });
 
   it("imports a file in the LEGACY export's five-column layout", async () => {
     const bytes = await legacySheet([["Cement", "Bag", "27.00", "18", "25232910"]]);
-    const result = await h.sheets.import(bytes, ACTOR);
+    const result = await h.sheets.import(bytes, ACTOR, true);
 
     expect(result).toMatchObject({ created: 1, errors: [] });
 
@@ -133,7 +130,8 @@ describe("ItemSheetService (real PostgreSQL)", () => {
     // No GST Amount column, so it is derived — in decimals. 27 at 18% is 4.86,
     // not the 4.859999999999999 that floats give.
     expect(page.rows[0]!.gstAmount).toBe("4.86");
-    expect(page.rows[0]!.isWithGst).toBe(true);
+    // The percentage is now the whole answer to "does this item carry GST".
+    expect(page.rows[0]!.gstPercent).toBe("18.00");
   });
 
   describe("all-or-nothing", () => {
@@ -144,7 +142,7 @@ describe("ItemSheetService (real PostgreSQL)", () => {
         ["Good Two", "Ton", "30.00", "", "", ""],
       ]);
 
-      await expect(h.sheets.import(bytes, ACTOR)).rejects.toBeInstanceOf(ItemSheetRejected);
+      await expect(h.sheets.import(bytes, ACTOR, true)).rejects.toBeInstanceOf(ItemSheetRejected);
       expect(await names(h.items)).toEqual([]);
     });
 
@@ -155,7 +153,7 @@ describe("ItemSheetService (real PostgreSQL)", () => {
         ["", "Bag", "30.00", "", "", ""],
       ]);
 
-      const error = await h.sheets.import(bytes, ACTOR).catch((e: unknown) => e);
+      const error = await h.sheets.import(bytes, ACTOR, true).catch((e: unknown) => e);
       expect(error).toBeInstanceOf(ItemSheetRejected);
       const result = (error as ItemSheetRejected).result;
 
@@ -179,7 +177,7 @@ describe("ItemSheetService (real PostgreSQL)", () => {
       ]);
 
       const error = (await h.sheets
-        .import(bytes, ACTOR)
+        .import(bytes, ACTOR, true)
         .catch((e: unknown) => e)) as ItemSheetRejected;
 
       expect(error.result.errors.map((e) => e.row)).toEqual([2, 3, 4, 5]);
@@ -197,7 +195,7 @@ describe("ItemSheetService (real PostgreSQL)", () => {
 
       const bytes = await ourSheet([["OPC   Cement ", "Bag", "999.00", "", "", ""]]);
       const error = (await h.sheets
-        .import(bytes, ACTOR)
+        .import(bytes, ACTOR, true)
         .catch((e: unknown) => e)) as ItemSheetRejected;
 
       expect(error.result.errors[0]!.message).toMatch(/"OPC Cement" already exists/);
@@ -208,7 +206,7 @@ describe("ItemSheetService (real PostgreSQL)", () => {
         ["Cement", "Bag", "395.00", "", "", ""],
         ["River Sand", "Ton", "1800.00", "5", "", ""],
       ]);
-      await h.sheets.import(bytes, ACTOR);
+      await h.sheets.import(bytes, ACTOR, true);
 
       const rows = await h.db
         .select({ source: schema.itemPriceChanges.source, newPrice: schema.itemPriceChanges.newPrice })
@@ -228,7 +226,7 @@ describe("ItemSheetService (real PostgreSQL)", () => {
 
       const bytes = await ourSheet([["Cement", "Bag", "999.00", "", "", ""]]);
       const error = (await h.sheets
-        .import(bytes, ACTOR)
+        .import(bytes, ACTOR, true)
         .catch((e: unknown) => e)) as ItemSheetRejected;
 
       expect(error.result.errors[0]!.message).toMatch(/already exists.*Items screen/);
@@ -253,7 +251,7 @@ describe("ItemSheetService (real PostgreSQL)", () => {
       );
 
       const bytes = await ourSheet([["CEMENT", "Bag", "999.00", "", "", ""]]);
-      await expect(h.sheets.import(bytes, ACTOR)).rejects.toBeInstanceOf(ItemSheetRejected);
+      await expect(h.sheets.import(bytes, ACTOR, true)).rejects.toBeInstanceOf(ItemSheetRejected);
     });
 
     it("revives a soft-deleted item and overwrites it, as the source does", async () => {
@@ -266,7 +264,7 @@ describe("ItemSheetService (real PostgreSQL)", () => {
       expect(await names(h.items)).toEqual([]);
 
       const bytes = await ourSheet([["Cement", "Ton", "999.00", "", "", "25232910"]]);
-      const result = await h.sheets.import(bytes, ACTOR);
+      const result = await h.sheets.import(bytes, ACTOR, true);
 
       expect(result).toMatchObject({ created: 0, revived: 1, errors: [] });
 
@@ -286,7 +284,7 @@ describe("ItemSheetService (real PostgreSQL)", () => {
     it("names the valid units when one is not found", async () => {
       const bytes = await ourSheet([["Cement", "Sacks", "10.00", "", "", ""]]);
       const error = (await h.sheets
-        .import(bytes, ACTOR)
+        .import(bytes, ACTOR, true)
         .catch((e: unknown) => e)) as ItemSheetRejected;
 
       // The legacy message is ": Cement at row 1 does not match any data type."
@@ -300,7 +298,7 @@ describe("ItemSheetService (real PostgreSQL)", () => {
 
     it("matches a unit name whatever its case or padding", async () => {
       const bytes = await ourSheet([["Cement", "  bag  ", "10.00", "", "", ""]]);
-      const result = await h.sheets.import(bytes, ACTOR);
+      const result = await h.sheets.import(bytes, ACTOR, true);
       expect(result.created).toBe(1);
     });
   });
@@ -357,12 +355,12 @@ describe("ItemSheetService (real PostgreSQL)", () => {
 
   it("refuses a sheet with headers and no rows", async () => {
     const bytes = await ourSheet([]);
-    await expect(h.sheets.import(bytes, ACTOR)).rejects.toThrow(/headers but no rows/);
+    await expect(h.sheets.import(bytes, ACTOR, true)).rejects.toThrow(/headers but no rows/);
   });
 
   it("refuses a sheet whose required columns are missing, without row noise", async () => {
     const bytes = await writeWorkbook("Items", [{ header: "Item Name", width: 20 }], [["Cement"]]);
-    const error = (await h.sheets.import(bytes, ACTOR).catch((e: unknown) => e)) as ItemSheetRejected;
+    const error = (await h.sheets.import(bytes, ACTOR, true).catch((e: unknown) => e)) as ItemSheetRejected;
 
     expect(error.result.errors).toHaveLength(2);
     expect(error.result.errors.every((e) => e.row === 1)).toBe(true);

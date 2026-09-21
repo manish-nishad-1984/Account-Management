@@ -81,13 +81,15 @@ export const createSupplierSchema = z
     bankBranch: optionalText(200),
     accountNo: optionalText(30),
     ifscCode,
-    /**
-     * `IsApproved` is carried, not enforced. Nothing in the repository layer
-     * treats it as a gate — an unapproved supplier can still be selected on a
-     * purchase order — so making it one here would be a behaviour change that
-     * needs business sign-off (assessment 07).
-     */
-    isApproved: z.boolean().default(false),
+    /*
+      NO `isApproved` HERE. Approval is decided by the writer's own approve
+      right, on the server, from the access token — see `common/approval.ts`.
+
+      `IsApproved` remains carried rather than enforced: nothing in the
+      repository treats it as a gate, so an unapproved supplier can still be
+      selected on a purchase order. Making it a gate is a separate behaviour
+      change that needs business sign-off (assessment 07).
+    */
     openingBalance: optionalMoney("Opening balance"),
     openingBalanceDate: optionalDate,
   })

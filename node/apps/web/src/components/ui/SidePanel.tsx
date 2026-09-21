@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
 import { X } from "lucide-react";
+import { IconButton } from "./icon-button";
 
 /**
  * A record docked beside the list, the way the legacy screens work.
@@ -72,34 +73,29 @@ export function SidePanel({
       // role out would be redundant; the label is what does the work.
       aria-labelledby={titleId}
       className={clsx(
-        "fixed inset-y-0 right-0 z-30 flex w-full flex-col bg-white shadow-2xl",
-        "ring-1 ring-slate-900/5 sm:w-[28rem]",
+        "fixed inset-y-0 right-0 z-30 flex w-full flex-col bg-white shadow-pop",
+        "border-l border-slate-200 sm:w-[28rem]",
         // Below the sticky header on large screens, so the site scope and the
         // layout switch stay reachable while a record is open.
         "lg:top-16",
       )}
     >
-      <div className="flex items-start justify-between gap-4 border-b border-slate-200/80 px-4 py-3">
+      <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-2.5">
         <div className="min-w-0">
-          <h2 id={titleId} className="heading truncate text-base">
+          <h2 id={titleId} className="heading truncate text-sm leading-5">
             {title}
           </h2>
-          {description && <p className="mt-0.5 truncate text-sm text-slate-500">{description}</p>}
+          {description && (
+            <p className="mt-0.5 truncate text-xs leading-4 text-slate-500">{description}</p>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="-m-1 shrink-0 rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
-        >
-          <X aria-hidden className="size-5" />
-        </button>
+        <IconButton label="Close" icon={X} onClick={onClose} className="-mr-1 shrink-0" />
       </div>
 
       <div className="scroll-subtle flex-1 overflow-y-auto px-4 py-3">{children}</div>
 
       {footer && (
-        <div className="flex items-center justify-end gap-2 border-t border-slate-200/80 bg-slate-50/60 px-4 py-2.5">
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-surface-muted px-4 py-2.5">
           {footer}
         </div>
       )}

@@ -7,7 +7,11 @@ import {
   formatBytes,
   type InwardChallanDocument,
 } from "@accountmanagement/contracts";
-import { Alert, Button } from "../../components/ui";
+import {
+  Alert,
+  Button,
+  IconButton,
+} from "../../components/ui";
 import { ApiError } from "../../lib/api-client";
 import {
   downloadChallanDocument,
@@ -142,14 +146,14 @@ export function ChallanAttachments({
               )}
 
               {canEdit && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="shrink-0 px-2 py-1 text-rose-600 hover:bg-rose-50"
+                <IconButton
+                  label={`Remove ${document.documentName}`}
                   icon={Trash2}
-                  aria-label={`Remove ${document.documentName}`}
-                  disabled={busyId === document.id}
+                  tone="destructive"
+                  size="sm"
                   onClick={() => void onRemove(document)}
+                  disabled={busyId === document.id}
+                  className="shrink-0"
                 />
               )}
             </li>
@@ -231,13 +235,13 @@ export function QueuedAttachments({
               <Paperclip aria-hidden className="size-3.5 shrink-0 text-slate-400" />
               <span className="min-w-0 flex-1 truncate text-slate-700">{file.name}</span>
               <span className="shrink-0 text-xs text-slate-400">{formatBytes(file.size)}</span>
-              <Button
-                type="button"
-                variant="ghost"
-                className="shrink-0 px-2 py-1 text-rose-600 hover:bg-rose-50"
+              <IconButton
+                label={`Remove ${file.name}`}
                 icon={Trash2}
-                aria-label={`Remove ${file.name}`}
+                tone="destructive"
+                size="sm"
                 onClick={() => onChange(files.filter((_, i) => i !== index))}
+                className="shrink-0"
               />
             </li>
           ))}
@@ -254,7 +258,7 @@ export function QueuedAttachments({
           aria-label="Choose files to attach"
           onChange={(event) => onPick(event.target.files)}
         />
-        <Button type="button" variant="secondary" icon={Upload} onClick={() => input.current?.click()}>
+        <Button type="button" variant="outline" icon={Upload} onClick={() => input.current?.click()}>
           Choose files
         </Button>
         <span className="text-xs text-slate-500">

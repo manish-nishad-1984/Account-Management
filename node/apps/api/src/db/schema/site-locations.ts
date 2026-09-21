@@ -34,6 +34,18 @@ export const siteLocations = pgTable(
     name: text("name").notNull(),
 
     /**
+     * The address deliveries to this location go to — the other half of the PAIR
+     * (business, 17 Sep 2026).
+     *
+     * NULLABLE, and `name` may be "" for the same reason: the rows migrated out
+     * of `site_location_addresses` have an address and no name, because nothing
+     * recorded which name went with which address. Either half may be blank while
+     * someone is filling the other in. The unique index below exempts blank names
+     * so that several unnamed pairs can sit on one site.
+     */
+    address: text("address"),
+
+    /**
      * Soft delete, because documents reference a location by id. Removing a name
      * from the form marks it deleted; an order that already names it keeps
      * showing the name it was raised with.
@@ -46,22 +58,31 @@ export const siteLocations = pgTable(
   },
   (table) => [
     index("site_locations_site_id_idx").on(table.siteId),
-    /** One "Block A" per site, case-insensitively. Two sites may both have one. */
+    /**
+     * One "Block A" per site, case-insensitively. Two sites may both have one.
+     *
+     * BLANK NAMES ARE EXEMPT (`name <> ''`). A site can hold several pairs that
+     * have an address and no name yet — BHAVNAGAR-RAJUBHAI arrived with eight —
+     * and without the exemption the second one violates this index. Two REAL
+     * locations sharing a name are still refused, which is the rule this is for.
+     */
     uniqueIndex("site_locations_site_name_key")
       .on(table.siteId, sql`lower(${table.name})`)
-      .where(sql`${table.isDeleted} = false`),
+      .where(sql`${table.isDeleted} = false AND ${table.name} <> ''`),
   ],
 );
 
 /**
- * The addresses entered on the Site Location screen, one list per site.
+ * SUPERSEDED by `siteLocations.address` on 17 Sep 2026, and read by nothing.
  *
- * SEPARATE FROM `site_addresses`, which the Site master edits — the business
- * asked for two lists, as the legacy app had Site addresses and Group addresses
- * in two panels. A document's shipping choice offers both together.
+ * The business asked for a location and its address to be one PAIR, so these
+ * rows were copied into `site_locations` with a blank name (migration 0020) and
+ * this table stopped being written. It is kept, populated, on purpose: it is the
+ * only pre-pairing copy of addresses that people deliver material to, and a
+ * dropped table is the one thing a rollback cannot undo.
  *
- * No document references these rows: a document COPIES the address it was
- * raised with as text, so a save replaces the list outright.
+ * Drop it once the pairs on the Site Location screen have been named — on
+ * purpose, in its own migration, not as a side effect of this one.
  */
 export const siteLocationAddresses = pgTable(
   "site_location_addresses",

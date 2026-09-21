@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SitesPage } from "./SitesPage";
 import { AuthProvider } from "../../contexts/AuthContext";
+import { DEFAULT_GRID_PAGE_SIZE } from "../../lib/page-size";
 
 const row = (name: string, overrides: Record<string, unknown> = {}) => ({
   id: `id-${name}`,
@@ -58,7 +59,7 @@ describe("SitesPage", () => {
 
     await screen.findByText("Ahmedabad Riverfront");
     expect(lastRequestUrl().pathname).toBe("/api/v1/sites");
-    expect(lastRequestUrl().searchParams.get("limit")).toBe("25");
+    expect(lastRequestUrl().searchParams.get("limit")).toBe(String(DEFAULT_GRID_PAGE_SIZE));
   });
 
   it("shows the user and location counts as separate numbers", async () => {

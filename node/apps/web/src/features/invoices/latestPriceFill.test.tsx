@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PurchaseInvoiceFormDialog } from "../purchase-invoices/PurchaseInvoiceFormDialog";
 import { SalesInvoiceFormDialog } from "../sales-invoices/SalesInvoiceFormDialog";
-import { renderWithAuth } from "../../test/render";
+import { pickItem, renderWithAuth } from "../../test/render";
 
 /**
  * Choosing an item on an invoice line fills its latest price, unit and GST
@@ -21,7 +21,6 @@ const item = (id: string, name: string) => ({
   unitId: 1,
   unitName: "Bag",
   pricePerUnit: "395.00",
-  isWithGst: false,
   gstPercent: null,
   gstAmount: null,
   hsnCode: null,
@@ -87,11 +86,15 @@ const openPurchase = () =>
     permissions: ["purchase-invoice.view", "purchase-invoice.add", "item.view"],
   });
 
-const chooseItem = async (user: ReturnType<typeof userEvent.setup>, name: string) => {
-  const select = screen.getByLabelText(/item on line 1/i);
-  await waitFor(() => expect(select.querySelectorAll("option").length).toBeGreaterThan(2));
-  await user.selectOptions(select, name);
-};
+/**
+ * Pick an item on line 1 by name.
+ *
+ * The wait is what the old `option`-count check was really for: the picker
+ * searches on a 200ms debounce, so the list arrives after the click rather than
+ * with it. `pickItem` holds that wait.
+ */
+const chooseItem = async (user: ReturnType<typeof userEvent.setup>, name: string) =>
+  pickItem(user, /item on line 1/i, name);
 
 describe("filling an invoice line with the item's latest price", () => {
   beforeEach(() => {
@@ -175,7 +178,7 @@ describe("filling an invoice line with the item's latest price", () => {
     openPurchase();
 
     await chooseItem(user, "OPC Cement");
-    await user.selectOptions(screen.getByLabelText(/item on line 1/i), "River Sand");
+    await chooseItem(user, "River Sand");
     await waitFor(() => expect(screen.getByLabelText(/price on line 1/i)).toHaveValue("1800.00"));
 
     releaseCement();

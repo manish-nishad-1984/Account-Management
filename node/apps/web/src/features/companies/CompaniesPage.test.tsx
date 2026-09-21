@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CompaniesPage } from "./CompaniesPage";
 import { AuthProvider } from "../../contexts/AuthContext";
+import { DEFAULT_GRID_PAGE_SIZE } from "../../lib/page-size";
 
 const row = (name: string, overrides: Record<string, unknown> = {}) => ({
   id: `id-${name}`,
@@ -57,7 +58,7 @@ describe("CompaniesPage", () => {
 
     await screen.findByText("D H Infra");
     expect(lastRequestUrl().pathname).toBe("/api/v1/companies");
-    expect(lastRequestUrl().searchParams.get("limit")).toBe("25");
+    expect(lastRequestUrl().searchParams.get("limit")).toBe(String(DEFAULT_GRID_PAGE_SIZE));
   });
 
   it("sends the cursor — not a page number — when moving forward", async () => {

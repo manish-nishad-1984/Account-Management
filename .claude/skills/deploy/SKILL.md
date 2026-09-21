@@ -141,6 +141,23 @@ and rewrites the two workspace deps to `file:../packages/<name>`, dropping
 `@accountmanagement/domain` and `@accountmanagement/contracts`, whose versions
 are `*` and `^0.0.0` — `npm ci` cannot resolve those standalone.
 
+In full, from `node/`, with `$SP` the session scratchpad:
+
+```bash
+REL=$(date +%Y%m%d-%H%M%S); echo "$REL" > "$SP/rel.txt"
+node tools/deploy/stage.mjs "E:/nakul/Chintan Kalathiya/AC/node" "$SP/staging-$REL"
+
+# Does the staged page reference the bundle that was just built? If not, the
+# build did not run and a stale dist is about to be shipped as if it were new.
+grep -o 'index-[A-Za-z0-9_-]*\.js' "$SP/staging-$REL/web/index.html"
+ls apps/web/dist/assets | grep -E '^index-.*\.js$'
+
+tar --force-local -czf "$SP/$REL.tgz" -C "$SP/staging-$REL" .
+```
+
+`--force-local` is not optional: plain `tar` reads the `C:` in a Windows path as
+a remote host and fails with a hostname lookup.
+
 ### 3. Ship and install
 
 `tar --force-local -czf` (plain `tar` reads `C:/…` as a remote host and fails),
@@ -222,7 +239,12 @@ migration means something is wrong.
 
 ### 6. Switch, restart, verify
 
+**Say what the rollback target is before you move the symlink**, while it is
+still trivially readable. It goes in the report, and it is the thing you want at
+hand if the next 30 seconds go badly:
+
 ```bash
+echo "ROLLBACK TARGET: $(readlink -f /opt/accountbook-next/current)"
 ln -sfn /opt/accountbook-next/releases/$REL /opt/accountbook-next/current
 systemctl restart accountbook-next
 ```
@@ -230,6 +252,28 @@ systemctl restart accountbook-next
 Then poll `http://127.0.0.1:3101/api/v1/health` for up to 25s. **If it does not
 come up, roll back immediately** (see below) and report the last 30 lines of
 `/var/log/accountbook-next.log`. Never leave a failed release as `current`.
+
+**Write the poll exactly like this**, or it will lie to you:
+
+```bash
+for i in $(seq 1 25); do
+  C=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3101/api/v1/health 2>/dev/null || echo 000)
+  if [ "$C" = '200' ]; then echo "HEALTHY after ${i}s"; break; fi
+  sleep 1
+done
+```
+
+The `|| echo 000` is not decoration. Under `set -e`, `C=$(curl ...)` takes the
+exit status of the command substitution, and curl exits **7** when it cannot
+connect — which is exactly what happens on the first pass, while Nest is still
+booting. So the script dies on iteration 1, the loop never runs its remaining 24
+seconds, and the deploy looks failed.
+
+This cost a needless rollback on 16 Sep 2026. The service had started correctly;
+`/var/log/accountbook-next.log` said *"Nest application successfully started"*
+while the deploy was being reverted around it. **Before rolling back for a failed
+health check, read the log.** A healthy app and a broken poll look identical from
+outside, and only the log tells them apart.
 
 A healthy `/health` is **not** enough on its own — it does not touch the signing
 key. Always also check a real login:
@@ -242,21 +286,44 @@ curl -s -X POST http://127.0.0.1:3101/api/v1/auth/login \
 
 ### 7. Fix ownership and permissions
 
-The tar carries Windows uids, and nginx runs as `www-data`:
+The tar carries Windows uids, and nginx runs as `www-data`.
+
+**ORDER MATTERS HERE, and getting it wrong exposes `DATABASE_URL`.** The broad
+`644` walk covers `api/.env` too, so it must finish *before* the `600` lands. Run
+it with `-exec ... {} +` and `sync` between the two halves:
 
 ```bash
 chown -R root:root /opt/accountbook-next
 chmod 755 /opt/accountbook-next /opt/accountbook-next/releases
-find /opt/accountbook-next/releases -type d -exec chmod 755 {} \;
-find /opt/accountbook-next/releases -type f -exec chmod 644 {} \;
+
+# The broad walks run to completion FIRST.
+find /opt/accountbook-next/releases -type d -exec chmod 755 {} +
+find /opt/accountbook-next/releases -type f -exec chmod 644 {} +
+sync
+
+# ONLY NOW the restrictive ones.
 chmod 700 /opt/accountbook-next/keys
 chmod 600 /opt/accountbook-next/keys/private.pem /opt/accountbook-next/.dbpass
-chmod 600 /opt/accountbook-next/current/api/.env
+chmod 600 /opt/accountbook-next/releases/*/api/.env
 # Uploads: the service writes them, and NOBODY else reads them — not even
 # www-data. Every download goes through the API, which checks the token and the
 # permission first.
 chmod 700 /opt/accountbook-next/uploads
+
+stat -c '%a %n' /opt/accountbook-next/releases/*/api/.env   # every one must be 600
 ```
+
+Two things changed here on 16 Sep 2026, both after finding `.env` at **644**
+mid-deploy on a live server:
+
+- **`releases/*/api/.env`, not `current/api/.env`.** Every kept release is a
+  rollback target, and the `644` walk re-opens the older ones on every deploy. A
+  `600` applied only to `current` leaves four readable copies of the database URL
+  behind it.
+- **`-exec ... {} +`, not `\;`.** One `chmod` per batch instead of one per file:
+  on this tree that is the difference between a walk that has finished when the
+  next line runs and one that is still travelling. `sync` makes it explicit
+  rather than hoping.
 
 Confirm nginx cannot read an attachment directly. If this ever passes, the
 uploads are back where the legacy ones were:
@@ -281,12 +348,57 @@ sudo -u www-data test -r /opt/accountbook-next/.dbpass                  # must F
 curl -o /dev/null -w '%{http_code}\n' https://avfast.in/
 curl https://avfast.in/api/v1/health
 curl -o /dev/null -w '%{http_code}\n' https://www.avfast.in/
-curl -o /dev/null -w '%{http_code}\n' https://api.avfast.in/
 curl -o /dev/null -w '%{http_code}\n' http://89.116.122.175:8090/
 ```
 
-Check 8080, 7251 and 1433 are all still listening, and that 3101 is **not**
-reachable from outside. Report the URL: **https://avfast.in/**
+**Check the BUNDLE HASH, not just the status code.** A 200 from `avfast.in` says
+nginx is serving something; it does not say it is serving *this* release. The
+cheapest honest check there is:
+
+```bash
+curl -s https://avfast.in/ | grep -oE 'assets/index-[A-Za-z0-9_-]+\.(js|css)'
+```
+
+Compare it to `apps/web/dist/assets/`. If they differ, the switch did not take
+and everything below is measuring the old build.
+
+**`https://api.avfast.in/` answers 404 at its root, and always has.** That is the
+dotnet API's own behaviour, not a symptom — `curl http://127.0.0.1:7251/` gives
+the same 404 with this procedure nowhere near it. Do not report it as breakage
+and do not "fix" it.
+
+Check 8080, 7251 and 1433 are all still listening — **and that their PIDs are the
+ones they had before the deploy**, which is what actually proves nothing was
+restarted:
+
+```bash
+ss -lntp | awk '/:8080|:7251|:1433/ {print $4, $6}'
+```
+
+3101 must **not** be reachable from outside. Report the URL:
+**https://avfast.in/**
+
+### 8b. Look at it
+
+The checks above prove the server is serving. They do not prove the application
+works — and on a UI release that is the entire question. Use the
+`browser-automation` skill against **https://avfast.in/**, signing in as
+`ckalathiya` / `DevPassword1`, and assert the specific thing that shipped.
+
+Worth capturing every time, because all four are cheap and each has caught
+something real:
+
+- **console errors and failed requests** — expect 0 and 0 on production (the
+  `ERR_ABORTED` noise in dev is StrictMode double-mounting and does not happen in
+  a production build)
+- `document.documentElement.scrollWidth - clientWidth` — expect **0**, at 1600px
+  and at 390px
+- a real list rendering real rows, so the API path is exercised end to end
+- a screenshot, read back, for anything about layout
+
+Gotcha worth remembering: `patchright` resolves from the CodeGPT install, so run
+`browser.mjs` from `C:/Users/PC-8/AppData/Roaming/npm` (or export `NODE_PATH` to
+it) or it exits with "Could not resolve patchright".
 
 ### 9. Prune
 
@@ -295,6 +407,29 @@ Keep the last five releases:
 ```bash
 ls -1dt /opt/accountbook-next/releases/*/ | tail -n +6 | xargs -r rm -rf
 ```
+
+---
+
+## What to report when it is done
+
+The point of the run is the report, and these are the lines that have mattered:
+
+- **The URL and the release id** — `https://avfast.in/`, `releases/<REL>`
+- **The rollback target**, as a command the user can paste, with the note that
+  migrations are not rolled back
+- **The gate**: test counts per workspace, typecheck, build
+- **The migration summary** verbatim — `N applied, N adopted, N skipped`.
+  `0 applied` is correct for a UI-only release and wrong after shipping a new
+  migration; say which case this was.
+- **That the live business survived**: `www.avfast.in` 200, and 8080 / 7251 /
+  1433 on the same PIDs as before
+- **What was actually seen in the browser**, not just what was deployed
+- **Anything that went wrong on the way**, including anything self-inflicted.
+  A deploy report that hides a needless rollback is worse than no report: the
+  next person repeats it.
+
+**Raise the SQL Server exposure every single time** (see below). It is not part
+of the deploy and it outranks the deploy.
 
 ---
 

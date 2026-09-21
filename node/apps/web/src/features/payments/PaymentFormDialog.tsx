@@ -1,11 +1,21 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Building2, Plus, Trash2, Wallet } from "lucide-react";
 import type { CreatePayment } from "@accountmanagement/contracts";
-import { Alert, Button, Modal, SelectField, TextField } from "../../components/ui";
+import {
+  Alert,
+  Button,
+  FormSection,
+  IconButton,
+  Modal,
+  SelectField,
+  SummaryStrip,
+  TextField,
+} from "../../components/ui";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { useCompanyOptions, useSupplierOptions } from "../purchase-orders/api";
 import { useCreatePayments } from "./api";
 import { todayInput } from "../../lib/dates";
+import { formatMoney } from "../../lib/format";
 
 /**
  * The Payment Actions repeater, from `/Report/ReportDetails` panel 3.
@@ -119,12 +129,20 @@ export function PaymentFormDialog({
     }
   };
 
+  /*
+    Summed from the typed text, not from the server: this dialog posts rows that
+    do not exist yet. A row left blank or half-typed counts as nothing rather
+    than breaking the total.
+  */
+  const runTotal = rows
+    .reduce((sum, row) => sum + (Number.parseFloat(row.amount) || 0), 0)
+    .toFixed(2);
+
   return (
     <Modal
       open={open}
       onClose={onClose}
       title={direction === "out" ? "Record payments to a supplier" : "Record receipts from a customer"}
-      description="Several rows are saved together, as one payment run"
       size="xl"
       footer={
         <div className="flex justify-end gap-2">
@@ -139,7 +157,11 @@ export function PaymentFormDialog({
     >
       {error && <Alert className="mb-3">{error}</Alert>}
 
-      <div className="mb-3 grid gap-3 sm:grid-cols-2">
+      <FormSection
+        icon={Building2}
+        title={direction === "out" ? "Who is being paid" : "Who is paying"}
+        columns={2}
+      >
         <SelectField
           label={direction === "out" ? "Supplier" : "Customer"}
           placeholder="Choose…"
@@ -161,9 +183,25 @@ export function PaymentFormDialog({
             label: company.name,
           }))}
         />
-      </div>
+      </FormSection>
 
-      <div className="overflow-x-auto rounded-lg ring-1 ring-slate-200">
+      <FormSection
+        icon={Wallet}
+        title="Payments"
+        description="Several rows are saved together, as one payment run"
+        columns={1}
+        action={
+          <Button
+            variant="outline"
+            size="sm"
+            icon={Plus}
+            onClick={() => setRows((current) => [...current, blankRow()])}
+          >
+            Add row
+          </Button>
+        }
+      >
+        <div className="relative overflow-x-auto rounded-lg ring-1 ring-slate-200">
         <table className="w-full min-w-[54rem] border-collapse text-sm">
           <thead className="bg-slate-50 text-xs text-slate-500">
             <tr>
@@ -264,11 +302,11 @@ export function PaymentFormDialog({
                 </td>
                 <td className="px-2 py-2">
                   {rows.length > 1 && (
-                    <Button
-                      variant="ghost"
+                    <IconButton
+                      label={`Remove row ${index + 1}`}
                       icon={Trash2}
-                      className="px-1.5 py-1 text-xs text-rose-600"
-                      aria-label={`Remove row ${index + 1}`}
+                      tone="destructive"
+                      size="sm"
                       onClick={() =>
                         setRows((current) => current.filter((one) => one.key !== row.key))
                       }
@@ -281,14 +319,14 @@ export function PaymentFormDialog({
         </table>
       </div>
 
-      <Button
-        variant="secondary"
-        icon={Plus}
-        className="mt-3"
-        onClick={() => setRows((current) => [...current, blankRow()])}
-      >
-        Add row
-      </Button>
+        {/* What the run comes to, in the strip the invoices use. */}
+        <SummaryStrip
+          items={[
+            { label: "Rows", value: String(rows.length) },
+            { label: "Total", value: formatMoney(runTotal), strong: true },
+          ]}
+        />
+      </FormSection>
     </Modal>
   );
 }

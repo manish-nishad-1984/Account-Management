@@ -32,11 +32,47 @@ export class ApiError extends Error {
 
 const BASE = "/api/v1";
 
+/** The Authorization header, or none — always an object, never a Content-Type. */
+const bearer = (token: string | null): Record<string, string> =>
+  token ? { Authorization: `Bearer ${token}` } : {};
+
 /** Set by AuthContext. Held in memory only — never localStorage. */
 let accessTokenProvider: () => string | null = () => null;
 export const setAccessTokenProvider = (provider: () => string | null) => {
   accessTokenProvider = provider;
 };
+
+/**
+ * Set by AuthContext: trades the refresh cookie for a new access token, or
+ * answers null when there is no session left to renew.
+ */
+let sessionRenewer: (() => Promise<string | null>) | null = null;
+export const setSessionRenewer = (renew: (() => Promise<string | null>) | null) => {
+  sessionRenewer = renew;
+};
+
+/**
+ * One request, and — when the access token has expired under it — the same
+ * request once more with a renewed one.
+ *
+ * THE BUG THIS FIXES (18 Sep 2026): the access token lives 15 minutes, and the
+ * app only ever renewed it on a page load. Someone working steadily was signed
+ * out mid-task every 15 minutes: the next save answered 401, and the screen
+ * said the session had ended while they were using it. Now a 401 renews the
+ * token and repeats the request, and the person never sees it.
+ *
+ * NOT FOR THE AUTH ROUTES THEMSELVES: a 401 from `/auth/login` is a wrong
+ * password and from `/auth/refresh` is a session that is over — renewing in
+ * answer to either would loop. Only ONE retry: a second 401 is a real refusal.
+ */
+async function authorisedFetch(path: string, build: (token: string | null) => RequestInit): Promise<Response> {
+  const response = await fetch(`${BASE}${path}`, build(accessTokenProvider()));
+  if (response.status !== 401 || path.startsWith("/auth/") || !sessionRenewer) {
+    return response;
+  }
+  const renewed = await sessionRenewer();
+  return renewed ? fetch(`${BASE}${path}`, build(renewed)) : response;
+}
 
 interface RequestOptions<T> {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -49,8 +85,8 @@ async function send(
   path: string,
   init: { method: string; body?: unknown; signal?: AbortSignal },
 ): Promise<Response> {
-  const token = accessTokenProvider();
-  const response = await fetch(`${BASE}${path}`, {
+  const payload = init.body ? JSON.stringify(init.body) : undefined;
+  const response = await authorisedFetch(path, (token) => ({
     method: init.method,
     headers: {
       ...(init.body ? { "Content-Type": "application/json" } : {}),
@@ -64,9 +100,9 @@ async function send(
      * attaches nothing to the other requests.
      */
     credentials: "same-origin",
-    body: init.body ? JSON.stringify(init.body) : undefined,
+    body: payload,
     signal: init.signal,
-  });
+  }));
 
   if (!response.ok) {
     throw await problemFrom(response);
@@ -120,13 +156,13 @@ export async function uploadRequest<T>(
     form.append("files", file);
   }
 
-  const token = accessTokenProvider();
-  const response = await fetch(`${BASE}${path}`, {
+  // The same FormData can be sent twice: it is read afresh for each request.
+  const response = await authorisedFetch(path, (token) => ({
     method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: bearer(token),
     body: form,
     signal: options.signal,
-  });
+  }));
 
   if (!response.ok) {
     throw await problemFrom(response);
@@ -149,10 +185,9 @@ export async function uploadRequest<T>(
  * which is what makes CSRF possible.
  */
 export async function downloadRequest(path: string): Promise<Blob> {
-  const token = accessTokenProvider();
-  const response = await fetch(`${BASE}${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  const response = await authorisedFetch(path, (token) => ({
+    headers: bearer(token),
+  }));
 
   if (!response.ok) {
     throw await problemFrom(response);

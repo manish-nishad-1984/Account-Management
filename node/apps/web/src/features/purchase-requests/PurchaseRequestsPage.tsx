@@ -6,9 +6,19 @@ import {
 } from "@accountmanagement/contracts";
 import { Check, Plus, Undo2 } from "lucide-react";
 import { DataGrid, RowActions } from "../../components/DataGrid";
-import { Badge, Button, ConfirmDialog, PageHeader, SelectField } from "../../components/ui";
+import {
+  Badge,
+  Button,
+  ConfirmDialog,
+  PageHeader,
+  SelectField,
+} from "../../components/ui";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
-import { useDeletePurchaseRequest, usePurchaseRequestList, useSetApproval } from "./api";
+import {
+  useDeletePurchaseRequest,
+  usePurchaseRequestList,
+  useSetApproval,
+} from "./api";
 import { PurchaseRequestFormDialog } from "./PurchaseRequestFormDialog";
 import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
@@ -26,7 +36,10 @@ const APPROVAL_OPTIONS = [
 
 export function PurchaseRequestsPage() {
   const canAdd = usePermission("purchase-request", "add");
-  const screen = useMasterScreen<PurchaseRequestRow>({ defaultSortBy: "prNo", defaultSortDir: "desc" });
+  const screen = useMasterScreen<PurchaseRequestRow>({
+    defaultSortBy: "prNo",
+    defaultSortDir: "desc",
+  });
 
   const [approval, setApproval] = useState<ApprovalFilter>("all");
 
@@ -48,7 +61,9 @@ export function PurchaseRequestsPage() {
         header: "Request",
         cell: ({ row }) => (
           <div>
-            <div className="tabular font-medium text-slate-900">{row.original.prNo}</div>
+            <div className="tabular font-medium text-slate-900">
+              {row.original.prNo}
+            </div>
             <div className="text-xs text-slate-500">
               {formatDate(row.original.documentDate) || "No date"}
             </div>
@@ -64,10 +79,14 @@ export function PurchaseRequestsPage() {
               {row.original.itemLabel || <Absent />}
             </div>
             {row.original.itemId === null && (
-              <div className="text-xs text-slate-500">Not in the item catalogue</div>
+              <div className="text-xs text-slate-500">
+                Not in the item catalogue
+              </div>
             )}
             {row.original.itemDescription && (
-              <div className="text-xs text-slate-500">{row.original.itemDescription}</div>
+              <div className="text-xs text-slate-500">
+                {row.original.itemDescription}
+              </div>
             )}
           </div>
         ),
@@ -78,14 +97,18 @@ export function PurchaseRequestsPage() {
         cell: ({ row }) => (
           <span className="tabular block text-right text-slate-800">
             {formatQuantity(row.original.quantity)}{" "}
-            <span className="text-xs text-slate-500">{row.original.unitName}</span>
+            <span className="text-xs text-slate-500">
+              {row.original.unitName}
+            </span>
           </span>
         ),
       },
       {
         id: "siteName",
         header: "Site",
-        cell: ({ row }) => <span className="text-slate-600">{row.original.siteName}</span>,
+        cell: ({ row }) => (
+          <span className="text-slate-600">{row.original.siteName}</span>
+        ),
       },
       {
         id: "isApproved",
@@ -113,7 +136,9 @@ export function PurchaseRequestsPage() {
         meta: { defaultHidden: true },
         cell: ({ row }) =>
           row.original.createdAt ? (
-            <span className="tabular text-slate-600">{formatDate(row.original.createdAt)}</span>
+            <span className="tabular text-slate-600">
+              {formatDate(row.original.createdAt)}
+            </span>
           ) : (
             <span className="text-slate-300">—</span>
           ),
@@ -161,6 +186,22 @@ export function PurchaseRequestsPage() {
       <PageHeader
         title="Purchase Requests"
         description="What a site has asked for, before it becomes a purchase order"
+      />
+
+      <DataGrid<PurchaseRequestRow>
+        // One row above the grid (client request, 18 Sep 2026): the screen's
+        // filters beside the search box and its actions at the right-hand end.
+        filters={
+          <SelectField
+            labelHidden
+            label="Status"
+            value={approval}
+            options={APPROVAL_OPTIONS}
+            onChange={(event) =>
+              setApproval(event.target.value as ApprovalFilter)
+            }
+          />
+        }
         actions={
           canAdd && (
             <Button icon={Plus} onClick={screen.openCreate}>
@@ -168,18 +209,6 @@ export function PurchaseRequestsPage() {
             </Button>
           )
         }
-      />
-
-      <div className="mb-4 max-w-xs">
-        <SelectField
-          label="Status"
-          value={approval}
-          options={APPROVAL_OPTIONS}
-          onChange={(event) => setApproval(event.target.value as ApprovalFilter)}
-        />
-      </div>
-
-      <DataGrid<PurchaseRequestRow>
         gridKey="purchase-requests"
         columns={columns}
         searchPlaceholder="Search request number or item"
@@ -213,11 +242,14 @@ export function PurchaseRequestsPage() {
           <>
             <p>
               Delete{" "}
-              <span className="font-medium text-slate-900">{screen.deleteTarget?.prNo}</span>?
+              <span className="font-medium text-slate-900">
+                {screen.deleteTarget?.prNo}
+              </span>
+              ?
             </p>
             <p className="mt-2 text-xs text-slate-500">
-              The request is marked deleted and hidden from every list. Its number
-              is not reissued.
+              The request is marked deleted and hidden from every list. Its
+              number is not reissued.
             </p>
           </>
         }

@@ -11,7 +11,7 @@ describe("supplier approval (real PostgreSQL)", () => {
 
   const make = async (name: string, isApproved: boolean) =>
     suppliers.create(
-      createSupplierSchema.parse({ name, area: "Ring Road", isApproved }),
+      { ...createSupplierSchema.parse({ name, area: "Ring Road" }), isApproved },
       ACTOR,
     );
 

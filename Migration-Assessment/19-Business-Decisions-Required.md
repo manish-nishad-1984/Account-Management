@@ -484,7 +484,7 @@ purchase requests today", that is a fine answer and we will set it up.
 
 ---
 
-## Question 12 — Should a record open OVER the list, or BESIDE it?
+## Question 12 — Should a record open OVER the list, BESIDE it, or INSTEAD of it?
 
 **This one you can answer in two minutes, on the real screens, today.** It is not
 about data. It is about how your staff work all day, and it gets more expensive
@@ -498,35 +498,66 @@ one record after another, without closing anything.
 record in a box on top of it. Better for concentrating on one record. Worse for
 looking through many, because the list is hidden while the box is open.
 
-**Both are now in the new system, and you can switch between them.** Top right of
-every screen there is a small control with two options — **Dialog** and **Side by
-side**. It remembers your choice, and it is per user, so trying it does not
-change anything for anyone else.
+**All three are now in the new system, and you can switch between them.** Top
+right of every screen there is a small control with three options — **Dialog**,
+**Side by side** and **Full page**. It remembers your choice, and it is per user,
+so trying it does not change anything for anyone else.
+
+> **Where to find the control.** Top right of every screen, on the live site at
+> **https://avfast.in** as well as the demonstration one. It was briefly taken
+> out of the released build — the redesign brief asked for developer controls off
+> the client-facing screen — and put back on 16 Sep 2026 at the client's request,
+> which is the more useful answer: the people working these screens are the ones
+> who can settle the question, and they cannot settle it with the control
+> removed.
+>
+> So the switch stays until this question is answered. Answer below and the other
+> two layouts are removed along with it — a permanent three-way switch is three
+> layouts to keep working. **Full page** is what a new user gets today.
+
+The third one is new since this question was first written, and it exists because
+of a complaint neither of the other two answers: on a **purchase order**, the
+line items have eight columns, and inside a box on top of the list they do not
+fit. You end up sliding the lines sideways to reach the rate and GST boxes while
+typing the very line they belong to. **Full page** gives the record the whole
+screen, and a back arrow at the top left returns you to the list — exactly where
+you left it, same search, same page, same position.
 
 ### Please try this
 
 1. Open **Suppliers** or **Items** — something with a lot of rows.
 2. Set the switch to **Side by side**. Click a row, then the next, then the next.
 3. Set it to **Dialog**. Open a record, close it, open the next one.
-4. Ask whoever spends the most time in these screens which one they want.
+4. Set it to **Full page**, and this time open a **purchase order** — the screen
+   with the most to fill in. Then press the back arrow.
+5. Ask whoever spends the most time in these screens which one they want. It may
+   honestly be a different answer for the lists than for the purchase orders;
+   tell us if it is.
 
 ### The honest trade-off
 
-Side by side takes about a third of the width, so the last column or two of a
-wide list gets pushed off and you scroll sideways to see them. Dialog keeps the
-full list width but hides it entirely while a record is open.
+There is no option that wins on everything. Each buys one thing by giving up
+another:
 
-There is no third option that avoids both. The question is which one costs your
-staff less.
+| | Room for the record | List stays visible | Getting to the next record |
+|---|---|---|---|
+| **Dialog** | Medium | No | Close, then click the next |
+| **Side by side** | Smallest — about a third of the width, so the last column or two of a wide list gets pushed off and you scroll sideways | Yes | Click straight down the list |
+| **Full page** | Largest — the whole screen | No | Back arrow, then click the next |
 
-**Why we are asking now.** Whichever you choose, the other is deleted. Today that
-is one shared change. Once ten more screens are built on the wrong one it is ten
-times the work, and by then people will have got used to it.
+Put simply: **Side by side** is the best for looking through many records and the
+worst for filling one in. **Full page** is the reverse. **Dialog** sits between
+them and is nobody's best at either.
 
-> **Decision:** ☐ Side by side, like the old system  ☐ Dialog  ☐ Keep both and let each user choose
+**Why we are asking now.** Whichever you choose, the others are deleted. Today
+that is one shared change. Once ten more screens are built on the wrong one it is
+ten times the work, and by then people will have got used to it.
+
+> **Decision:** ☐ Side by side, like the old system  ☐ Dialog  ☐ Full page
+> ☐ Keep more than one and let each user choose
 >
-> _(We would advise against the third. Two layouts is two of everything to test
-> and support, and it leaves the question permanently open.)_
+> _(We would advise against the last. Every layout kept is one more of everything
+> to test and support, and it leaves the question permanently open.)_
 
 ---
 

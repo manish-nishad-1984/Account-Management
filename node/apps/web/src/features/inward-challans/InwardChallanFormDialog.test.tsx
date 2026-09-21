@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InwardChallanFormDialog } from "./InwardChallanFormDialog";
-import { json, renderWithAuth, routeFetch } from "../../test/render";
+import { json, pickItem, renderWithAuth, routeFetch } from "../../test/render";
 
 const SITE = "22222222-2222-2222-2222-222222222222";
 const ITEM = "33333333-3333-3333-3333-333333333333";
@@ -28,7 +28,6 @@ const ITEMS = {
       unitId: 1,
       unitName: "Nos",
       pricePerUnit: "8.00",
-      isWithGst: false,
       gstPercent: null,
       gstAmount: null,
       hsnCode: null,
@@ -67,16 +66,20 @@ const callsTo = (fragment: string, method = "POST") =>
 /**
  * Fills the three required fields and submits.
  *
- * Waits for the OPTIONS, not for the selects. Both selects render immediately
- * with a placeholder and fill in when their query resolves, so selecting too
- * early fails with "value not found in options" — which reads like a broken
- * fixture and is really a race.
+ * THE ITEM IS PICKED BY NAME. It is a combobox since 16 Sep 2026, so there is no
+ * `<option value="{uuid}">` to select — and the name is what a user reads and
+ * types anyway. `pickItem` waits for the debounced search to land, which is what
+ * the old `findByRole("option")` was really for: both controls render at once
+ * with a placeholder and fill in when their query resolves, so acting too early
+ * failed with "value not found in options" — a race that read like a broken
+ * fixture.
+ *
+ * The UNIT is still a native select: units are a closed list of twelve.
  */
 async function fillAndSave() {
-  await screen.findByRole("option", { name: "FLY ASH BRICKS" });
   await screen.findByRole("option", { name: "Nos" });
 
-  await userEvent.selectOptions(screen.getByLabelText(/Item/), ITEM);
+  await pickItem(userEvent, /item/i, "FLY ASH BRICKS");
   await userEvent.type(screen.getByLabelText(/Quantity/), "4000");
   await userEvent.selectOptions(screen.getByLabelText(/Unit/), "1");
   await userEvent.click(screen.getByRole("button", { name: "Record challan" }));

@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import clsx from "clsx";
+import { Boxes, FileText, MapPin, Receipt, Truck } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
@@ -10,20 +12,23 @@ import {
 import { invoiceTotal } from "@accountmanagement/domain";
 import {
   Alert,
+  Button,
   FormDialog,
   FormSection,
   SelectField,
   TextAreaField,
   TextField,
+  SummaryStrip,
 } from "../../components/ui";
 import { applyServerErrors, unshownValidationMessage } from "../../lib/crud";
 import { text } from "../../lib/form-values";
 import { formatMoney } from "../../lib/format";
 import { useLatestPriceFill } from "../invoices/useLatestPriceFill";
 import { InvoiceLineGrid, previewNumber } from "../invoices/InvoiceLineGrid";
+import { GstBreakdown } from "../invoices/GstBreakdown";
 import { useAllUnits } from "../items/api";
-import { useItemOptions } from "../purchase-requests/api";
-import { useCompanyOptions, useSupplierOptions } from "../purchase-orders/api";
+
+import { useCompanyOptions, usePurchaseOrder, useSupplierOptions } from "../purchase-orders/api";
 import {
   useCreatePurchaseInvoice,
   usePurchaseInvoice,
@@ -32,6 +37,7 @@ import {
 } from "./api";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { todayInput } from "../../lib/dates";
+import { SavedDocumentPdfButton } from "../document-templates/DocumentActions";
 import { SiteAddressFields } from "../sites/SiteAddressFields";
 import { SiteContactSelect } from "../sites/SiteContactSelect";
 
@@ -141,7 +147,6 @@ export function PurchaseInvoiceFormDialog({
 
   const scope = useSiteScope();
   const units = useAllUnits();
-  const itemOptions = useItemOptions("");
   const suppliers = useSupplierOptions();
   const companies = useCompanyOptions();
   const create = useCreatePurchaseInvoice();
@@ -157,13 +162,13 @@ export function PurchaseInvoiceFormDialog({
     getValues,
     watch,
     control,
-    formState: { errors, isSubmitted },
+    formState: { errors, isSubmitted, isDirty },
   } = useForm<FormValues, unknown, Submitted>({
     resolver: zodResolver(createPurchaseInvoiceSchema),
     defaultValues: EMPTY,
   });
 
-  const { fields, insert, remove } = useFieldArray({ control, name: "items" });
+  const { fields, insert, remove, replace } = useFieldArray({ control, name: "items" });
 
   useEffect(() => {
     if (!open) return;
@@ -235,10 +240,7 @@ export function PurchaseInvoiceFormDialog({
     label: row.name,
   }));
 
-  const items = itemOptions.data?.rows ?? [];
-  const itemTotal = itemOptions.data?.total ?? 0;
-  const itemsTruncated = itemTotal > items.length;
-  const itemChoices = items.map((item) => ({ value: item.id, label: item.name }));
+
 
   // Choosing an item fills its price, unit and GST from the latest purchase invoice
   // for it, or from the item master (client request, 14 Sep 2026).
@@ -273,6 +275,87 @@ export function PurchaseInvoiceFormDialog({
     label: `${row.poNo} · ${formatMoney(row.totalAmount)}`,
   }));
 
+  /**
+   * CHOOSING A PURCHASE ORDER BRINGS ITS PRODUCTS IN (client, 17 Sep 2026).
+   *
+   * An invoice raised against an order almost always bills that order's lines,
+   * and retyping them is both slow and the place a quantity gets mistyped
+   * against what was actually ordered.
+   *
+   * The ORDER'S OWN LINES ARE USED, fetched from its detail — the dropdown is
+   * built from list rows, which carry a total but no products.
+   *
+   * WHAT IT WILL NOT DO IS OVERWRITE TYPED WORK. Someone who has already
+   * entered lines and then links the order would otherwise lose them with no
+   * warning and no undo, which is the one failure worth designing around here.
+   * So the lines are replaced only when they are all still blank, or when they
+   * came from an order chosen a moment ago; anything else offers a button
+   * instead and leaves the decision to the person.
+   *
+   * NO DISCOUNT COMES ACROSS because a purchase order has no discount column —
+   * see `purchase-order-total.ts`. The invoice's own Disc/unit stays blank and
+   * editable.
+   */
+  const chosenOrderId = String(watch("purchaseOrderId") ?? "");
+  const chosenOrder = usePurchaseOrder(open && chosenOrderId ? chosenOrderId : null);
+  /** The order whose lines are in the grid, so re-picking it does not re-fill. */
+  const linesFrom = useRef<string | null>(null);
+
+  const orderLines = (chosenOrder.data?.items ?? []).map((line) => ({
+    itemId: text(line.itemId),
+    itemName: line.itemId === null ? line.itemLabel : "",
+    itemDescription: text(line.itemDescription),
+    unitId: line.unitId,
+    quantity: line.quantity,
+    unitPrice: line.unitPrice,
+    discountPerUnit: "",
+    gstPercent: text(line.gstPercent),
+  }));
+
+  const linesAreBlank = () =>
+    (getValues("items") ?? []).every(
+      (line) =>
+        !String(line?.itemId ?? "").trim() &&
+        !String(line?.itemName ?? "").trim() &&
+        !String(line?.quantity ?? "").trim() &&
+        !String(line?.unitPrice ?? "").trim(),
+    );
+
+  const loadOrderLines = () => {
+    if (orderLines.length === 0) return;
+    linesFrom.current = chosenOrderId;
+    replace(orderLines);
+  };
+
+  /** True when the order's products are ready but would overwrite typed lines. */
+  const [askToLoad, setAskToLoad] = useState(false);
+
+  useEffect(() => {
+    // Editing a saved invoice must never have its lines rewritten by the order
+    // it references — only a choice made in this form fills anything.
+    if (!open || chosenOrder.data === undefined) return;
+    if (chosenOrder.data.id !== chosenOrderId) return;
+    if (linesFrom.current === chosenOrderId) return;
+
+    if (linesAreBlank() || linesFrom.current !== null) {
+      setAskToLoad(false);
+      loadOrderLines();
+    } else {
+      setAskToLoad(true);
+    }
+    // `loadOrderLines` and `linesAreBlank` read the form, which is not reactive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, chosenOrderId, chosenOrder.data]);
+
+  // Clearing the order leaves the lines alone — they may have been edited since
+  // — but the grid is no longer "from" an order, so typed work is protected.
+  useEffect(() => {
+    if (!chosenOrderId) {
+      linesFrom.current = null;
+      setAskToLoad(false);
+    }
+  }, [chosenOrderId]);
+
   return (
     <FormDialog
       open={open}
@@ -286,6 +369,9 @@ export function PurchaseInvoiceFormDialog({
       }
       formError={formError}
       pending={pending}
+      footerStart={
+        invoiceId !== null ? <SavedDocumentPdfButton documentType="purchase-invoice" id={invoiceId} dirty={isDirty} /> : undefined
+      }
       submitLabel={isEdit ? "Save changes" : "Add purchase invoice"}
       // Wider than the master dialogs, because the body is a data-entry grid.
       size="xl"
@@ -294,7 +380,7 @@ export function PurchaseInvoiceFormDialog({
         <p className="py-8 text-center text-sm text-slate-500">Loading invoice…</p>
       ) : (
         <>
-          <FormSection title="Invoice" columns={2}>
+          <FormSection icon={Receipt} title="Invoice details" columns={2}>
             {/*
               REQUIRED, and it is the SUPPLIER'S number — free text in whatever
               format they use. Deliberately not checked for uniqueness: two
@@ -356,31 +442,88 @@ export function PurchaseInvoiceFormDialog({
               error={errors.invoiceType?.message}
               {...register("invoiceType")}
             />
-          </FormSection>
 
-          <FormSection title="Against a purchase order" columns={1}>
             {/*
-              `SupplierInvoice.Poid` is an nvarchar holding the order's NUMBER as
-              text, matched by string equality — assessment 09 §7.5. Renaming or
-              reissuing an order silently detaches its invoices today. Here it is
-              a real foreign key, chosen from a list.
+              THE ORDER BELONGS IN THIS CARD, not in one of its own (client
+              request, 21 Sep 2026, from a mockup).
+
+              It is one select and, occasionally, one offer — about a sixth of
+              the content of a section, and as a card of its own it took a
+              heading, an icon tile, a border and 16px of padding to say it.
+              Inline in the tinted well it sits in the second row beside Site and
+              Type, which is where the mockup puts it and where it reads as part
+              of the invoice's own details rather than as a separate subject.
+
+              `sm:col-span-2` is what makes it the right-hand half of that row:
+              the card is four columns wide at this window size, so the row is
+              Site, Type, and this across the remaining two.
             */}
-            <SelectField
-              label="Purchase order"
-              placeholder={
-                !chosenSupplierId
-                  ? "Choose a supplier first"
-                  : orders.isLoading
-                    ? "Loading orders…"
-                    : orderChoices.length === 0
-                      ? "This supplier has no orders"
-                      : "Not against an order"
-              }
-              options={orderChoices}
-              hint="Optional. Only orders raised on the chosen supplier are listed."
-              error={errors.purchaseOrderId?.message}
-              {...register("purchaseOrderId")}
-            />
+            <div className="rounded-lg border border-brand-100 bg-brand-50/50 p-3 sm:col-span-2">
+              <div className="flex items-center gap-2">
+                <FileText aria-hidden className="size-4 shrink-0 text-brand-600" />
+                <h4 className="text-xs font-semibold leading-4 text-slate-800">
+                  Against a purchase order
+                </h4>
+              </div>
+
+              <div
+                className={clsx(
+                  "mt-2 grid gap-3",
+                  // Side by side only once the offer is actually there, and only
+                  // where there is room for both — otherwise the select would
+                  // sit in half a well for no reason.
+                  askToLoad && orderLines.length > 0 && "xl:grid-cols-2",
+                )}
+              >
+                {/*
+                  `SupplierInvoice.Poid` is an nvarchar holding the order's
+                  NUMBER as text, matched by string equality — assessment 09
+                  §7.5. Renaming or reissuing an order silently detaches its
+                  invoices today. Here it is a real foreign key, chosen from a
+                  list.
+                */}
+                <SelectField
+                  label="Purchase order"
+                  placeholder={
+                    !chosenSupplierId
+                      ? "Choose a supplier first"
+                      : orders.isLoading
+                        ? "Loading orders…"
+                        : orderChoices.length === 0
+                          ? "This supplier has no orders"
+                          : "Not against an order"
+                  }
+                  options={orderChoices}
+                  hint="Optional. Only orders raised on the chosen supplier are listed. Choosing one brings its products in."
+                  error={errors.purchaseOrderId?.message}
+                  {...register("purchaseOrderId")}
+                />
+                {/*
+                  Only when the grid already holds typed lines. Replacing them is
+                  offered rather than done, because there is no undo for it.
+                */}
+                {askToLoad && orderLines.length > 0 && (
+                  <div className="rounded-md border border-brand-200 bg-white px-2.5 py-2">
+                    <p className="text-xs leading-4 text-slate-700">
+                      This order has {orderLines.length}{" "}
+                      {orderLines.length === 1 ? "product" : "products"}. Loading them replaces
+                      the lines you have entered.
+                    </p>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => {
+                        setAskToLoad(false);
+                        loadOrderLines();
+                      }}
+                    >
+                      Load the order&rsquo;s products
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
           </FormSection>
 
           {/*
@@ -388,12 +531,11 @@ export function PurchaseInvoiceFormDialog({
             without it the grid is squeezed into half the dialog and the
             Add-product button sits beside it instead of below.
           */}
-          <FormSection title="Products" columns={1}>
+          <FormSection icon={Boxes} title="Products" columns={1}>
             <InvoiceLineGrid
               fields={fields}
               lines={lines}
               totals={totals}
-              itemChoices={itemChoices}
               unitOptions={unitOptions}
               register={register as unknown as (name: string) => ReturnType<typeof register>}
               lineError={(index, field) => errors.items?.[index]?.[field]?.message}
@@ -409,55 +551,84 @@ export function PurchaseInvoiceFormDialog({
                 latestPrice.onItemChosen(index, itemId);
               }}
               priceHint={(index) => latestPrice.hintFor(lines?.[index]?.itemId)}
-              footerNote={
-                itemsTruncated && (
-                  <Alert tone="info">
-                    Showing the first {items.length} of {itemTotal} items. If the one you need is
-                    not listed, type its name beside the dropdown — an invoice line can name a
-                    product that is not in the catalogue.
-                  </Alert>
-                )
-              }
             />
-          </FormSection>
-
-          <FormSection title="Charges" columns={2}>
-            <TextField
-              label="TDS"
-              inputMode="decimal"
-              hint="Tax deducted at source. Subtracted from the total."
-              error={errors.tds?.message}
-              {...register("tds")}
-            />
-            <TextField
-              label="Adjustment"
-              inputMode="decimal"
-              hint="Added to the total. Use a minus to nudge it down."
-              error={errors.roundOff?.message}
-              {...register("roundOff")}
-            />
-          </FormSection>
-
-          <FormSection title="Totals" columns={2}>
-            <Summary label="Sub total" value={formatMoney(totals.subtotal)} />
-            <Summary label="Total GST" value={formatMoney(totals.totalGst)} />
-            <Summary label="Discount" value={formatMoney(totals.totalDiscount)} />
-            <Summary label="TDS" value={`− ${formatMoney(totals.tds)}`} />
-            <Summary label="Adjustment" value={formatMoney(totals.roundOff)} />
-            <Summary label="Total amount" value={formatMoney(totals.grandTotal)} strong />
-
             {/*
-              Said on the screen, because it is a real rule that surprises people
-              and because the alternative is someone reporting the paise as a bug.
+              THE CHARGES AND THE TOTAL BELONG WITH THE LINES, not in two
+              sections of their own below (client request, 21 Sep 2026). TDS and
+              the adjustment are the two figures that are typed rather than
+              computed, so they sit to the left of the strip they change.
             */}
-            <Alert tone="info" className="sm:col-span-2">
-              The total is rounded to a whole rupee, with exactly 50 paise rounding down — the rule
-              every invoice this business has issued was calculated with. The subtotal, GST and
-              discount above are exact.
-            </Alert>
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:items-start">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <TextField
+                  label="TDS"
+                  inputMode="decimal"
+                  hint="Tax deducted at source. Subtracted from the total."
+                  error={errors.tds?.message}
+                  {...register("tds")}
+                />
+                <TextField
+                  label="Adjustment"
+                  inputMode="decimal"
+                  hint="Added to the total. Use a minus to nudge it down."
+                  error={errors.roundOff?.message}
+                  {...register("roundOff")}
+                />
+              </div>
+
+              {/*
+                THE WHOLE RECKONING IN ONE COLUMN: the strip, the GST it is made
+                of, and the rounding rule that decides its last rupee. They were
+                three full-width blocks stacked down the card, which is three
+                times the height for one answer and put the tax split further
+                from the total than the total is from the lines.
+              */}
+              <div className="grid gap-2">
+                <SummaryStrip
+                  items={[
+                    { label: "Sub total", value: formatMoney(totals.subtotal) },
+                    { label: "Discount", value: formatMoney(totals.totalDiscount) },
+                    { label: "Total GST", value: formatMoney(totals.totalGst) },
+                    { label: "TDS", value: `− ${formatMoney(totals.tds)}` },
+                    { label: "Adjustment", value: formatMoney(totals.roundOff) },
+                    { label: "Total amount", value: formatMoney(totals.grandTotal), strong: true },
+                  ]}
+                />
+
+                <GstBreakdown
+                  lines={(lines ?? []).map((line, index) => ({
+                    gstPercent: String(line?.gstPercent ?? "") || null,
+                    netAmount: totals.lines[index]?.netAmount ?? "0",
+                    gstAmount: totals.lines[index]?.gstAmount ?? "0",
+                  }))}
+                />
+
+                {/*
+                  Said on the screen, because it is a real rule that surprises
+                  people and because the alternative is someone reporting the
+                  paise as a bug. A footnote rather than the blue banner it was:
+                  it explains the figure above it, and a banner claims the
+                  attention of something that has gone wrong.
+                */}
+                <p className="text-xs leading-4 text-slate-500">
+                  The total is rounded to a whole rupee, with exactly 50 paise rounding down — the
+                  rule every invoice this business has issued was calculated with. The subtotal, GST
+                  and discount above are exact.
+                </p>
+              </div>
+            </div>
           </FormSection>
 
-          <FormSection title="Delivery and contacts" columns={2}>
+          {/*
+            THE LAST TWO CARDS SHARE A ROW, at 42/58 rather than in half (client
+            request, 21 Sep 2026, from a mockup). Delivery is six short boxes —
+            a challan number, a vehicle number — and addresses are long lines
+            that wrap, so an even split leaves air on the left and wrapping on
+            the right. Under 1280px they stack, where half a line is too narrow
+            for a labelled field.
+          */}
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,42fr)_minmax(0,58fr)]">
+          <FormSection icon={Truck} title="Delivery and contacts" columns={3}>
             <TextField
               label="Challan number"
               error={errors.challanNo?.message}
@@ -491,7 +662,7 @@ export function PurchaseInvoiceFormDialog({
             />
           </FormSection>
 
-          <FormSection title="Location, addresses and notes" columns={1}>
+          <FormSection icon={MapPin} title="Location, addresses and notes" columns={1}>
             {/*
               Billing is the site's own address; shipping is ONE of the site's
               addresses, chosen — the rules of 15 Sep 2026. Either is copied onto
@@ -519,6 +690,7 @@ export function PurchaseInvoiceFormDialog({
               {...register("description")}
             />
           </FormSection>
+          </div>
 
           {!isEdit && (
             <Alert tone="info">
@@ -532,15 +704,3 @@ export function PurchaseInvoiceFormDialog({
   );
 }
 
-function Summary({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
-      <div
-        className={`tabular mt-0.5 ${strong ? "text-lg font-semibold text-slate-900" : "text-slate-800"}`}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}

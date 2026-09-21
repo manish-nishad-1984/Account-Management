@@ -63,7 +63,7 @@ describe("ItemsRepository and UnitsRepository (real PostgreSQL)", () => {
       // disagree and the business has not said which is right. The server must
       // therefore store what it is given rather than arbitrate.
       const created = await items.create(
-        input({ isWithGst: true, gstPercent: "18.00", gstAmount: "71.10" }),
+        input({ gstPercent: "18.00", gstAmount: "71.10" }),
         ACTOR,
       );
 
@@ -194,29 +194,32 @@ describe("ItemsRepository and UnitsRepository (real PostgreSQL)", () => {
   });
 
   describe("the contract's GST rules", () => {
-    it("refuses a GST-inclusive item with no percentage", () => {
+    /**
+     * THE "GST-INCLUSIVE" FLAG IS GONE (business decision, 17 Sep 2026), and so
+     * are the two rules that kept it agreeing with the figures beside it. These
+     * two tests replace the ones that asserted those rules: both shapes they
+     * used to refuse must now be accepted, because the percentage alone says
+     * whether an item carries GST.
+     */
+    it("accepts an item with no GST figures at all", () => {
       expect(() =>
         createItemSchema.parse({
           name: "X",
           unitId: 1,
           pricePerUnit: "100.00",
-          isWithGst: true,
         }),
-      ).toThrow();
+      ).not.toThrow();
     });
 
-    it("refuses GST figures left behind on a non-GST item", () => {
-      // The dangerous direction: anything reading the columns rather than the
-      // flag would still pick these up.
-      expect(() =>
-        createItemSchema.parse({
-          name: "X",
-          unitId: 1,
-          pricePerUnit: "100.00",
-          isWithGst: false,
-          gstPercent: "18.00",
-        }),
-      ).toThrow();
+    it("accepts a GST percentage with no flag to go with it", () => {
+      const parsed = createItemSchema.parse({
+        name: "X",
+        unitId: 1,
+        pricePerUnit: "100.00",
+        gstPercent: "18.00",
+      });
+      expect(parsed.gstPercent).toBe("18.00");
+      expect(parsed).not.toHaveProperty("isWithGst");
     });
 
     it("refuses a price with more than two decimal places", () => {
@@ -231,7 +234,6 @@ describe("ItemsRepository and UnitsRepository (real PostgreSQL)", () => {
           name: "X",
           unitId: 1,
           pricePerUnit: "100.00",
-          isWithGst: true,
           gstPercent: "180.00",
         }),
       ).toThrow();

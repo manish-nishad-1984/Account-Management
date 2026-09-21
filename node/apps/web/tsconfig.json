@@ -19,7 +19,8 @@
     "noEmit": true,
     "types": [
       "vitest/globals",
-      "@testing-library/jest-dom"
+      "@testing-library/jest-dom",
+      "vite/client"
     ],
     "baseUrl": ".",
     "paths": {

@@ -157,7 +157,7 @@ export class SuppliersRepository extends BaseRepository {
     return toDetail(row);
   }
 
-  async create(input: CreateSupplier, actorId: string): Promise<SupplierDetail> {
+  async create(input: CreateSupplier & { isApproved?: boolean }, actorId: string): Promise<SupplierDetail> {
     const [row] = await writing(() =>
       this.db
         .insert(suppliers)
@@ -167,7 +167,7 @@ export class SuppliersRepository extends BaseRepository {
     return toDetail(row!);
   }
 
-  async update(id: string, input: UpdateSupplier, actorId: string): Promise<SupplierDetail> {
+  async update(id: string, input: UpdateSupplier & { isApproved?: boolean }, actorId: string): Promise<SupplierDetail> {
     const [row] = await writing(() =>
       this.db
         .update(suppliers)

@@ -4,16 +4,25 @@ import {
   INWARD_CHALLAN_SORT_FIELDS,
   type InwardChallanRow,
 } from "@accountmanagement/contracts";
-import { Check, Paperclip, Plus, RotateCcw, Undo2 } from "lucide-react";
+import { Check, Paperclip, Plus, RotateCcw, Search, Undo2 } from "lucide-react";
 import { DataGrid, RowActions } from "../../components/DataGrid";
-import { Badge, Button, ConfirmDialog, PageHeader, SelectField, TextField } from "../../components/ui";
+import {
+  Badge,
+  Button,
+  ConfirmDialog,
+  FILTER_ACTIONS,
+  FILTER_ROW,
+  PageHeader,
+  SelectField,
+  TextField,
+} from "../../components/ui";
 import {
   useDeleteInwardChallan,
   useInwardChallanList,
   useSetChallanApproval,
   useSupplierOptions,
 } from "./api";
-import { useItemOptions } from "../purchase-requests/api";
+import { ItemCombobox } from "../items/ItemCombobox";
 import { InwardChallanFormDialog } from "./InwardChallanFormDialog";
 import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
@@ -57,7 +66,6 @@ export function InwardChallansPage() {
 
   const scope = useSiteScope();
   const suppliers = useSupplierOptions();
-  const items = useItemOptions("");
 
   const query = useInwardChallanList(screen.listParams, {
     supplierId: applied.supplierId || undefined,
@@ -222,7 +230,6 @@ export function InwardChallansPage() {
   );
 
   const supplierOptions = (suppliers.data?.rows ?? []).map((s) => ({ value: s.id, label: s.name }));
-  const itemOptions = (items.data?.rows ?? []).map((i) => ({ value: i.id, label: i.name }));
 
   const apply = () => {
     setApplied(draft);
@@ -237,17 +244,10 @@ export function InwardChallansPage() {
       <PageHeader
         title="Inward Challans"
         description="Goods arriving from a supplier, against their invoice"
-        actions={
-          canAdd && (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              New challan
-            </Button>
-          )
-        }
       />
 
       <form
-        className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5"
+        className={`mb-4 ${FILTER_ROW}`}
         onSubmit={(event) => {
           event.preventDefault();
           apply();
@@ -260,12 +260,16 @@ export function InwardChallansPage() {
           options={supplierOptions}
           onChange={(e) => setDraft({ ...draft, supplierId: e.target.value })}
         />
-        <SelectField
+        {/*
+          The one filter the legacy screen got most wrong. Its Item box LOOKED
+          like free text and was parsed with `Guid.Parse`, so a typed name
+          matched nothing at all. The port made it a dropdown, which could then
+          not offer 558 of the 758 items. Typing now searches and picks.
+        */}
+        <ItemCombobox
           label="Item"
-          value={draft.itemId}
-          placeholder={items.isLoading ? "Loading…" : "Any item"}
-          options={itemOptions}
-          onChange={(e) => setDraft({ ...draft, itemId: e.target.value })}
+          itemId={draft.itemId}
+          onPick={(picked) => setDraft({ ...draft, itemId: picked })}
         />
         <TextField
           label="From"
@@ -286,8 +290,10 @@ export function InwardChallansPage() {
           onChange={(e) => setDraft({ ...draft, approval: e.target.value as ApprovalFilter })}
         />
 
-        <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-5">
-          <Button type="submit">Search</Button>
+        <div className={FILTER_ACTIONS}>
+          <Button type="submit" icon={Search}>
+            Search
+          </Button>
           <Button
             type="button"
             variant="secondary"
@@ -304,6 +310,14 @@ export function InwardChallansPage() {
       </form>
 
       <DataGrid<InwardChallanRow>
+        // On the grid's toolbar row, not a row of its own above the filters (18 Sep 2026).
+        actions={
+          canAdd && (
+            <Button icon={Plus} onClick={screen.openCreate}>
+              New challan
+            </Button>
+          )
+        }
         gridKey="inward-challans"
         columns={columns}
         searchPlaceholder="Search item, supplier, invoice or vehicle"

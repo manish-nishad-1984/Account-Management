@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   DOCUMENT_TYPES,
   TEMPLATE_PRESETS,
+  createDocumentTemplateSchema,
+  documentFieldLabel,
   presetLayout,
   printTitle,
   templateLayoutSchema,
@@ -106,5 +108,48 @@ describe("printTitle", () => {
     ["purchase-invoice", "Credit Note", "CREDIT NOTE"],
   ] as const)("%s of type %s is titled %s", (documentType, invoiceType, title) => {
     expect(printTitle(documentType, invoiceType)).toBe(title);
+  });
+});
+
+/**
+ * A PURCHASE ORDER prints too (18 Sep 2026). Its starters follow the legacy order
+ * print: terms where an invoice has bank details, and no discount column.
+ */
+describe("purchase order layouts", () => {
+  const blocksOf = (layout: ReturnType<typeof presetLayout>) =>
+    layout.rows.flatMap((row) => row.columns.flatMap((column) => column.blocks));
+
+  it.each(TEMPLATE_PRESETS)("the %s starter prints the order's terms and no bank details", (preset) => {
+    const blocks = blocksOf(presetLayout(preset, "purchase-order"));
+    expect(blocks.some((block) => block.type === "terms")).toBe(true);
+    expect(blocks.some((block) => block.type === "bank-details")).toBe(false);
+  });
+
+  it.each(TEMPLATE_PRESETS)("the %s starter has no discount column on an order", (preset) => {
+    const tables = blocksOf(presetLayout(preset, "purchase-order")).filter((block) => block.type === "items-table");
+    for (const table of tables) {
+      if (table.type === "items-table") expect(table.columns).not.toContain("discount");
+    }
+  });
+
+  /** Nothing an invoice printed before this change may move. */
+  it.each(TEMPLATE_PRESETS)("the %s starter for an invoice is unchanged: bank details, no terms", (preset) => {
+    const blocks = blocksOf(presetLayout(preset, "sales-invoice"));
+    expect(blocks.some((block) => block.type === "terms")).toBe(false);
+    if (preset !== "minimal") expect(blocks.some((block) => block.type === "bank-details")).toBe(true);
+  });
+
+  it("titles the order, and calls its number PO No", () => {
+    expect(printTitle("purchase-order", "Purchase Order")).toBe("PURCHASE ORDER");
+    expect(documentFieldLabel("number", "purchase-order")).toBe("PO No");
+    expect(documentFieldLabel("number", "sales-invoice")).toBe("Invoice No");
+  });
+
+  it("offers orders a template of their own", () => {
+    expect(createDocumentTemplateSchema.parse({
+      documentType: "purchase-order",
+      name: "Order",
+      layout: presetLayout("classic", "purchase-order"),
+    }).documentType).toBe("purchase-order");
   });
 });

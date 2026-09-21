@@ -36,7 +36,7 @@ export function SiteScopePicker() {
    * tapping the visible edge of the pill did nothing at all.
    */
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 ring-1 ring-inset ring-slate-200">
+    <div className="flex h-9 items-center gap-2 rounded-lg bg-slate-50 px-2.5 ring-1 ring-inset ring-slate-200">
       <Building2 aria-hidden className="size-3.5 shrink-0 text-slate-400" />
       <label htmlFor="site-scope" className="sr-only">
         Site
@@ -52,7 +52,7 @@ export function SiteScopePicker() {
          * it. Truncated site names are readable enough here because the full
          * list is one tap away, and the option list is not truncated.
          */
-        className="max-w-[7.5rem] truncate border-0 bg-transparent py-2 pl-0 pr-6 text-xs font-semibold text-slate-800 focus:ring-0 sm:max-w-[13rem]"
+        className="h-full max-w-[7.5rem] truncate border-0 bg-transparent py-0 pl-0 pr-6 text-xs font-semibold text-slate-800 focus:ring-0 sm:max-w-[13rem]"
         title="The site every site-scoped screen is filtered to"
         disabled={!isReady}
         value={siteId ?? ALL}

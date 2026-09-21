@@ -20,9 +20,18 @@ describe("item approval (real PostgreSQL)", () => {
   let items: ItemsRepository;
   let unitId: number;
 
+  /**
+   * `isApproved` rides ALONGSIDE the parsed body, never through it.
+   *
+   * The schema has no such field any more — approval is decided from the access
+   * token in `common/approval.ts`, so a caller cannot state it. Passing it into
+   * `parse` would be silently stripped and every row here would come back
+   * unapproved, which is exactly what this helper used to do once the field was
+   * removed. This mirrors what the controller does.
+   */
   const make = async (name: string, isApproved: boolean) =>
     items.create(
-      createItemSchema.parse({ name, unitId, pricePerUnit: "10.00", isApproved }),
+      { ...createItemSchema.parse({ name, unitId, pricePerUnit: "10.00" }), isApproved },
       ACTOR,
     );
 

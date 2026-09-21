@@ -1,9 +1,22 @@
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ITEM_SORT_FIELDS, type ItemRow } from "@accountmanagement/contracts";
-import { AlertTriangle, Clock, Download, Plus, Ruler, Upload } from "lucide-react";
+import {
+  AlertTriangle,
+  Clock,
+  Download,
+  Plus,
+  Ruler,
+  Upload,
+} from "lucide-react";
 import { DataGrid, RowActions } from "../../components/DataGrid";
-import { Alert, Badge, Button, ConfirmDialog, PageHeader } from "../../components/ui";
+import {
+  Alert,
+  Badge,
+  Button,
+  ConfirmDialog,
+  PageHeader,
+} from "../../components/ui";
 import { downloadItemSheet, useDeleteItem, useItemList } from "./api";
 import { ApiError } from "../../lib/api-client";
 import { ItemFormDialog } from "./ItemFormDialog";
@@ -13,8 +26,6 @@ import { UnitsDialog } from "./UnitsDialog";
 import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
 import { formatMoney, formatPercent } from "../../lib/format";
-
-const Absent = () => <span className="text-slate-300">—</span>;
 
 export function ItemsPage() {
   const canAdd = usePermission("item", "add");
@@ -53,7 +64,9 @@ export function ItemsPage() {
     try {
       await downloadItemSheet(screen.listParams.search);
     } catch (error) {
-      setDownloadError(error instanceof ApiError ? error.message : "The download failed.");
+      setDownloadError(
+        error instanceof ApiError ? error.message : "The download failed.",
+      );
     } finally {
       setDownloading(false);
     }
@@ -66,9 +79,13 @@ export function ItemsPage() {
         header: "Item",
         cell: ({ row }) => (
           <div>
-            <div className="font-medium text-slate-900">{row.original.name}</div>
+            <div className="font-medium text-slate-900">
+              {row.original.name}
+            </div>
             <div className="tabular text-xs text-slate-500">
-              {row.original.hsnCode ? `HSN ${row.original.hsnCode}` : "No HSN code"}
+              {row.original.hsnCode
+                ? `HSN ${row.original.hsnCode}`
+                : "No HSN code"}
             </div>
           </div>
         ),
@@ -76,7 +93,9 @@ export function ItemsPage() {
       {
         id: "unitName",
         header: "Unit",
-        cell: ({ row }) => <span className="text-slate-600">{row.original.unitName}</span>,
+        cell: ({ row }) => (
+          <span className="text-slate-600">{row.original.unitName}</span>
+        ),
       },
       {
         id: "pricePerUnit",
@@ -90,11 +109,16 @@ export function ItemsPage() {
       {
         id: "gst",
         header: "GST",
+        /*
+          The percentage IS the answer to "does this item carry GST" now that the
+          GST-inclusive flag is gone, so a row with no percentage says "No GST"
+          rather than branching on a separate boolean that could disagree with it.
+        */
         cell: ({ row }) =>
-          row.original.isWithGst ? (
+          row.original.gstPercent ? (
             <div className="text-right">
               <div className="tabular text-slate-700">
-                {row.original.gstPercent ? formatPercent(row.original.gstPercent) : <Absent />}
+                {formatPercent(row.original.gstPercent)}
               </div>
               {row.original.gstAmount && (
                 <div className="tabular text-xs text-slate-500">
@@ -103,7 +127,9 @@ export function ItemsPage() {
               )}
             </div>
           ) : (
-            <span className="block text-right text-xs text-slate-500">Not GST</span>
+            <span className="block text-right text-xs text-slate-500">
+              No GST
+            </span>
           ),
       },
       {
@@ -159,6 +185,17 @@ export function ItemsPage() {
       <PageHeader
         title="Items"
         description="Materials and services that appear on purchase orders"
+      />
+
+      {downloadError && (
+        <Alert icon={AlertTriangle} className="mb-4">
+          {downloadError}
+        </Alert>
+      )}
+
+      <DataGrid<ItemRow>
+        // One row above the grid (client request, 18 Sep 2026): the screen's
+        // filters beside the search box and its actions at the right-hand end.
         actions={
           <>
             {/*
@@ -167,7 +204,11 @@ export function ItemsPage() {
               units except while defining an item.
             */}
             {canView && (
-              <Button variant="secondary" icon={Ruler} onClick={() => setUnitsOpen(true)}>
+              <Button
+                variant="secondary"
+                icon={Ruler}
+                onClick={() => setUnitsOpen(true)}
+              >
                 Units
               </Button>
             )}
@@ -189,7 +230,11 @@ export function ItemsPage() {
               </Button>
             )}
             {canAdd && (
-              <Button variant="secondary" icon={Upload} onClick={() => setImportOpen(true)}>
+              <Button
+                variant="outline"
+                icon={Upload}
+                onClick={() => setImportOpen(true)}
+              >
                 Upload File
               </Button>
             )}
@@ -200,15 +245,6 @@ export function ItemsPage() {
             )}
           </>
         }
-      />
-
-      {downloadError && (
-        <Alert icon={AlertTriangle} className="mb-4">
-          {downloadError}
-        </Alert>
-      )}
-
-      <DataGrid<ItemRow>
         gridKey="items"
         columns={columns}
         searchPlaceholder="Search item name or HSN code"
@@ -217,11 +253,18 @@ export function ItemsPage() {
         {...screen.gridProps(query)}
       />
 
-      <ItemFormDialog open={screen.isFormOpen} itemId={screen.editingId} onClose={screen.closeForm} />
+      <ItemFormDialog
+        open={screen.isFormOpen}
+        itemId={screen.editingId}
+        onClose={screen.closeForm}
+      />
 
       <UnitsDialog open={unitsOpen} onClose={() => setUnitsOpen(false)} />
 
-      <ItemImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
+      <ItemImportDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+      />
 
       <ItemHistoryDialog
         open={historyRow !== null}
@@ -241,12 +284,16 @@ export function ItemsPage() {
         body={
           <>
             <p>
-              Delete <span className="font-medium text-slate-900">{screen.deleteTarget?.name}</span>?
+              Delete{" "}
+              <span className="font-medium text-slate-900">
+                {screen.deleteTarget?.name}
+              </span>
+              ?
             </p>
             <p className="mt-2 text-xs text-slate-500">
               The item is marked deleted and hidden from every list. Documents
-              that already reference it — purchase requests, orders, challans and
-              invoices — keep showing it by name, so its price history stays
+              that already reference it — purchase requests, orders, challans
+              and invoices — keep showing it by name, so its price history stays
               readable. Nothing is refused: an item appearing on years of
               invoices would otherwise be undeletable forever.
             </p>

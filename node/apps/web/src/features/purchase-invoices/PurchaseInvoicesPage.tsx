@@ -7,12 +7,27 @@ import {
 } from "@accountmanagement/contracts";
 import { Check, Plus, Undo2 } from "lucide-react";
 import { DataGrid, RowActions } from "../../components/DataGrid";
-import { Badge, Button, ConfirmDialog, PageHeader, SelectField } from "../../components/ui";
+import {
+  Badge,
+  Button,
+  ConfirmDialog,
+  PageHeader,
+  SelectField,
+} from "../../components/ui";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { useCompanyOptions } from "../purchase-orders/api";
-import { useDeletePurchaseInvoice, usePurchaseInvoiceList, useSetApproval } from "./api";
+import {
+  useDeletePurchaseInvoice,
+  usePurchaseInvoiceList,
+  useSetApproval,
+} from "./api";
 import { PurchaseInvoiceFormDialog } from "./PurchaseInvoiceFormDialog";
 import { usePermission } from "../../lib/permissions";
+import {
+  DocumentActions,
+  DocumentPdfError,
+  useDocumentPdf,
+} from "../document-templates/DocumentActions";
 import { useMasterScreen } from "../../lib/use-master-screen";
 import { formatDate, formatMoney } from "../../lib/format";
 
@@ -37,7 +52,8 @@ const TYPE_OPTIONS = [
 ];
 
 /** A return or a credit note is money going the other way. Say so on the row. */
-const isReturn = (type: string) => type === "Purchase Return" || type === "Credit Note";
+const isReturn = (type: string) =>
+  type === "Purchase Return" || type === "Credit Note";
 
 export function PurchaseInvoicesPage() {
   const canAdd = usePermission("purchase-invoice", "add");
@@ -54,6 +70,7 @@ export function PurchaseInvoicesPage() {
   const [companyId, setCompanyId] = useState<string>("");
 
   const scope = useSiteScope();
+  const pdf = useDocumentPdf();
   const companies = useCompanyOptions();
   const query = usePurchaseInvoiceList(screen.listParams, {
     isApproved: approval === "all" ? undefined : approval === "approved",
@@ -68,7 +85,10 @@ export function PurchaseInvoicesPage() {
   const companyOptions = useMemo(
     () => [
       { value: "", label: "All companies" },
-      ...(companies.data?.rows ?? []).map((row) => ({ value: row.id, label: row.name })),
+      ...(companies.data?.rows ?? []).map((row) => ({
+        value: row.id,
+        label: row.name,
+      })),
     ],
     [companies.data],
   );
@@ -86,10 +106,13 @@ export function PurchaseInvoicesPage() {
               supplier number renders an empty link there. Here the fallback is
               computed server-side and this cell is never blank.
             */}
-            <div className="tabular font-medium text-slate-900">{row.original.displayNo}</div>
+            <div className="tabular font-medium text-slate-900">
+              {row.original.displayNo}
+            </div>
             <div className="text-xs text-slate-500">
               {formatDate(row.original.documentDate) || "No date"}
-              {row.original.siteLocationName && ` · ${row.original.siteLocationName}`}
+              {row.original.siteLocationName &&
+                ` · ${row.original.siteLocationName}`}
             </div>
           </div>
         ),
@@ -99,8 +122,12 @@ export function PurchaseInvoicesPage() {
         header: "Supplier",
         cell: ({ row }) => (
           <div>
-            <div className="font-medium text-slate-900">{row.original.supplierName}</div>
-            <div className="text-xs text-slate-500">{row.original.companyName}</div>
+            <div className="font-medium text-slate-900">
+              {row.original.supplierName}
+            </div>
+            <div className="text-xs text-slate-500">
+              {row.original.companyName}
+            </div>
           </div>
         ),
       },
@@ -128,7 +155,8 @@ export function PurchaseInvoicesPage() {
                 drops. An invoice whose total does not deduct a TDS it records is
                 exactly the document B-2 asks about, and it is visible here.
               */}
-              {row.original.tds !== "0.00" && ` · less ${formatMoney(row.original.tds)} TDS`}
+              {row.original.tds !== "0.00" &&
+                ` · less ${formatMoney(row.original.tds)} TDS`}
             </div>
           </div>
         ),
@@ -145,7 +173,9 @@ export function PurchaseInvoicesPage() {
               <Badge tone="neutral">{row.original.invoiceType}</Badge>
             )}
             {row.original.paymentStatus && (
-              <span className="text-xs text-slate-500">{row.original.paymentStatus}</span>
+              <span className="text-xs text-slate-500">
+                {row.original.paymentStatus}
+              </span>
             )}
           </div>
         ),
@@ -215,7 +245,9 @@ export function PurchaseInvoicesPage() {
         meta: { defaultHidden: true },
         cell: ({ row }) =>
           row.original.createdAt ? (
-            <span className="tabular text-slate-600">{formatDate(row.original.createdAt)}</span>
+            <span className="tabular text-slate-600">
+              {formatDate(row.original.createdAt)}
+            </span>
           ) : (
             <span className="text-slate-300">—</span>
           ),
@@ -243,6 +275,12 @@ export function PurchaseInvoicesPage() {
                 }
               />
             )}
+            <DocumentActions
+              pdf={pdf}
+              documentType="purchase-invoice"
+              id={row.original.id}
+              label={row.original.displayNo}
+            />
             <RowActions
               capabilities={row.original.capabilities}
               label={row.original.displayNo}
@@ -253,7 +291,7 @@ export function PurchaseInvoicesPage() {
         ),
       },
     ],
-    [openEdit, askDelete, setApprovalMutation],
+    [openEdit, askDelete, setApprovalMutation, pdf],
   );
 
   return (
@@ -261,6 +299,45 @@ export function PurchaseInvoicesPage() {
       <PageHeader
         title="Purchase Invoices"
         description="What a supplier has billed, and what is owed on it"
+      />
+
+      <DocumentPdfError pdf={pdf} />
+
+      <DataGrid<PurchaseInvoiceRow>
+        // One row above the grid (client request, 18 Sep 2026): the screen's
+        // filters beside the search box and its actions at the right-hand end.
+        filters={
+          <>
+            <SelectField
+              labelHidden
+              label="Approval"
+              value={approval}
+              options={APPROVAL_OPTIONS}
+              onChange={(event) =>
+                setApproval(event.target.value as ApprovalFilter)
+              }
+            />
+            <SelectField
+              labelHidden
+              label="Type"
+              value={invoiceType}
+              options={TYPE_OPTIONS}
+              onChange={(event) => setInvoiceType(event.target.value)}
+            />
+            {/*
+          The legacy list is filtered by COMPANY rather than by the usual
+          All/Most Recent pair — people work one company at a time, the same
+          instinct as the global site selector.
+        */}
+            <SelectField
+              labelHidden
+              label="Company"
+              value={companyId}
+              options={companyOptions}
+              onChange={(event) => setCompanyId(event.target.value)}
+            />
+          </>
+        }
         actions={
           canAdd && (
             <Button icon={Plus} onClick={screen.openCreate}>
@@ -268,41 +345,6 @@ export function PurchaseInvoicesPage() {
             </Button>
           )
         }
-      />
-
-      <div className="mb-4 flex flex-wrap gap-3">
-        <div className="max-w-xs flex-1">
-          <SelectField
-            label="Approval"
-            value={approval}
-            options={APPROVAL_OPTIONS}
-            onChange={(event) => setApproval(event.target.value as ApprovalFilter)}
-          />
-        </div>
-        <div className="max-w-xs flex-1">
-          <SelectField
-            label="Type"
-            value={invoiceType}
-            options={TYPE_OPTIONS}
-            onChange={(event) => setInvoiceType(event.target.value)}
-          />
-        </div>
-        {/*
-          The legacy list is filtered by COMPANY rather than by the usual
-          All/Most Recent pair — people work one company at a time, the same
-          instinct as the global site selector.
-        */}
-        <div className="max-w-xs flex-1">
-          <SelectField
-            label="Company"
-            value={companyId}
-            options={companyOptions}
-            onChange={(event) => setCompanyId(event.target.value)}
-          />
-        </div>
-      </div>
-
-      <DataGrid<PurchaseInvoiceRow>
         gridKey="purchase-invoices"
         columns={columns}
         searchPlaceholder="Search invoice number, challan number or supplier"
@@ -333,7 +375,10 @@ export function PurchaseInvoicesPage() {
           <>
             <p>
               Delete{" "}
-              <span className="font-medium text-slate-900">{screen.deleteTarget?.displayNo}</span>?
+              <span className="font-medium text-slate-900">
+                {screen.deleteTarget?.displayNo}
+              </span>
+              ?
             </p>
             {/*
               A REAL delete, and the wording says so — unlike the purchase order
@@ -341,7 +386,8 @@ export function PurchaseInvoicesPage() {
               soft-delete column on `SupplierInvoice` to set.
             */}
             <p className="mt-2 text-xs text-slate-500">
-              The invoice and its lines are removed permanently. This cannot be undone.
+              The invoice and its lines are removed permanently. This cannot be
+              undone.
             </p>
           </>
         }

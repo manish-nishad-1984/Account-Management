@@ -32,6 +32,7 @@ import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { actorId } from "../../common/actor";
+import { approvalOnUpdate, approvedOnCreate } from "../../common/approval";
 import type { AccessTokenClaims } from "../auth/token.service";
 
 /**
@@ -131,7 +132,10 @@ export class PurchaseInvoicesController {
     @Body(new ZodValidationPipe(createPurchaseInvoiceSchema)) body: CreatePurchaseInvoice,
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<PurchaseInvoiceDetail> {
-    return this.invoices.create(body, actorId(caller));
+    return this.invoices.create(
+      { ...body, isApproved: approvedOnCreate(caller, SUBJECT) },
+      actorId(caller),
+    );
   }
 
   @Patch(":id")
@@ -141,7 +145,11 @@ export class PurchaseInvoicesController {
     @Body(new ZodValidationPipe(updatePurchaseInvoiceSchema)) body: UpdatePurchaseInvoice,
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<PurchaseInvoiceDetail> {
-    return this.invoices.update(id, body, actorId(caller));
+    return this.invoices.update(
+      id,
+      { ...body, ...approvalOnUpdate(caller, SUBJECT) },
+      actorId(caller),
+    );
   }
 
   @Patch(":id/approval")

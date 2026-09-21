@@ -117,16 +117,16 @@ export function SuppliersPage() {
       <PageHeader
         title="Suppliers"
         description="Vendors you raise purchase orders against"
-        actions={
-          canAdd ? (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              Add supplier
-            </Button>
-          ) : undefined
-        }
       />
 
       <DataGrid<SupplierRow>
+        // One row above the grid (client request, 18 Sep 2026): the screen's
+        // filters beside the search box and its actions at the right-hand end.
+        actions={canAdd ? (
+            <Button icon={Plus} onClick={screen.openCreate}>
+              Add supplier
+            </Button>
+          ) : undefined}
         gridKey="suppliers"
         columns={columns}
         searchPlaceholder="Search name, GST, mobile or email"

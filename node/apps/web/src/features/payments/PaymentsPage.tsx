@@ -141,8 +141,12 @@ export function PaymentsPage() {
       <PageHeader
         title="Payments"
         description="Money paid to suppliers and received from customers"
-        actions={
-          <>
+      />
+
+      <DataGrid<PaymentRow>
+        // One row above the grid (client request, 18 Sep 2026): the screen's
+        // filters beside the search box and its actions at the right-hand end.
+        actions={<>
             {/*
               The legacy screen has one direction per screen — PayOut on the
               report and PayIn on the sales side — with the same repeater built
@@ -173,11 +177,7 @@ export function PaymentsPage() {
                 Record payments
               </Button>
             )}
-          </>
-        }
-      />
-
-      <DataGrid<PaymentRow>
+          </>}
         gridKey="payments"
         columns={columns}
         searchPlaceholder="Search party, description or reference"

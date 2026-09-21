@@ -1,3 +1,4 @@
+import { Building2, Home, Landmark } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,10 +17,14 @@ import { useCompany, useCreateCompany, useUpdateCompany } from "./api";
  * from the grid row alone would submit them blank and wipe them.
  *
  * The resolver is the SAME Zod schema the API validates with, imported from
- * `@accountmanagement/contracts`. That is what the contracts package is for: the
- * GST format rule has one definition and the two ends cannot drift. The client
- * check is a convenience — the server runs it again, because a rule enforced
- * only in a browser is not a rule.
+ * `@accountmanagement/contracts`. That is what the contracts package is for: each
+ * rule has one definition and the two ends cannot drift. The client check is a
+ * convenience — the server runs it again, because a rule enforced only in a
+ * browser is not a rule.
+ *
+ * GST and PAN carry `maxLength` so the box stops accepting characters at the
+ * limit instead of taking a longer value and reporting it afterwards. Neither
+ * has a format rule any more; see `gstNo` in `contracts/src/fields.ts`.
  */
 type FormValues = z.input<typeof createCompanySchema>;
 type Submitted = z.output<typeof createCompanySchema>;
@@ -100,7 +105,7 @@ export function CompanyFormDialog({
         <p className="py-8 text-center text-sm text-slate-500">Loading company…</p>
       ) : (
         <>
-          <FormSection title="Identity">
+          <FormSection icon={Building2} title="Identity">
             <TextField
               label="Company name"
               required
@@ -116,13 +121,15 @@ export function CompanyFormDialog({
             />
             <TextField
               label="GST number"
-              hint="15 characters, e.g. 24AAACD1234A1Z5"
+              hint="Up to 15 characters"
+              maxLength={15}
               error={errors.gstNo?.message}
               {...register("gstNo")}
             />
             <TextField
               label="PAN"
-              hint="10 characters, e.g. AAACD1234A"
+              hint="Up to 10 characters"
+              maxLength={10}
               error={errors.panNo?.message}
               {...register("panNo")}
             />
@@ -137,7 +144,7 @@ export function CompanyFormDialog({
             purpose — an edit then carries whatever the row already held,
             rather than blanking it because the form stopped showing it.
           */}
-          <FormSection title="Address">
+          <FormSection icon={Home} title="Address">
             <TextAreaField
               label="Address"
               rows={2}
@@ -147,7 +154,7 @@ export function CompanyFormDialog({
             />
           </FormSection>
 
-          <FormSection title="Bank details" description="Not shown on the companies list">
+          <FormSection icon={Landmark} title="Bank details" description="Not shown on the companies list">
             <TextField
               label="Bank name"
               error={errors.bankName?.message}

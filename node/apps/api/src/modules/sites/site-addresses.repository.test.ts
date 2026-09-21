@@ -143,15 +143,45 @@ describe("site addresses (real PostgreSQL)", () => {
       });
     });
 
+    /**
+     * The last group comes off `site_locations.address` since 17 Sep 2026, when a
+     * location and its address became one pair. It used to come off
+     * `site_location_addresses`, which nothing reads any more.
+     */
     it("includes the shipping address, then the extra ones, then the location addresses", async () => {
       await repo.addAddress(siteId, { address: "Warehouse B, Sachin GIDC" });
       await db
-        .insert(schema.siteLocationAddresses)
-        .values({ siteId, address: "Block A gate, Ring Road", lineNumber: 1 });
+        .insert(schema.siteLocations)
+        .values({ siteId, name: "Block A", address: "Block A gate, Ring Road" });
       const choices = await choicesFor(siteId);
 
       expect(choices.map((c) => c.source)).toEqual(["site", "site-shipping", "extra", "location"]);
       expect(choices.at(-1)!.address).toBe("Block A gate, Ring Road");
+    });
+
+    /**
+     * A pair carried through migration 0020 has an address and no name. Its
+     * ADDRESS still has to reach the shipping list — that is the half a delivery
+     * needs — even though the pair has nothing to call itself yet.
+     */
+    it("offers the address of a pair that has no location name yet", async () => {
+      await db
+        .insert(schema.siteLocations)
+        .values({ siteId, name: "", address: "Plot 5, Bardoli Road" });
+
+      const { shippingAddresses, locations } = await repo.documentOptions(siteId);
+      expect(shippingAddresses.map((c) => c.address)).toContain("Plot 5, Bardoli Road");
+      // ...and it is NOT offered as a blank option in the Location select.
+      expect(locations).toEqual([]);
+    });
+
+    /** A location with no address yet simply offers nothing to ship to. */
+    it("offers nothing extra for a pair that has no address yet", async () => {
+      await db.insert(schema.siteLocations).values({ siteId, name: "Block A", address: null });
+
+      const { shippingAddresses, locations } = await repo.documentOptions(siteId);
+      expect(shippingAddresses.map((c) => c.source)).toEqual(["site", "site-shipping"]);
+      expect(locations.map((l) => l.name)).toEqual(["Block A"]);
     });
 
     it("offers nothing for an address the site has left blank", async () => {

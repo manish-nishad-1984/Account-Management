@@ -1,3 +1,4 @@
+import { KeyRound, ShieldCheck, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -115,7 +116,7 @@ export function UserFormDialog({
         <p className="py-8 text-center text-sm text-slate-500">Loading user…</p>
       ) : (
         <>
-          <FormSection title="Person">
+          <FormSection icon={User} title="Person">
             <TextField
               label="First name"
               required
@@ -146,7 +147,7 @@ export function UserFormDialog({
             />
           </FormSection>
 
-          <FormSection title="Sign-in">
+          <FormSection icon={KeyRound} title="Sign-in">
             <TextField
               label="Username"
               required
@@ -189,7 +190,7 @@ export function UserFormDialog({
             tables here, so an assignment to a site that no longer exists is
             refused by a foreign key rather than sitting in a string forever.
           */}
-          <FormSection title="Access" columns={2}>
+          <FormSection icon={ShieldCheck} title="Access" columns={2}>
             <Controller
               control={control}
               name="siteIds"

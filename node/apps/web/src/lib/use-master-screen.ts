@@ -1,8 +1,9 @@
 import { useCallback, useState } from "react";
-import { DEFAULT_PAGE_SIZE, type ListResponse, type SortDirection } from "@accountmanagement/contracts";
+import { type ListResponse, type SortDirection } from "@accountmanagement/contracts";
 import { ApiError } from "./api-client";
 import type { ListParams } from "./list-query";
 import { useRecordLayout } from "../contexts/RecordLayoutContext";
+import { DEFAULT_GRID_PAGE_SIZE, PAGE_SIZE_OPTIONS, useGridPageSize } from "./page-size";
 
 /**
  * The state every master screen has: search, sort, a cursor stack, which record
@@ -20,15 +21,23 @@ export interface MasterScreenOptions {
   /** Must be one of the resource's sortable fields, and NOT NULL in the database. */
   defaultSortBy: string;
   defaultSortDir?: SortDirection;
+  /**
+   * The page this screen opens at when the reader has never chosen one.
+   *
+   * A CHOICE THEY HAVE MADE ALWAYS WINS. This is the fallback, not a cap - a
+   * screen passing 50 here still gets 20 from someone who set 20 on the screen
+   * before, which is the point of the setting.
+   */
   pageSize?: number;
 }
 
 export function useMasterScreen<TRow extends { id: string | number }>({
   defaultSortBy,
   defaultSortDir = "asc",
-  pageSize = DEFAULT_PAGE_SIZE,
+  pageSize: initialPageSize = DEFAULT_GRID_PAGE_SIZE,
 }: MasterScreenOptions) {
   const { layout } = useRecordLayout();
+  const { pageSize, setPageSize } = useGridPageSize(initialPageSize);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState(defaultSortBy);
   const [sortDir, setSortDir] = useState<SortDirection>(defaultSortDir);
@@ -68,6 +77,24 @@ export function useMasterScreen<TRow extends { id: string | number }>({
    * a page of rows from nowhere in particular.
    */
   const resetPaging = useCallback(() => setCursors([]), []);
+
+  /**
+   * A NEW PAGE SIZE MEANS PAGE ONE, for the same reason a new search does.
+   *
+   * A cursor is a position in a sequence cut into pages of a particular size.
+   * Ask for 100 rows while holding a cursor taken from a run of 20 and the
+   * server answers honestly with 100 rows starting from that row - which is
+   * neither page 1 nor page 4 of the new pagination, and the pager underneath it
+   * would be counting something that does not exist. Keyset paging reports no
+   * error for this; it just returns rows from nowhere in particular.
+   */
+  const changePageSize = useCallback(
+    (size: number) => {
+      setPageSize(size);
+      setCursors([]);
+    },
+    [setPageSize],
+  );
 
   const changeSort = useCallback((field: string, direction: SortDirection) => {
     setSortBy(field);
@@ -139,6 +166,9 @@ export function useMasterScreen<TRow extends { id: string | number }>({
     sortDir,
     onSortChange: changeSort,
     pageIndex: cursors.length,
+    pageSize,
+    pageSizeOptions: PAGE_SIZE_OPTIONS,
+    onPageSizeChange: changePageSize,
     canGoBack: cursors.length > 0,
     canGoForward: Boolean(query.data?.nextCursor),
     onPrevious: () => setCursors((stack) => stack.slice(0, -1)),
@@ -148,15 +178,23 @@ export function useMasterScreen<TRow extends { id: string | number }>({
     },
 
     /**
-     * ONLY in the split layout. With a modal, a click anywhere in a row would
-     * throw a blocking dialog over the list — the exact behaviour the legacy
-     * screens do not have and the reason this comparison exists.
+     * NOT under a modal. A click anywhere in a row would throw a blocking dialog
+     * over the list — the exact behaviour the legacy screens do not have and the
+     * reason this comparison exists.
+     *
+     * Both other layouts take it, for the same reason from opposite directions:
+     * the split pane fills beside a list that stays readable, and the full page
+     * is a drill-down that has a back arrow to return by. Neither traps the user
+     * behind a backdrop they did not ask for.
      */
-    onRowClick: layout === "split" ? (row: TRow) => setFormTarget({ id: String(row.id) }) : undefined,
+    onRowClick:
+      layout === "modal" ? undefined : (row: TRow) => setFormTarget({ id: String(row.id) }),
     /**
      * Marking the open record only makes sense when it is visible beside the
      * list. Under a modal the highlight is hidden by the dialog and then
-     * lingers, unexplained, after it closes.
+     * lingers, unexplained, after it closes — and under the full page the list
+     * is not on screen at all while the record is open, and the target is
+     * already cleared by the time it comes back.
      */
     selectedRowId: layout === "split" ? (formTarget?.id ?? null) : null,
   });
@@ -164,6 +202,7 @@ export function useMasterScreen<TRow extends { id: string | number }>({
   return {
     listParams,
     gridProps,
+    pageSize,
     formTarget,
     isFormOpen: formTarget !== null,
     editingId: formTarget?.id ?? null,

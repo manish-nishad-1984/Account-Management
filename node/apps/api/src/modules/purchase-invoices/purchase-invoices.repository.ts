@@ -415,7 +415,7 @@ export class PurchaseInvoicesRepository extends BaseRepository {
    * SUPPLIER's, typed in, and deliberately not checked for uniqueness. Two
    * suppliers both numbering an invoice `016` is ordinary.
    */
-  async create(input: CreatePurchaseInvoice, actorId: string): Promise<PurchaseInvoiceDetail> {
+  async create(input: CreatePurchaseInvoice & { isApproved?: boolean }, actorId: string): Promise<PurchaseInvoiceDetail> {
     const { items: lines, tds, roundOff, ...header } = input;
     const { totals, rows } = this.priced(lines, { tds: tds ?? undefined, roundOff: roundOff ?? undefined });
 
@@ -468,7 +468,7 @@ export class PurchaseInvoicesRepository extends BaseRepository {
    */
   async update(
     id: string,
-    input: UpdatePurchaseInvoice,
+    input: UpdatePurchaseInvoice & { isApproved?: boolean },
     actorId: string,
   ): Promise<PurchaseInvoiceDetail> {
     const now = new Date();

@@ -1,3 +1,4 @@
+import { Boxes, MapPin, Receipt, Truck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,14 +16,16 @@ import {
   SelectField,
   TextAreaField,
   TextField,
+  SummaryStrip,
 } from "../../components/ui";
 import { applyServerErrors, unshownValidationMessage } from "../../lib/crud";
 import { text } from "../../lib/form-values";
 import { formatMoney } from "../../lib/format";
 import { useLatestPriceFill } from "../invoices/useLatestPriceFill";
 import { InvoiceLineGrid, previewNumber } from "../invoices/InvoiceLineGrid";
+import { GstBreakdown } from "../invoices/GstBreakdown";
 import { useAllUnits } from "../items/api";
-import { useItemOptions } from "../purchase-requests/api";
+
 import {
   useCompanyOptions,
   useCreateSalesInvoice,
@@ -32,6 +35,7 @@ import {
 } from "./api";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { todayInput } from "../../lib/dates";
+import { SavedDocumentPdfButton } from "../document-templates/DocumentActions";
 import { SiteAddressFields } from "../sites/SiteAddressFields";
 import { SiteContactSelect } from "../sites/SiteContactSelect";
 
@@ -140,7 +144,6 @@ export function SalesInvoiceFormDialog({
 
   const scope = useSiteScope();
   const units = useAllUnits();
-  const itemOptions = useItemOptions("");
   const customers = useCustomerOptions();
   const companies = useCompanyOptions();
   const create = useCreateSalesInvoice();
@@ -156,7 +159,7 @@ export function SalesInvoiceFormDialog({
     getValues,
     watch,
     control,
-    formState: { errors, isSubmitted },
+    formState: { errors, isSubmitted, isDirty },
   } = useForm<FormValues, unknown, Submitted>({
     resolver: zodResolver(createSalesInvoiceSchema),
     defaultValues: EMPTY,
@@ -225,10 +228,7 @@ export function SalesInvoiceFormDialog({
   const companyRows = companies.data?.rows ?? [];
   const companyOptions = companyRows.map((row) => ({ value: row.id, label: row.name }));
 
-  const items = itemOptions.data?.rows ?? [];
-  const itemTotal = itemOptions.data?.total ?? 0;
-  const itemsTruncated = itemTotal > items.length;
-  const itemChoices = items.map((item) => ({ value: item.id, label: item.name }));
+
 
   // Choosing an item fills its price, unit and GST from the latest sales invoice
   // for it, or from the item master (client request, 14 Sep 2026).
@@ -268,6 +268,9 @@ export function SalesInvoiceFormDialog({
       }
       formError={formError}
       pending={pending}
+      footerStart={
+        invoiceId !== null ? <SavedDocumentPdfButton documentType="sales-invoice" id={invoiceId} dirty={isDirty} /> : undefined
+      }
       submitLabel={isEdit ? "Save changes" : "Add sales invoice"}
       size="xl"
     >
@@ -275,7 +278,7 @@ export function SalesInvoiceFormDialog({
         <p className="py-8 text-center text-sm text-slate-500">Loading invoice…</p>
       ) : (
         <>
-          <FormSection title="Invoice" columns={2}>
+          <FormSection icon={Receipt} title="Invoice" columns={2}>
             <SelectField
               label="Customer"
               required
@@ -349,12 +352,11 @@ export function SalesInvoiceFormDialog({
           </FormSection>
 
           {/* `columns={1}` IS LOAD-BEARING — FormSection defaults to two. */}
-          <FormSection title="Products" columns={1}>
+          <FormSection icon={Boxes} title="Products" columns={1}>
             <InvoiceLineGrid
               fields={fields}
               lines={lines}
               totals={totals}
-              itemChoices={itemChoices}
               unitOptions={unitOptions}
               register={register as unknown as (name: string) => ReturnType<typeof register>}
               lineError={(index, field) => errors.items?.[index]?.[field]?.message}
@@ -370,51 +372,76 @@ export function SalesInvoiceFormDialog({
                 latestPrice.onItemChosen(index, itemId);
               }}
               priceHint={(index) => latestPrice.hintFor(lines?.[index]?.itemId)}
-              footerNote={
-                itemsTruncated && (
-                  <Alert tone="info">
-                    Showing the first {items.length} of {itemTotal} items. If the one you need is
-                    not listed, type its name beside the dropdown — an invoice line can name a
-                    product that is not in the catalogue.
-                  </Alert>
-                )
-              }
             />
+
+            {/*
+              THE CHARGES AND THE TOTAL BELONG WITH THE LINES (client request,
+              21 Sep 2026), as one strip under the lines they are the sum of,
+              rather than six bordered tiles in two sections of their own.
+            */}
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:items-start">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <TextField
+                  label="TDS"
+                  inputMode="decimal"
+                  hint="Tax deducted at source. Subtracted from the total."
+                  error={errors.tds?.message}
+                  {...register("tds")}
+                />
+                <TextField
+                  label="Adjustment"
+                  inputMode="decimal"
+                  hint="Added to the total. Use a minus to nudge it down."
+                  error={errors.roundOff?.message}
+                  {...register("roundOff")}
+                />
+              </div>
+
+              {/*
+                THE WHOLE RECKONING IN ONE COLUMN: the strip, the GST it is made
+                of, and the rounding rule that decides its last rupee — beside
+                the two boxes that change them rather than stacked underneath.
+              */}
+              <div className="grid gap-2">
+                <SummaryStrip
+                  items={[
+                    { label: "Sub total", value: formatMoney(totals.subtotal) },
+                    { label: "Discount", value: formatMoney(totals.totalDiscount) },
+                    { label: "Total GST", value: formatMoney(totals.totalGst) },
+                    { label: "TDS", value: `− ${formatMoney(totals.tds)}` },
+                    { label: "Adjustment", value: formatMoney(totals.roundOff) },
+                    { label: "Total amount", value: formatMoney(totals.grandTotal), strong: true },
+                  ]}
+                />
+
+                <GstBreakdown
+                  lines={(lines ?? []).map((line, index) => ({
+                    gstPercent: String(line?.gstPercent ?? "") || null,
+                    netAmount: totals.lines[index]?.netAmount ?? "0",
+                    gstAmount: totals.lines[index]?.gstAmount ?? "0",
+                  }))}
+                />
+
+                {/* A footnote, not a banner: it explains the figure above it. */}
+                <p className="text-xs leading-4 text-slate-500">
+                  The total is rounded to a whole rupee, with exactly 50 paise rounding down — the
+                  rule every invoice this business has issued was calculated with. The subtotal, GST
+                  and discount above are exact.
+                </p>
+              </div>
+            </div>
           </FormSection>
 
-          <FormSection title="Charges" columns={2}>
-            <TextField
-              label="TDS"
-              inputMode="decimal"
-              hint="Tax deducted at source. Subtracted from the total."
-              error={errors.tds?.message}
-              {...register("tds")}
-            />
-            <TextField
-              label="Adjustment"
-              inputMode="decimal"
-              hint="Added to the total. Use a minus to nudge it down."
-              error={errors.roundOff?.message}
-              {...register("roundOff")}
-            />
-          </FormSection>
-
-          <FormSection title="Totals" columns={2}>
-            <Summary label="Sub total" value={formatMoney(totals.subtotal)} />
-            <Summary label="Total GST" value={formatMoney(totals.totalGst)} />
-            <Summary label="Discount" value={formatMoney(totals.totalDiscount)} />
-            <Summary label="TDS" value={`− ${formatMoney(totals.tds)}`} />
-            <Summary label="Adjustment" value={formatMoney(totals.roundOff)} />
-            <Summary label="Total amount" value={formatMoney(totals.grandTotal)} strong />
-
-            <Alert tone="info" className="sm:col-span-2">
-              The total is rounded to a whole rupee, with exactly 50 paise rounding down — the rule
-              every invoice this business has issued was calculated with. The subtotal, GST and
-              discount above are exact.
-            </Alert>
-          </FormSection>
-
-          <FormSection title="Delivery and contacts" columns={2}>
+          {/*
+            TWO TO A ROW AT 42/58 (client request, 21 Sep 2026): neither card
+            fills a 1500px line on its own, and stacked they pushed the products
+            — the part of the document people actually work in — below the fold.
+            The split is uneven because delivery is short boxes and addresses are
+            long lines that wrap. Under 1280px they stack, where half a line is
+            too narrow for a labelled field.
+          */}
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,42fr)_minmax(0,58fr)]">
+          <FormSection icon={Truck} title="Delivery and contacts" columns={3}>
             <TextField
               label="Challan number"
               error={errors.challanNo?.message}
@@ -448,7 +475,7 @@ export function SalesInvoiceFormDialog({
             />
           </FormSection>
 
-          <FormSection title="Addresses and notes" columns={1}>
+          <FormSection icon={MapPin} title="Addresses and notes" columns={1}>
             {/*
               Billing is our site's own address; shipping is ONE of the site's
               addresses, chosen — the rules of 15 Sep 2026. A sales invoice
@@ -469,6 +496,7 @@ export function SalesInvoiceFormDialog({
               {...register("description")}
             />
           </FormSection>
+          </div>
 
           {!isEdit && (
             <Alert tone="info">
@@ -482,15 +510,3 @@ export function SalesInvoiceFormDialog({
   );
 }
 
-function Summary({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
-      <div
-        className={`tabular mt-0.5 ${strong ? "text-lg font-semibold text-slate-900" : "text-slate-800"}`}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}

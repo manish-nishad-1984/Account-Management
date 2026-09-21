@@ -202,6 +202,21 @@ export const items = pgTable(
 
     pricePerUnit: numeric("price_per_unit", { precision: 18, scale: 2 }).notNull(),
 
+    /**
+     * SUPERSEDED, 17 Sep 2026 — nothing reads or writes this any more.
+     *
+     * The business removed the "Item is GST-inclusive" checkbox, and
+     * `gstPercent` is now the only thing that says whether an item carries GST.
+     * The column is kept rather than dropped because dropping it destroys the
+     * stored flag on every existing row, and the flag is the one piece of this
+     * that a migration could not put back. It is `NOT NULL DEFAULT false`, so
+     * inserts that ignore it are fine.
+     *
+     * It stays declared here so the schema still matches the database — remove
+     * the declaration and the next `drizzle-kit generate` will propose dropping
+     * the column. Drop it deliberately, in its own migration, if the business
+     * confirms the flag is not wanted back.
+     */
     isWithGst: boolean("is_with_gst").notNull().default(false),
     /** Percentage, e.g. "18.00". Nullable because a non-GST item has none. */
     gstPercent: numeric("gst_percent", { precision: 5, scale: 2 }),

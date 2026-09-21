@@ -1,13 +1,31 @@
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { PURCHASE_ORDER_SORT_FIELDS, type PurchaseOrderRow } from "@accountmanagement/contracts";
+import {
+  PURCHASE_ORDER_SORT_FIELDS,
+  type PurchaseOrderRow,
+} from "@accountmanagement/contracts";
 import { Check, Plus, Undo2 } from "lucide-react";
 import { DataGrid, RowActions } from "../../components/DataGrid";
-import { Badge, Button, ConfirmDialog, PageHeader, SelectField } from "../../components/ui";
+import {
+  Badge,
+  Button,
+  ConfirmDialog,
+  PageHeader,
+  SelectField,
+} from "../../components/ui";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
-import { useDeletePurchaseOrder, usePurchaseOrderList, useSetApproval } from "./api";
+import {
+  useDeletePurchaseOrder,
+  usePurchaseOrderList,
+  useSetApproval,
+} from "./api";
 import { PurchaseOrderFormDialog } from "./PurchaseOrderFormDialog";
 import { usePermission } from "../../lib/permissions";
+import {
+  DocumentActions,
+  DocumentPdfError,
+  useDocumentPdf,
+} from "../document-templates/DocumentActions";
 import { useMasterScreen } from "../../lib/use-master-screen";
 import { formatDate, formatMoney } from "../../lib/format";
 
@@ -43,6 +61,7 @@ export function PurchaseOrdersPage() {
   const [active, setActive] = useState<ActiveFilter>("active");
 
   const scope = useSiteScope();
+  const pdf = useDocumentPdf();
   const query = usePurchaseOrderList(screen.listParams, {
     isApproved: approval === "all" ? undefined : approval === "approved",
     isActive: active === "all" ? undefined : active === "active",
@@ -59,7 +78,9 @@ export function PurchaseOrdersPage() {
         header: "Order",
         cell: ({ row }) => (
           <div>
-            <div className="tabular font-medium text-slate-900">{row.original.poNo}</div>
+            <div className="tabular font-medium text-slate-900">
+              {row.original.poNo}
+            </div>
             <div className="text-xs text-slate-500">
               {formatDate(row.original.documentDate) || "No date"}
               {/*
@@ -67,7 +88,8 @@ export function PurchaseOrdersPage() {
                 one cell, which is where the "free-text suffix on the number"
                 reading came from. They are two fields and they stay two.
               */}
-              {row.original.buyersPurchaseNo && ` · Buyer's ref ${row.original.buyersPurchaseNo}`}
+              {row.original.buyersPurchaseNo &&
+                ` · Buyer's ref ${row.original.buyersPurchaseNo}`}
             </div>
           </div>
         ),
@@ -77,21 +99,29 @@ export function PurchaseOrdersPage() {
         header: "Supplier",
         cell: ({ row }) => (
           <div>
-            <div className="font-medium text-slate-900">{row.original.supplierName}</div>
-            <div className="text-xs text-slate-500">{row.original.companyName}</div>
+            <div className="font-medium text-slate-900">
+              {row.original.supplierName}
+            </div>
+            <div className="text-xs text-slate-500">
+              {row.original.companyName}
+            </div>
           </div>
         ),
       },
       {
         id: "siteName",
         header: "Site",
-        cell: ({ row }) => <span className="text-slate-600">{row.original.siteName}</span>,
+        cell: ({ row }) => (
+          <span className="text-slate-600">{row.original.siteName}</span>
+        ),
       },
       {
         id: "lineCount",
         header: "Lines",
         cell: ({ row }) => (
-          <span className="tabular block text-right text-slate-600">{row.original.lineCount}</span>
+          <span className="tabular block text-right text-slate-600">
+            {row.original.lineCount}
+          </span>
         ),
       },
       {
@@ -145,7 +175,9 @@ export function PurchaseOrdersPage() {
         meta: { defaultHidden: true },
         cell: ({ row }) =>
           row.original.createdAt ? (
-            <span className="tabular text-slate-600">{formatDate(row.original.createdAt)}</span>
+            <span className="tabular text-slate-600">
+              {formatDate(row.original.createdAt)}
+            </span>
           ) : (
             <span className="text-slate-300">—</span>
           ),
@@ -173,6 +205,12 @@ export function PurchaseOrdersPage() {
                 }
               />
             )}
+            <DocumentActions
+              pdf={pdf}
+              documentType="purchase-order"
+              id={row.original.id}
+              label={row.original.poNo}
+            />
             <RowActions
               capabilities={row.original.capabilities}
               label={row.original.poNo}
@@ -183,7 +221,7 @@ export function PurchaseOrdersPage() {
         ),
       },
     ],
-    [openEdit, askDelete, setApprovalMutation],
+    [openEdit, askDelete, setApprovalMutation, pdf],
   );
 
   return (
@@ -191,6 +229,35 @@ export function PurchaseOrdersPage() {
       <PageHeader
         title="Purchase Orders"
         description="What has been ordered from a supplier, and for how much"
+      />
+
+      <DocumentPdfError pdf={pdf} />
+
+      <DataGrid<PurchaseOrderRow>
+        // One row above the grid (client request, 18 Sep 2026): the screen's
+        // filters beside the search box and its actions at the right-hand end.
+        filters={
+          <>
+            <SelectField
+              labelHidden
+              label="Approval"
+              value={approval}
+              options={APPROVAL_OPTIONS}
+              onChange={(event) =>
+                setApproval(event.target.value as ApprovalFilter)
+              }
+            />
+            <SelectField
+              labelHidden
+              label="Status"
+              value={active}
+              options={ACTIVE_OPTIONS}
+              onChange={(event) =>
+                setActive(event.target.value as ActiveFilter)
+              }
+            />
+          </>
+        }
         actions={
           canAdd && (
             <Button icon={Plus} onClick={screen.openCreate}>
@@ -198,28 +265,6 @@ export function PurchaseOrdersPage() {
             </Button>
           )
         }
-      />
-
-      <div className="mb-4 flex flex-wrap gap-3">
-        <div className="max-w-xs flex-1">
-          <SelectField
-            label="Approval"
-            value={approval}
-            options={APPROVAL_OPTIONS}
-            onChange={(event) => setApproval(event.target.value as ApprovalFilter)}
-          />
-        </div>
-        <div className="max-w-xs flex-1">
-          <SelectField
-            label="Status"
-            value={active}
-            options={ACTIVE_OPTIONS}
-            onChange={(event) => setActive(event.target.value as ActiveFilter)}
-          />
-        </div>
-      </div>
-
-      <DataGrid<PurchaseOrderRow>
         gridKey="purchase-orders"
         columns={columns}
         searchPlaceholder="Search order number, buyer's reference or supplier"
@@ -249,12 +294,15 @@ export function PurchaseOrdersPage() {
         body={
           <>
             <p>
-              Delete <span className="font-medium text-slate-900">{screen.deleteTarget?.poNo}</span>
+              Delete{" "}
+              <span className="font-medium text-slate-900">
+                {screen.deleteTarget?.poNo}
+              </span>
               ?
             </p>
             <p className="mt-2 text-xs text-slate-500">
-              The order is marked deleted and hidden from every list. Its lines are kept, and its
-              number is not reissued.
+              The order is marked deleted and hidden from every list. Its lines
+              are kept, and its number is not reissued.
             </p>
           </>
         }

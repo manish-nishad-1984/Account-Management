@@ -114,7 +114,7 @@ export function SiteCombobox({
         <ul
           id={listId}
           role="listbox"
-          className="scroll-subtle absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-md bg-white py-1 text-sm shadow-lg ring-1 ring-slate-200"
+          className="scroll-subtle absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-pop"
         >
           {matches.length === 0 ? (
             <li className="px-3 py-2 text-slate-500">No site matches "{query}"</li>

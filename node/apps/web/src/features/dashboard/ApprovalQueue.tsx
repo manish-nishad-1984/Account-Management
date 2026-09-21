@@ -6,6 +6,7 @@ import { AlertTriangle, ArrowRight, Check, CheckCircle2 } from "lucide-react";
 import { Button, Card } from "../../components/ui";
 import { describeApproved, useBulkApproval } from "./approvals";
 import { usePermission } from "../../lib/permissions";
+import { useFitHeight } from "../../lib/use-fit-height";
 
 /** Every queue row is addressable and carries what the caller may do to it. */
 export interface QueueRow {
@@ -65,6 +66,9 @@ export function ApprovalQueue<T extends QueueRow>({
   const [notice, setNotice] = useState<string | null>(null);
   const approve = useBulkApproval(resource);
   const headerBox = useRef<HTMLInputElement>(null);
+  // The queue opens in full under the dashboard's tiles; its rows scroll inside
+  // the height left on the page, under a pinned header, and the page stays put.
+  const fitted = useFitHeight();
 
   const rows = useMemo(() => query.data?.rows ?? [], [query.data]);
   const total = query.data?.total ?? 0;
@@ -131,7 +135,11 @@ export function ApprovalQueue<T extends QueueRow>({
         <div className="min-w-0">
           <h2 className="heading text-sm">{title}</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            {loading ? "Loading…" : `${total} awaiting approval`}
+            {loading
+              ? "Loading…"
+              : rows.length < total
+                ? `${total} awaiting approval — the first ${rows.length} are here, View all has the rest`
+                : `${total} awaiting approval`}
           </p>
         </div>
         {canApprove && selected.size > 0 && (
@@ -171,10 +179,10 @@ export function ApprovalQueue<T extends QueueRow>({
           No data found for the selected criteria
         </p>
       ) : (
-        <div className="-mx-1 overflow-x-auto">
+        <div ref={fitted.ref} className="relative -mx-1 overflow-auto" style={{ maxHeight: fitted.height }}>
           <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-xs text-slate-500">
+            <thead className="sticky top-0 z-10 bg-white shadow-[inset_0_-1px_0_var(--color-slate-100)]">
+              <tr className="text-xs text-slate-500">
                 {canApprove && (
                   <th scope="col" className="w-8 px-1 py-2">
                     {/*

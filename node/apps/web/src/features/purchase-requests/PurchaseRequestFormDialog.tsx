@@ -1,3 +1,4 @@
+import { MapPin, Package } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,9 +11,9 @@ import { Alert, FormDialog, FormSection, SelectField, TextAreaField, TextField }
 import { applyServerErrors, unshownValidationMessage } from "../../lib/crud";
 import { text } from "../../lib/form-values";
 import { useAllUnits } from "../items/api";
+import { ItemCombobox } from "../items/ItemCombobox";
 import {
   useCreatePurchaseRequest,
-  useItemOptions,
   usePurchaseRequest,
   useUpdatePurchaseRequest,
 } from "./api";
@@ -56,7 +57,7 @@ export function PurchaseRequestFormDialog({
    */
   const scope = useSiteScope();
   const units = useAllUnits();
-  const itemOptions = useItemOptions("");
+
   const create = useCreatePurchaseRequest();
   const update = useUpdatePurchaseRequest();
   const [formError, setFormError] = useState<string | null>(null);
@@ -67,6 +68,7 @@ export function PurchaseRequestFormDialog({
     reset,
     setError,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<FormValues, unknown, Submitted>({
     resolver: zodResolver(createPurchaseRequestSchema),
@@ -74,6 +76,7 @@ export function PurchaseRequestFormDialog({
   });
 
   const chosenItemId = watch("itemId");
+  const itemName = watch("itemName");
 
   useEffect(() => {
     if (!open) return;
@@ -117,9 +120,9 @@ export function PurchaseRequestFormDialog({
     label: unit.name,
   }));
 
-  const items = itemOptions.data?.rows ?? [];
-  const itemTotal = itemOptions.data?.total ?? 0;
-  const itemsTruncated = itemTotal > items.length;
+
+
+
 
   return (
     <FormDialog
@@ -140,7 +143,7 @@ export function PurchaseRequestFormDialog({
         <p className="py-8 text-center text-sm text-slate-500">Loading request…</p>
       ) : (
         <>
-          <FormSection title="Where" columns={2}>
+          <FormSection icon={MapPin} title="Where" columns={2}>
             <SelectField
               label="Site"
               required
@@ -167,28 +170,33 @@ export function PurchaseRequestFormDialog({
             />
           </FormSection>
 
-          <FormSection title="What" columns={2}>
-            <SelectField
-              label="Item"
-              placeholder={itemOptions.isLoading ? "Loading items…" : "Choose an item"}
-              options={items.map((item) => ({ value: item.id, label: item.name }))}
-              error={errors.itemId?.message}
-              {...register("itemId")}
-            />
-            <TextField
-              label="Or name it"
-              hint="For something not in the item catalogue"
-              error={errors.itemName?.message}
-              {...register("itemName")}
-            />
+          <FormSection icon={Package} title="What" columns={2}>
+            {/*
+              ONE PICKER WHERE THERE WERE TWO FIELDS AND AN ALERT.
 
-            {itemsTruncated && (
-              <Alert tone="info" className="sm:col-span-2">
-                Showing the first {items.length} of {itemTotal} items. If the one you
-                need is not listed, type its name in the field beside the dropdown —
-                a request can name an item that is not in the catalogue.
-              </Alert>
-            )}
+              "Item" and "Or name it" sat side by side, and a request could be
+              saved with BOTH filled in — the dropdown offered 200 of 758 items,
+              so a user who could not find one typed it, and nothing then cleared
+              the id if they found it afterwards. The combobox searches all 758
+              and offers the typed name as the last option in the list, so the
+              two states are exclusive by construction.
+            */}
+            <ItemCombobox
+              label="Item"
+              className="sm:col-span-2"
+              allowFreeText
+              itemId={String(chosenItemId ?? "")}
+              itemName={String(itemName ?? "")}
+              error={errors.itemId?.message ?? errors.itemName?.message}
+              onPick={(picked) => {
+                setValue("itemId", picked, { shouldDirty: true, shouldValidate: true });
+                setValue("itemName", "", { shouldDirty: true });
+              }}
+              onTypeName={(name) => {
+                setValue("itemName", name, { shouldDirty: true, shouldValidate: true });
+                setValue("itemId", "", { shouldDirty: true });
+              }}
+            />
 
             <TextField
               label="Quantity"

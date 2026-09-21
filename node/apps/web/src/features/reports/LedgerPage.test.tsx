@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LedgerPage } from "./LedgerPage";
@@ -63,6 +63,10 @@ const withReports = (
 /** The ledger loads nothing until Search is pressed, so every ledger test starts there. */
 const search = async () =>
   userEvent.click(await screen.findByRole("button", { name: "Search" }));
+
+/** The two are tabs since 18 Sep 2026; the ledger shows first. */
+const openTab = async (name: "Ledger" | "Balance summary") =>
+  userEvent.click(await screen.findByRole("tab", { name }));
 
 const ledgerResponse = (rows: unknown[], overrides: Record<string, unknown> = {}) => ({
   rows,
@@ -147,17 +151,17 @@ describe("the ledger and balances screen", () => {
    * The summary's Net is credit less debit. The legacy version adds returns to
    * the net while subtracting them in the Debit column beside it, so the two
    * panels of that screen disagree — this is the sentence that says which one
-   * this screen means.
+   * this screen means. It is the Net heading's tooltip now, not a paragraph.
    */
   it("explains that returns reduce the balance", async () => {
     withReports(ledgerResponse([]), balancesResponse([balanceRow()]));
     renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
     await search();
 
-    // Awaited on the NUMBER, not on the sentence: the paragraph renders
-    // unconditionally, so awaiting it passes while the panel is still loading.
+    await openTab("Balance summary");
+
     expect(await screen.findAllByText("8,000.00")).not.toHaveLength(0);
-    expect(screen.getByText(/Net is credit less debit/)).toBeInTheDocument();
+    expect(screen.getByText("Net")).toHaveAttribute("title", expect.stringMatching(/^Credit less debit. Purchase returns/));
   });
 
   it("shows a total row over every entry, not just the page", async () => {
@@ -269,20 +273,24 @@ describe("the ledger and balances screen", () => {
     withReports(ledgerResponse([ledgerRow()]), balancesResponse([balanceRow()]));
     renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
 
-    expect(await screen.findByText("Search to see the ledger")).toBeInTheDocument();
-    expect(screen.getByText("Search to see the balances")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Search" })).toBeInTheDocument();
     expect(screen.queryByText("BB/154")).not.toBeInTheDocument();
-    expect(screen.queryByText("8,000.00")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /excel|pdf/i })).not.toBeInTheDocument();
+    // No prompt before a search (client request, 18 Sep 2026): just the filters.
+    expect(screen.queryByText(/Search to see/)).not.toBeInTheDocument();
+    await openTab("Balance summary");
+    expect(screen.queryByText(/Search to see/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(ledgerRequests()).toBe(0);
     expect(balanceRequests()).toBe(0);
 
+    await openTab("Ledger");
     await search();
 
     expect(await screen.findByText("BB/154")).toBeInTheDocument();
+    // One Search loads both, so the other tab is ready when opened.
+    await openTab("Balance summary");
     expect((await screen.findAllByText("8,000.00")).length).toBeGreaterThan(0);
-    expect(screen.queryByText("Search to see the ledger")).not.toBeInTheDocument();
-    expect(screen.queryByText("Search to see the balances")).not.toBeInTheDocument();
     expect(ledgerRequests()).toBe(1);
     expect(balanceRequests()).toBe(1);
   });
@@ -295,9 +303,88 @@ describe("the ledger and balances screen", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Reset" }));
 
-    expect(await screen.findByText("Search to see the ledger")).toBeInTheDocument();
-    expect(screen.getByText("Search to see the balances")).toBeInTheDocument();
-    expect(screen.queryByText("BB/154")).not.toBeInTheDocument();
-    expect(screen.queryByText("8,000.00")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("BB/154")).not.toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /excel|pdf/i })).not.toBeInTheDocument();
+    await openTab("Balance summary");
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  describe("tabs and grid (client request, 18 Sep 2026)", () => {
+    it("shows the ledger first, and the balance summary in a tab of its own", async () => {
+      withReports(ledgerResponse([ledgerRow()]), balancesResponse([balanceRow()]));
+      renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
+      await search();
+
+      expect(await screen.findByRole("tab", { name: "Ledger" })).toHaveAttribute("aria-selected", "true");
+      expect(await screen.findByRole("table", { name: "Ledger" })).toBeInTheDocument();
+      expect(screen.queryByRole("table", { name: "Balance summary" })).not.toBeInTheDocument();
+
+      await openTab("Balance summary");
+
+      expect(await screen.findByRole("table", { name: "Balance summary" })).toBeInTheDocument();
+      expect(screen.queryByRole("table", { name: "Ledger" })).not.toBeInTheDocument();
+    });
+
+    /**
+     * Every amount is right-aligned exactly as its header is, in its footer too,
+     * in a column of the one fixed width — which is what makes the last digits
+     * of every row line up under the last letter of the heading.
+     */
+    it("aligns every amount with its column header", async () => {
+      withReports(ledgerResponse([ledgerRow()]), balancesResponse([balanceRow()]));
+      renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
+      await search();
+
+      const table = await screen.findByRole("table", { name: "Ledger" });
+      const headers = within(table).getAllByRole("columnheader");
+      const amountColumns = ["Credit", "Debit", "Balance"].map((name) =>
+        headers.findIndex((header) => header.textContent === name),
+      );
+      const cols = table.querySelectorAll("col");
+      for (const index of amountColumns) {
+        expect(headers[index]).toHaveClass("text-right");
+        for (const row of table.querySelectorAll("tbody tr")) {
+          expect(row.children[index]).toHaveClass("text-right", "tabular");
+        }
+        expect((cols[index] as HTMLTableColElement).style.width).toBe((cols[amountColumns[0]!] as HTMLTableColElement).style.width);
+      }
+    });
+
+    /** The downloads sit in the tab row, above the filters, for whichever tab is open. */
+    it("puts the export buttons above the filters, for the open tab", async () => {
+      withReports(ledgerResponse([ledgerRow()]), balancesResponse([balanceRow()]));
+      renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
+      await search();
+      await screen.findByRole("table", { name: "Ledger" });
+
+      const excel = screen.getByRole("button", { name: /export to excel/i });
+      const searchButton = screen.getByRole("button", { name: "Search" });
+      expect(excel.compareDocumentPosition(searchButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.getByRole("button", { name: /excel by party/i })).toBeInTheDocument();
+
+      await openTab("Balance summary");
+      await screen.findByRole("table", { name: "Balance summary" });
+      // The by-party download is the ledger's alone.
+      expect(screen.queryByRole("button", { name: /excel by party/i })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /export to excel/i })).toBeInTheDocument();
+    });
+
+    /** It asked for 50 rows and offered no way to the 51st. */
+    it("pages the balance summary", async () => {
+      withReports(ledgerResponse([ledgerRow()]), balancesResponse([balanceRow()], { total: 120, nextCursor: "50" }));
+      renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
+      await search();
+      await openTab("Balance summary");
+
+      await userEvent.click(await screen.findByRole("button", { name: "Next" }));
+
+      await waitFor(() =>
+        expect(
+          vi.mocked(globalThis.fetch).mock.calls.some(
+            ([url]) => String(url).includes("/reports/balances?") && String(url).includes("offset=50"),
+          ),
+        ).toBe(true),
+      );
+    });
   });
 });

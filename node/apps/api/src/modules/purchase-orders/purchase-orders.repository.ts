@@ -455,7 +455,7 @@ export class PurchaseOrdersRepository extends BaseRepository {
    * anywhere in 10,304 lines of repository — so a failure halfway leaves a header
    * with some of its lines and a total that matches none of them.
    */
-  async create(input: CreatePurchaseOrder, actorId: string): Promise<PurchaseOrderDetail> {
+  async create(input: CreatePurchaseOrder & { isApproved?: boolean }, actorId: string): Promise<PurchaseOrderDetail> {
     const now = new Date();
     const { totals, rows } = this.priced(input.items);
 
@@ -528,7 +528,7 @@ export class PurchaseOrdersRepository extends BaseRepository {
    */
   async update(
     id: string,
-    input: UpdatePurchaseOrder,
+    input: UpdatePurchaseOrder & { isApproved?: boolean },
     actorId: string,
   ): Promise<PurchaseOrderDetail> {
     const now = new Date();

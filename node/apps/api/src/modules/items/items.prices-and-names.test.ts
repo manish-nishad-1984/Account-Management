@@ -161,7 +161,7 @@ describe("item names, latest prices and price history (real PostgreSQL)", () => 
 
   describe("the latest price for an invoice line", () => {
     it("falls back to the item master price when the item was never invoiced", async () => {
-      const created = await item({ isWithGst: true, gstPercent: "28", gstAmount: "110.60" });
+      const created = await item({ gstPercent: "28", gstAmount: "110.60" });
       const latest = await history.latest(created.id, "out");
 
       expect(latest).toMatchObject({
@@ -267,7 +267,7 @@ describe("item names, latest prices and price history (real PostgreSQL)", () => 
 
     it("records a change of GST rate on its own", async () => {
       const created = await item();
-      await items.update(created.id, { isWithGst: true, gstPercent: "18", gstAmount: "71.10" }, ACTOR);
+      await items.update(created.id, { gstPercent: "18", gstAmount: "71.10" }, ACTOR);
 
       const [latest] = (await history.changes(created.id, 50)).rows;
       expect(latest).toMatchObject({ source: "edited", oldGstPercent: null, newGstPercent: "18.00" });

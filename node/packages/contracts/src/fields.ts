@@ -14,12 +14,19 @@ import { z } from "zod";
  * badly-formatted GST number is worse than one that shows it.
  */
 
-/** Trims, then treats "" as absent. HTML inputs submit "" for an empty field. */
-export const optionalText = (max: number) =>
+/**
+ * Trims, then treats "" as absent. HTML inputs submit "" for an empty field.
+ *
+ * `tooLong` replaces Zod's default message, which is written for a developer
+ * reading a stack trace rather than for someone filling in a form: "String must
+ * contain at most 15 character(s)" names a type and a constraint, and never says
+ * which box is wrong or what to do about it.
+ */
+export const optionalText = (max: number, tooLong?: string) =>
   z
     .string()
     .trim()
-    .max(max)
+    .max(max, tooLong)
     .transform((value) => (value === "" ? null : value))
     .nullable()
     .optional()
@@ -29,32 +36,29 @@ export const requiredText = (label: string, max: number) =>
   z.string().trim().min(1, `${label} is required`).max(max);
 
 /**
- * GSTIN — 15 characters: 2-digit state code, 10-character PAN, 1 entity digit,
- * a literal Z, 1 check character. Upper-cased before checking, because the form
- * lets people type lower case and rejecting that would be pedantry.
+ * GST number and PAN — LENGTH ONLY. There is no format rule on either.
+ *
+ * Both used to be checked against the official patterns (GSTIN: 2-digit state
+ * code, 10-character PAN, entity digit, a literal Z, check character; PAN: 5
+ * letters, 4 digits, 1 letter). The business removed that on 17 Sep 2026: these
+ * boxes are to accept what is typed, up to what the column holds, and nothing
+ * more is to be judged about the value.
+ *
+ * That is a deliberate loosening, not an oversight, and it is the right call
+ * here. A registration number is transcribed from a document the supplier
+ * provides; when the form and the document disagree, the form is not always the
+ * one that is right. Provisional registrations, older formats, and numbers from
+ * outside the pattern all exist, and the previous rule turned each of them into
+ * a record that simply could not be saved.
+ *
+ * THE LENGTH IS ENFORCED IN THE INPUT TOO, with `maxLength` on the control, so
+ * the cap is reached by the box stopping rather than by an error appearing after
+ * the fact. The check stays here as well because `maxLength` is a browser
+ * courtesy and the API is reachable without one.
  */
-export const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/;
+export const gstNo = optionalText(15, "GST number can be at most 15 characters");
 
-export const gstNo = optionalText(15).superRefine((value, ctx) => {
-  if (value !== null && !GSTIN_PATTERN.test(value.toUpperCase())) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "GST number must be 15 characters, e.g. 24AACD1234A1Z5",
-    });
-  }
-});
-
-/** PAN — 5 letters, 4 digits, 1 letter. */
-export const PAN_PATTERN = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
-
-export const panNo = optionalText(10).superRefine((value, ctx) => {
-  if (value !== null && !PAN_PATTERN.test(value.toUpperCase())) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "PAN must be 10 characters, e.g. AAACD1234A",
-    });
-  }
-});
+export const panNo = optionalText(10, "PAN can be at most 10 characters");
 
 /** Indian PIN code — six digits, never starting at zero. */
 export const pincode = optionalText(6).superRefine((value, ctx) => {

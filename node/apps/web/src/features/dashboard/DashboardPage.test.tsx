@@ -31,7 +31,6 @@ const itemRow = (id: string, name: string, overrides: Record<string, unknown> = 
   unitId: 1,
   unitName: "Bag",
   pricePerUnit: "395.00",
-  isWithGst: false,
   gstPercent: null,
   gstAmount: null,
   hsnCode: null,
@@ -116,7 +115,16 @@ const ALL = [
   "purchase-invoice.approve",
 ];
 
+/** A queue tile — its name, its count, "awaiting approval". */
+const tile = (title: string) => screen.findByRole("button", { name: new RegExp(`^${title}\\b`) });
+
+/**
+ * A queue opened in full. The dashboard shows only counts until a tile is
+ * clicked (18 Sep 2026), so this opens it first, unless it already is.
+ */
 const panel = async (title: string) => {
+  const button = await tile(title);
+  if (button.getAttribute("aria-expanded") !== "true") await userEvent.click(button);
   const heading = await screen.findByRole("heading", { name: title });
   // The Card is the heading's nearest ancestor that also holds the table.
   return heading.closest("div.rounded-xl") as HTMLElement;
@@ -135,8 +143,42 @@ describe("DashboardPage", () => {
     renderWithAuth(<DashboardPage />, { permissions: ALL });
 
     for (const title of ["Purchase Requests", "Items", "Suppliers", "Inward Challans"]) {
-      expect(await screen.findByRole("heading", { name: title })).toBeInTheDocument();
+      expect(await tile(title)).toBeInTheDocument();
     }
+  });
+
+  /** Client request, 18 Sep 2026: counts only, until one is clicked. */
+  it("opens on counts alone, and shows a queue in full when its tile is clicked", async () => {
+    routes({ items: list([itemRow("i1", "Cement"), itemRow("i2", "Sand")]) });
+    renderWithAuth(<DashboardPage />, { permissions: ALL });
+
+    const items = await tile("Items");
+    await waitFor(() => expect(items).toHaveAccessibleName(/^Items\s*2\s*awaiting approval$/));
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(items).toHaveAttribute("aria-expanded", "false");
+
+    await userEvent.click(items);
+    expect(items).toHaveAttribute("aria-expanded", "true");
+    expect(await screen.findByText("Cement")).toBeInTheDocument();
+    expect(screen.getByText("Sand")).toBeInTheDocument();
+
+    // Clicking it again closes it.
+    await userEvent.click(items);
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  /** A tile wants the total and nothing else; the open queue wants every row. */
+  it("asks for one row per tile, and for the whole queue once opened", async () => {
+    routes({ items: list([itemRow("i1", "Cement")]) });
+    renderWithAuth(<DashboardPage />, { permissions: ALL });
+    const itemUrls = () =>
+      vi.mocked(globalThis.fetch).mock.calls.map((call) => String(call[0])).filter((url) => url.includes("/items?"));
+
+    await waitFor(() => expect(itemUrls().length).toBeGreaterThan(0));
+    expect(itemUrls().every((url) => url.includes("limit=1&") || url.endsWith("limit=1"))).toBe(true);
+
+    await panel("Items");
+    await waitFor(() => expect(itemUrls().some((url) => url.includes("limit=200"))).toBe(true));
   });
 
   it("gives each queue the columns of its own module", async () => {

@@ -144,7 +144,7 @@ function RejectionTable({ result }: { result: ItemSheetImportResult }) {
         {result.errors.length === 1 ? "problem" : "problems"} and upload again.
       </Alert>
 
-      <div className="mt-3 max-h-64 overflow-auto rounded-lg ring-1 ring-slate-200">
+      <div className="relative mt-3 max-h-64 overflow-auto rounded-lg ring-1 ring-slate-200">
         <table className="w-full text-left text-xs">
           <thead className="sticky top-0 bg-slate-50 text-slate-500">
             <tr>

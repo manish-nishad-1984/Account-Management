@@ -1,3 +1,4 @@
+import { Package, Percent } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,7 +11,6 @@ import {
 } from "@accountmanagement/contracts";
 import {
   Alert,
-  CheckboxField,
   FormDialog,
   FormSection,
   SelectField,
@@ -70,8 +70,6 @@ export function ItemFormDialog({
     resolver: zodResolver(createItemSchema),
     defaultValues: EMPTY,
   });
-
-  const isWithGst = watch("isWithGst");
 
   /**
    * THE NAME CHECK WHILE TYPING (client request, 14 Sep 2026).
@@ -143,7 +141,7 @@ export function ItemFormDialog({
         <p className="py-8 text-center text-sm text-slate-500">Loading item…</p>
       ) : (
         <>
-          <FormSection title="Item">
+          <FormSection icon={Package} title="Item">
             <div>
               <TextField
                 label="Item name"
@@ -156,7 +154,7 @@ export function ItemFormDialog({
                 {...register("name")}
               />
               {checking && !sameName && (
-                <p className="mt-1 text-[11px] leading-4 text-slate-400" aria-live="polite">
+                <p className="mt-1 text-xs leading-4 text-slate-400" aria-live="polite">
                   Checking existing items…
                 </p>
               )}
@@ -165,7 +163,7 @@ export function ItemFormDialog({
                   className="mt-1.5 rounded-md bg-amber-50 px-2.5 py-2 ring-1 ring-inset ring-amber-200"
                   aria-live="polite"
                 >
-                  <p className="text-[11px] font-medium leading-4 text-amber-800">
+                  <p className="text-xs font-medium leading-4 text-amber-800">
                     Items with a similar name already exist
                   </p>
                   <ul aria-label="Items with a similar name" className="mt-1 space-y-0.5">
@@ -203,46 +201,35 @@ export function ItemFormDialog({
             />
           </FormSection>
 
-          <FormSection title="GST" columns={2}>
-            <CheckboxField
-              label="Item is GST-inclusive"
-              className="sm:col-span-2"
-              {...register("isWithGst")}
-            />
+          {/*
+            NO "GST-inclusive" CHECKBOX, and the two boxes are always shown.
 
-            {isWithGst && (
-              <>
-                <TextField
-                  label="GST percentage"
-                  required
-                  inputMode="decimal"
-                  hint="5, 12, 18 or 28"
-                  error={errors.gstPercent?.message}
-                  {...register("gstPercent")}
-                />
-                <TextField
-                  label="GST amount"
-                  inputMode="decimal"
-                  error={errors.gstAmount?.message}
-                  {...register("gstAmount")}
-                />
-                <Alert tone="info" className="sm:col-span-2">
-                  The GST amount is stored exactly as entered. It is not calculated
-                  from the price and percentage — three different calculations
-                  exist in the current system and which is correct has not been
-                  settled with the business.
-                </Alert>
-              </>
-            )}
+            Both fields are optional: an item with no GST simply leaves them
+            empty. That is what the flag used to say, and saying it twice is what
+            let the two disagree. See `createItemSchema`.
+          */}
+          <FormSection icon={Percent} title="GST" columns={2}>
+            <TextField
+              label="GST percentage"
+              inputMode="decimal"
+              hint="5, 12, 18 or 28 — leave blank if the item has no GST"
+              error={errors.gstPercent?.message}
+              {...register("gstPercent")}
+            />
+            <TextField
+              label="GST amount"
+              inputMode="decimal"
+              error={errors.gstAmount?.message}
+              {...register("gstAmount")}
+            />
+            <Alert tone="info" className="sm:col-span-2">
+              The GST amount is stored exactly as entered. It is not calculated
+              from the price and percentage — three different calculations
+              exist in the current system and which is correct has not been
+              settled with the business.
+            </Alert>
           </FormSection>
 
-          <FormSection title="Status" columns={1}>
-            <CheckboxField
-              label="Approved"
-              hint="Recorded on the item. It does not currently prevent use on a purchase order."
-              {...register("isApproved")}
-            />
-          </FormSection>
         </>
       )}
     </FormDialog>
@@ -253,20 +240,16 @@ const EMPTY: FormValues = {
   name: "",
   unitId: "" as unknown as number,
   pricePerUnit: "",
-  isWithGst: false,
   gstPercent: "",
   gstAmount: "",
   hsnCode: "",
-  isApproved: false,
 };
 
 const toFormValues = (detail: ItemDetail): FormValues => ({
   name: detail.name,
   unitId: detail.unitId,
   pricePerUnit: detail.pricePerUnit,
-  isWithGst: detail.isWithGst,
   gstPercent: text(detail.gstPercent),
   gstAmount: text(detail.gstAmount),
   hsnCode: text(detail.hsnCode),
-  isApproved: detail.isApproved,
 });

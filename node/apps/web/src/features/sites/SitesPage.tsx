@@ -134,16 +134,16 @@ export function SitesPage() {
       <PageHeader
         title="Sites"
         description="Project sites, their contacts and their addresses"
-        actions={
-          canAdd ? (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              Add site
-            </Button>
-          ) : undefined
-        }
       />
 
       <DataGrid<SiteRow>
+        // One row above the grid (client request, 18 Sep 2026): the screen's
+        // filters beside the search box and its actions at the right-hand end.
+        actions={canAdd ? (
+            <Button icon={Plus} onClick={screen.openCreate}>
+              Add site
+            </Button>
+          ) : undefined}
         gridKey="sites"
         columns={columns}
         searchPlaceholder="Search site, area or contact"

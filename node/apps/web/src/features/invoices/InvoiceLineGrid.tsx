@@ -1,8 +1,13 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import type { UseFormRegisterReturn } from "react-hook-form";
-import { List, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { money, type InvoiceTotal } from "@accountmanagement/domain";
-import { Button, SelectField, TextField } from "../../components/ui";
+import {
+  IconButton,
+  SelectField,
+  TextField,
+} from "../../components/ui";
+import { ItemCombobox } from "../items/ItemCombobox";
 import { formatMoney, formatQuantity } from "../../lib/format";
 
 /**
@@ -100,9 +105,6 @@ export const discountPercentOf = (line: InvoiceLineValues | undefined): string =
 export const totalQuantityOf = (lines: InvoiceLineValues[] | undefined): string =>
   (lines ?? []).reduce((sum, line) => sum + Number(previewNumber(line?.quantity)), 0).toFixed(2);
 
-/** The dropdown value that switches a line to a typed product name. */
-const TYPE_A_NAME = "__type-a-name__";
-
 /**
  * A change event for a field this component only has `register` for.
  *
@@ -119,9 +121,10 @@ const changeOf = (name: string, value: string) => ({ target: { name, value }, ty
  * Three things used to make a line taller than one control, and each has moved
  * into the row:
  *
- *  - The "…or type a name" box under the item dropdown is now an option inside
- *    the dropdown, "Not in the list — type a name". Choosing it swaps the
- *    dropdown for a text box, with a button to go back to the list.
+ *  - The "…or type a name" box under the item dropdown is now the last option
+ *    inside the picker itself. It was briefly a dropdown option that SWAPPED the
+ *    cell for a text box; since `ItemCombobox` the box and the list are the same
+ *    control, so there is nothing to swap.
  *  - The note saying where a filled-in price came from is an icon inside the
  *    Price box. Its full text is the icon's tooltip and accessible name.
  *  - The discount percent sits inside the Disc/unit box, on the right.
@@ -133,7 +136,6 @@ export function InvoiceLineGrid({
   fields,
   lines,
   totals,
-  itemChoices,
   unitOptions,
   register,
   lineError,
@@ -149,7 +151,6 @@ export function InvoiceLineGrid({
   lines: InvoiceLineValues[] | undefined;
   /** Already computed by the caller with `invoiceTotal.corrected()`. */
   totals: InvoiceTotal;
-  itemChoices: { value: string; label: string }[];
   unitOptions: { value: number; label: string }[];
   /**
    * `register("items.0.quantity")` from the caller's own form.
@@ -174,8 +175,14 @@ export function InvoiceLineGrid({
   priceHint?: (index: number) => ReactNode;
   footerNote?: ReactNode;
 }) {
-  /** Lines switched to a typed name, keyed by the field array's stable id. */
-  const [typing, setTyping] = useState<Record<string, boolean>>({});
+  /*
+    GONE WITH THE COMBOBOX: a `typing` map keyed by the field array's id, saying
+    which lines had been swapped from the dropdown to a text box. It was state
+    ABOUT the form that had to be kept in step with the form — a line whose item
+    was cleared, or one loaded with a saved typed name, had to be reasoned back
+    into the right half. `ItemCombobox` derives the same thing from `itemId` and
+    `itemName` directly, so there is nothing left to keep in step.
+  */
 
   /**
    * The line a + just added, whose item dropdown takes the cursor once it has
@@ -191,14 +198,9 @@ export function InvoiceLineGrid({
     focusLine.current = null;
   }, [fields]);
 
-  const choices = [
-    ...itemChoices,
-    { value: TYPE_A_NAME, label: "Not in the list — type a name" },
-  ];
-
   return (
     <>
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className="w-full min-w-[60rem] text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -219,64 +221,58 @@ export function InvoiceLineGrid({
               const line = lines?.[index];
               const itemField = `items.${index}.itemId`;
               const nameField = `items.${index}.itemName`;
-              // A saved line that names a product without a catalogue item opens
-              // in the typed-name state, or its name would be hidden.
-              const showName =
-                typing[field.id] === true ||
-                (!line?.itemId && String(line?.itemName ?? "").trim() !== "");
               const percent = discountPercentOf(line);
 
               return (
                 <tr key={field.id} className="border-b border-slate-100 align-top">
-                  <td className="py-3.5 pr-2 text-slate-400">{index + 1}</td>
-                  <td className="py-2 pr-2">
-                    {showName ? (
-                      <div className="flex items-start gap-1">
-                        <TextField
-                          label={`Product name on line ${index + 1}`}
-                          labelHidden
-                          placeholder="Type the product name"
-                          className="min-w-0 flex-1"
-                          error={lineError(index, "itemName")}
-                          {...register(nameField)}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          icon={List}
-                          className="px-2 py-2"
-                          title="Choose from the item list instead"
-                          aria-label={`Choose an item from the list on line ${index + 1}`}
-                          onClick={() => {
-                            void register(nameField).onChange(changeOf(nameField, ""));
-                            setTyping((state) => ({ ...state, [field.id]: false }));
-                          }}
-                        />
-                      </div>
-                    ) : (
-                      <SelectField
-                        label={`Item on line ${index + 1}`}
-                        labelHidden
-                        placeholder="Choose an item"
-                        options={choices}
-                        error={lineError(index, "itemId")}
-                        {...register(itemField)}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          if (value === TYPE_A_NAME) {
-                            // The special option is never stored as an item id.
-                            event.target.value = "";
-                            void register(itemField).onChange(changeOf(itemField, ""));
-                            setTyping((state) => ({ ...state, [field.id]: true }));
-                            return;
-                          }
-                          void register(itemField).onChange(event);
-                          if (value) onItemChosen?.(index, value);
-                        }}
-                      />
-                    )}
+                  {/*
+                    A 41px ROW (client request, 21 Sep 2026, from a mockup),
+                    down from 53px. The control inside is 32px and fixed by
+                    CONTROL_COMPACT; the row is what is left, so `py-1` is the
+                    whole of the change. It matters because this is the one part
+                    of the document that repeats — a ten-line invoice is 120px
+                    shorter for it.
+
+                    THE TEXT-ONLY CELLS ARE 6px TALLER on each side (`py-2.5`
+                    against `py-1`), which is not an inconsistency: a 20px line
+                    of text has to be padded to the height of a 32px box beside
+                    it or the numbers sit above the values they belong to. The
+                    two move together.
+                  */}
+                  <td className="py-2.5 pr-2 text-slate-400">{index + 1}</td>
+                  {/*
+                    ONE PICKER, replacing a dropdown, a "Not in the list" option,
+                    a text box it swapped to and a button to swap back.
+
+                    All of that machinery existed because the dropdown could only
+                    offer 200 of the 758 items. `ItemCombobox` searches the
+                    server, so the whole catalogue is reachable and the typed
+                    name is simply the last option in the list — no swapping, and
+                    no `typing` state to keep in step with what was saved.
+                  */}
+                  <td className="py-1 pr-2">
+                    <ItemCombobox
+                      id={`field-item-on-line-${index + 1}`}
+                      label={`Item on line ${index + 1}`}
+                      labelHidden
+                      allowFreeText
+                      itemId={String(line?.itemId ?? "")}
+                      itemName={String(line?.itemName ?? "")}
+                      error={lineError(index, "itemId") ?? lineError(index, "itemName")}
+                      onPick={(pickedId) => {
+                        void register(itemField).onChange(changeOf(itemField, pickedId));
+                        void register(nameField).onChange(changeOf(nameField, ""));
+                        // The caller owns `setValue`: it fills the unit and the
+                        // latest price from the item that was chosen.
+                        if (pickedId) onItemChosen?.(index, pickedId);
+                      }}
+                      onTypeName={(name) => {
+                        void register(nameField).onChange(changeOf(nameField, name));
+                        void register(itemField).onChange(changeOf(itemField, ""));
+                      }}
+                    />
                   </td>
-                  <td className="py-2 pr-2">
+                  <td className="py-1 pr-2">
                     <TextField
                       label={`Quantity on line ${index + 1}`}
                       labelHidden
@@ -285,7 +281,7 @@ export function InvoiceLineGrid({
                       {...register(`items.${index}.quantity`)}
                     />
                   </td>
-                  <td className="py-2 pr-2">
+                  <td className="py-1 pr-2">
                     <SelectField
                       label={`Unit on line ${index + 1}`}
                       labelHidden
@@ -295,7 +291,7 @@ export function InvoiceLineGrid({
                       {...register(`items.${index}.unitId`)}
                     />
                   </td>
-                  <td className="relative py-2 pr-2">
+                  <td className="relative py-1 pr-2">
                     {/*
                       NEVER type="number" for money — it returns a float and this
                       system holds money as a decimal string end to end.
@@ -308,9 +304,10 @@ export function InvoiceLineGrid({
                       error={lineError(index, "unitPrice")}
                       {...register(`items.${index}.unitPrice`)}
                     />
-                    <div className="absolute right-3.5 top-[0.95rem] flex">{priceHint?.(index)}</div>
+                    {/* Tracks the cell's own padding — see the row-height note. */}
+                    <div className="absolute right-3.5 top-[0.7rem] flex">{priceHint?.(index)}</div>
                   </td>
-                  <td className="relative py-2 pr-2">
+                  <td className="relative py-1 pr-2">
                     <TextField
                       label={`Discount per unit on line ${index + 1}`}
                       labelHidden
@@ -321,14 +318,14 @@ export function InvoiceLineGrid({
                     />
                     {percent && (
                       <span
-                        className="tabular pointer-events-none absolute right-4 top-[1.05rem] text-[10px] text-slate-400"
+                        className="tabular pointer-events-none absolute right-4 top-[0.8rem] text-[11px] text-slate-400"
                         title="The discount as a percent of the price"
                       >
                         {percent}
                       </span>
                     )}
                   </td>
-                  <td className="py-2 pr-2">
+                  <td className="py-1 pr-2">
                     <TextField
                       label={`GST percent on line ${index + 1}`}
                       labelHidden
@@ -337,38 +334,31 @@ export function InvoiceLineGrid({
                       {...register(`items.${index}.gstPercent`)}
                     />
                   </td>
-                  <td className="tabular py-3.5 pr-2 text-right text-slate-600">
+                  <td className="tabular py-2.5 pr-2 text-right text-slate-600">
                     {formatMoney(totals.lines[index]?.gstAmount ?? "0")}
                   </td>
-                  <td className="tabular py-3.5 pr-2 text-right font-medium text-slate-900">
+                  <td className="tabular py-2.5 pr-2 text-right font-medium text-slate-900">
                     {formatMoney(totals.lines[index]?.total ?? "0")}
                   </td>
-                  <td className="py-2">
+                  <td className="py-1">
                     <div className="flex justify-end gap-0.5">
-                      <Button
-                        type="button"
-                        variant="ghost"
+                      <IconButton
+                        label={`Add a line after line ${index + 1}`}
                         icon={Plus}
-                        className="px-2 py-2 text-brand-600 hover:bg-brand-50 hover:text-brand-700"
-                        title={`Add a line after line ${index + 1}`}
-                        aria-label={`Add a line after line ${index + 1}`}
+                        tone="operation"
+                        size="sm"
                         onClick={() => {
                           focusLine.current = index + 1;
                           onInsert(index);
                         }}
                       />
-                      <Button
-                        type="button"
-                        variant="ghost"
+                      <IconButton
+                        label={`Remove line ${index + 1}`}
                         icon={Trash2}
-                        className="px-2 py-2"
-                        title={`Remove line ${index + 1}`}
-                        aria-label={`Remove line ${index + 1}`}
-                        // The last line is not removable: an invoice with no lines
-                        // has no total and the contract refuses it, so the button
-                        // would produce an error rather than a result.
-                        disabled={fields.length === 1}
+                        tone="destructive"
+                        size="sm"
                         onClick={() => onRemove(index)}
+                        disabled={fields.length === 1}
                       />
                     </div>
                   </td>

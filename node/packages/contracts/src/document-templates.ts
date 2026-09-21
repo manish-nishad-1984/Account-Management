@@ -29,13 +29,31 @@ import { optionalUuidId, requiredText } from "./fields";
  * Credit notes and returns are NOT separate types: in this app they are an
  * `invoiceType` inside a sales or purchase invoice, and they print with the
  * invoice's template. The title changes with the type (see `printTitle`).
+ *
+ * `purchase-order` was added on 18 Sep 2026, when the client asked for a PDF
+ * wherever a document is raised. The legacy app printed orders from a fixed
+ * page of their own (`POPrintDetails.cshtml`); the Classic order layout below
+ * follows that page.
  */
-export const DOCUMENT_TYPES = ["sales-invoice", "purchase-invoice"] as const;
+export const DOCUMENT_TYPES = ["sales-invoice", "purchase-invoice", "purchase-order"] as const;
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
 
 export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   "sales-invoice": "Sales Invoice",
   "purchase-invoice": "Purchase Invoice",
+  "purchase-order": "Purchase Order",
+};
+
+/**
+ * The permission subject whose `view` right opens each document — and so prints
+ * it. NOT the document type itself: purchase orders were granted from the legacy
+ * form "Purchase Orders", so their subject is the plural `purchase-orders`.
+ * Guessing it from the type gave a print route no order-viewer could open.
+ */
+export const DOCUMENT_TYPE_SUBJECTS: Record<DocumentType, string> = {
+  "sales-invoice": "sales-invoice",
+  "purchase-invoice": "purchase-invoice",
+  "purchase-order": "purchase-orders",
 };
 
 /**
@@ -53,6 +71,7 @@ export function printTitle(documentType: DocumentType, invoiceType: string): str
     case "Purchase Return":
       return "PURCHASE RETURN";
     default:
+      if (documentType === "purchase-order") return "PURCHASE ORDER";
       return documentType === "sales-invoice" ? "TAX INVOICE" : "PURCHASE INVOICE";
   }
 }
@@ -128,11 +147,22 @@ export const DOCUMENT_FIELDS = [
   "vehicle-no",
   "dispatch-by",
   "payment-terms",
+  "delivery-date",
   "site",
   "site-group",
   "contact",
 ] as const;
 export type DocumentField = (typeof DOCUMENT_FIELDS)[number];
+
+/**
+ * A field's label on this kind of document. Only the number differs: an order's
+ * number is its PO No, and "Invoice No" on a purchase order would send a
+ * supplier a document that calls itself something it is not.
+ */
+export function documentFieldLabel(field: DocumentField, documentType: DocumentType): string {
+  if (field === "number" && documentType === "purchase-order") return "PO No";
+  return DOCUMENT_FIELD_LABELS[field];
+}
 
 export const DOCUMENT_FIELD_LABELS: Record<DocumentField, string> = {
   number: "Invoice No",
@@ -145,6 +175,7 @@ export const DOCUMENT_FIELD_LABELS: Record<DocumentField, string> = {
   "vehicle-no": "Vehicle No",
   "dispatch-by": "Dispatched by",
   "payment-terms": "Payment terms",
+  "delivery-date": "Delivery date",
   site: "Site",
   "site-group": "Site location",
   contact: "Contact",
@@ -245,6 +276,16 @@ export const templateBlockSchema = z.discriminatedUnion("type", [
     /** The invoice's own description box. */
     heading: z.string().trim().max(40).default("Notes"),
   }),
+  block("terms", {
+    /**
+     * A purchase order's terms and conditions, as formatted in its editor. On a
+     * document without terms — every invoice — the block prints nothing.
+     *
+     * No heading by default: all three stored terms templates open with their
+     * own "Terms & Condition" line, and the legacy print added none above it.
+     */
+    heading: z.string().trim().max(60).default(""),
+  }),
   block("text", {
     heading: z.string().trim().max(60).nullable().default(null),
     body: z.string().max(2000).default(""),
@@ -311,12 +352,24 @@ type B = Omit<z.input<typeof templateBlockSchema>, "id">;
 const b = <T extends B>(value: T) => value as unknown as z.input<typeof templateBlockSchema>;
 
 const partyHeading = (documentType: DocumentType) =>
-  documentType === "sales-invoice" ? "Buyer (Bill to)" : "Supplier";
-
-const INVOICE_FIELDS = (documentType: DocumentType): DocumentField[] =>
   documentType === "sales-invoice"
-    ? ["number", "date", "challan-no", "lr-no", "vehicle-no", "dispatch-by", "payment-terms", "site"]
-    : ["number", "party-invoice-no", "date", "purchase-order-no", "challan-no", "lr-no", "vehicle-no", "site"];
+    ? "Buyer (Bill to)"
+    : documentType === "purchase-order"
+      ? "Consigner (Supplier)"
+      : "Supplier";
+
+const INVOICE_FIELDS = (documentType: DocumentType): DocumentField[] => {
+  switch (documentType) {
+    case "sales-invoice":
+      return ["number", "date", "challan-no", "lr-no", "vehicle-no", "dispatch-by", "payment-terms", "site"];
+    case "purchase-invoice":
+      return ["number", "party-invoice-no", "date", "purchase-order-no", "challan-no", "lr-no", "vehicle-no", "site"];
+    case "purchase-order":
+      // The legacy order's own boxes: PO No, Dated, Contact, Dispatched Through,
+      // Mode/Terms of Payment — plus the delivery date, which it held and never printed.
+      return ["number", "date", "delivery-date", "contact", "dispatch-by", "payment-terms", "site", "site-group"];
+  }
+};
 
 /**
  * A starter layout, ready to save as a template.
@@ -326,11 +379,20 @@ const INVOICE_FIELDS = (documentType: DocumentType): DocumentField[] =>
  * lines with HSN, a CGST/SGST summary by rate, both amounts in words, the bank
  * details, the declaration and the signatory. People have been reading that
  * page for years; the first template should not surprise them.
+ *
+ * A PURCHASE ORDER differs in three places, all taken from the legacy order
+ * print (`POPrintDetails.cshtml`): its terms and conditions print where an
+ * invoice has its bank details and declaration — a supplier is not paying into
+ * the company's account, so the bank details have no business on an order —
+ * the consignee is the site, and there is no discount column, because an order
+ * has no discount.
  */
 export function presetLayout(preset: TemplatePreset, documentType: DocumentType): TemplateLayout {
   presetSeq = 0;
   const heading = partyHeading(documentType);
   const fields = INVOICE_FIELDS(documentType);
+  const order = documentType === "purchase-order";
+  const terms = b({ type: "terms" });
 
   const rows = (() => {
     switch (preset) {
@@ -347,19 +409,31 @@ export function presetLayout(preset: TemplatePreset, documentType: DocumentType)
               { blocks: [b({ type: "party", heading })] },
               { blocks: [b({ type: "shipping", heading: "Consignee (Ship to)" })] },
             ),
-            row({ blocks: [b({ type: "items-table", columns: ["index", "item", "hsn", "quantity", "rate", "unit", "discount", "gst-percent", "amount"] })] }),
+            row({
+              blocks: [
+                b({
+                  type: "items-table",
+                  columns: order
+                    ? ["index", "item", "hsn", "quantity", "rate", "unit", "gst-percent", "amount"]
+                    : ["index", "item", "hsn", "quantity", "rate", "unit", "discount", "gst-percent", "amount"],
+                }),
+              ],
+            }),
             row({ blocks: [b({ type: "totals", rows: ["subtotal", "discount", "cgst-sgst", "tds", "round-off"] }), b({ type: "amount-in-words" })] }),
             row({ blocks: [b({ type: "tax-summary", split: "cgst-sgst", showHsn: true }), b({ type: "amount-in-words", show: "tax" })] }),
             row(
               {
-                blocks: [
-                  b({ type: "bank-details", heading: "Company's Bank Details" }),
-                  b({ type: "text", heading: "Declaration", body: "We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct." }),
-                ],
+                weight: order ? 2 : 1,
+                blocks: order
+                  ? [terms]
+                  : [
+                      b({ type: "bank-details", heading: "Company's Bank Details" }),
+                      b({ type: "text", heading: "Declaration", body: "We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct." }),
+                    ],
               },
               { blocks: [b({ type: "signature", label: "Authorised Signatory" })] },
             ),
-            row({ blocks: [b({ type: "text", body: "This is a Computer Generated Invoice", align: "center" })] }),
+            row({ blocks: [b({ type: "text", body: order ? "This is a Computer Generated Purchase Order" : "This is a Computer Generated Invoice", align: "center" })] }),
           ],
         };
       case "compact":
@@ -378,9 +452,10 @@ export function presetLayout(preset: TemplatePreset, documentType: DocumentType)
             ),
             row({ blocks: [b({ type: "items-table", columns: ["index", "item", "quantity", "unit", "rate", "gst-percent", "amount"], showDescription: false })] }),
             row(
-              { weight: 3, blocks: [b({ type: "amount-in-words" }), b({ type: "bank-details" })] },
+              { weight: 3, blocks: order ? [b({ type: "amount-in-words" })] : [b({ type: "amount-in-words" }), b({ type: "bank-details" })] },
               { weight: 2, blocks: [b({ type: "totals", rows: ["subtotal", "discount", "gst", "tds", "round-off"] })] },
             ),
+            ...(order ? [row({ blocks: [terms] })] : []),
             row({ blocks: [b({ type: "signature" })] }),
           ],
         };
@@ -397,13 +472,22 @@ export function presetLayout(preset: TemplatePreset, documentType: DocumentType)
               { blocks: [b({ type: "party", heading, showContact: true })] },
               { blocks: [b({ type: "shipping" })] },
             ),
-            row({ blocks: [b({ type: "items-table", columns: ["index", "item", "hsn", "quantity", "unit", "rate", "discount", "taxable", "gst-percent", "gst-amount", "amount"] })] }),
+            row({
+              blocks: [
+                b({
+                  type: "items-table",
+                  columns: order
+                    ? ["index", "item", "hsn", "quantity", "unit", "rate", "taxable", "gst-percent", "gst-amount", "amount"]
+                    : ["index", "item", "hsn", "quantity", "unit", "rate", "discount", "taxable", "gst-percent", "gst-amount", "amount"],
+                }),
+              ],
+            }),
             row(
               { weight: 3, blocks: [b({ type: "tax-summary", split: "cgst-sgst", showHsn: false }), b({ type: "notes" })] },
               { weight: 2, blocks: [b({ type: "totals", rows: ["subtotal", "discount", "cgst-sgst", "tds", "round-off"] }), b({ type: "amount-in-words" })] },
             ),
             row(
-              { blocks: [b({ type: "bank-details" })] },
+              { weight: order ? 2 : 1, blocks: [order ? terms : b({ type: "bank-details" })] },
               { blocks: [b({ type: "signature" })] },
             ),
           ],
@@ -424,6 +508,7 @@ export function presetLayout(preset: TemplatePreset, documentType: DocumentType)
               { weight: 2, blocks: [b({ type: "totals", rows: ["subtotal", "gst", "round-off"] })] },
             ),
             row({ blocks: [b({ type: "amount-in-words" })] }),
+            ...(order ? [row({ blocks: [terms] })] : []),
           ],
         };
     }
@@ -561,13 +646,32 @@ export const printDocumentSchema = z.object({
     vehicleNo: nullableText,
     dispatchBy: nullableText,
     paymentTerms: nullableText,
+    /** A purchase order's. Null on an invoice. */
+    deliveryDate: nullableText,
+    /** "Immediate" was ticked on the order instead of a date. */
+    deliveryImmediate: z.boolean(),
     siteName: nullableText,
     siteLocationName: nullableText,
     contactName: nullableText,
     contactNumber: nullableText,
   }),
   description: nullableText,
+  /**
+   * Who the goods go to, printed above the shipping address. Null prints the
+   * party, as invoices always have. An order's consignee is the SITE: printing
+   * the supplier's own name above the delivery address, as the invoice layout
+   * would, sends the supplier to themselves.
+   */
+  shippingName: nullableText,
   shippingAddress: nullableText,
+  /**
+   * A purchase order's terms and conditions, as HTML — already put through the
+   * server's allowlist sanitiser (`sanitise-terms.ts`) when the document is
+   * assembled for printing, not only when it was saved, so an order imported
+   * from the legacy database cannot bring its markup onto the page unfiltered.
+   * Null on an invoice.
+   */
+  terms: nullableText,
   company: printCompanySchema,
   party: printPartySchema,
   lines: z.array(printLineSchema),

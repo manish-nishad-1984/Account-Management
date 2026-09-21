@@ -1,27 +1,44 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import clsx from "clsx";
-import { CalendarDays, LogOut, Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronRight,
+  LogOut,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  X,
+} from "lucide-react";
 import { financialYear } from "@accountmanagement/domain";
 import { hasPermission } from "@accountmanagement/contracts";
 import { useAuth } from "../contexts/AuthContext";
 import { NAV } from "../navigation/nav";
+import { IconButton, Tooltip } from "./ui/icon-button";
 import { SiteScopePicker } from "./SiteScopePicker";
 import { RecordLayoutPicker } from "./RecordLayoutPicker";
 import { useRecordLayout } from "../contexts/RecordLayoutContext";
 
 /**
- * Account Book panel shell: a module rail that collapses to icons, a slim top
- * bar, and the routed page on a soft surface.
+ * Account Book shell: a light module rail that collapses to icons, a slim top
+ * bar, and the routed page on a soft neutral ground.
  *
- * Screens not yet migrated stay visible but dimmed and marked, so the panel
+ * THE RAIL IS LIGHT, and that is the largest single change of the redesign. It
+ * was a near-black navy column, which is a fine look and the wrong one here: it
+ * put the heaviest object on the screen permanently in the reader's periphery,
+ * and it meant the application had two colour systems - one for the rail and one
+ * for everything else - so a component could not simply be moved between them.
+ * One surface family now, white to #f7f7f8, with sky doing the work of saying
+ * what is selected.
+ *
+ * Screens not yet migrated stay visible but muted and marked, so the rail
  * doubles as a readable record of migration progress rather than hiding work.
  */
 
 const collapseKey = (userId: string | null) =>
   `accountbook.sidebarCollapsed.${userId ?? "anonymous"}`;
 
-/** Storage can throw — a private window, or a browser set to block site data. */
+/** Storage can throw - a private window, or a browser set to block site data. */
 function readCollapsed(userId: string | null): boolean {
   try {
     return window.localStorage.getItem(collapseKey(userId)) === "true";
@@ -38,18 +55,62 @@ function writeCollapsed(userId: string | null, collapsed: boolean): void {
   }
 }
 
+/**
+ * Where you are, in the top bar: `Masters > Companies`.
+ *
+ * BACK IN THE HEADER at the client's request (16 Sep 2026). The redesign had
+ * moved it into `PageHeader`, on the reasoning that a trail reads best directly
+ * above the title it qualifies. The people using the screens want it in the bar,
+ * which is where the .NET app puts it and where they look for it - and that is
+ * the better argument, because it is the one from use.
+ *
+ * DERIVED, NOT PASSED. Both halves come out of `NAV`, the same list the rail is
+ * built from and the same list `App` builds its routes from, so a screen that is
+ * renamed or moves between sections is right here with no edit. Every route
+ * inside the shell is a `NAV` entry, so the lookup always hits; anything else
+ * (`/print/...`) renders outside the shell and never reaches this.
+ *
+ * The SECTION is what gives way when the bar runs out of room, not the page
+ * name: "Companies" on its own still says where you are, "Masters >" on its own
+ * says nothing.
+ */
+function Breadcrumb() {
+  const { pathname } = useLocation();
+  const section = NAV.find((group) => group.items.some((item) => item.to === pathname));
+  const current = section?.items.find((item) => item.to === pathname);
+  if (!section || !current) return null;
+
+  return (
+    <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5">
+      <span className="hidden shrink-0 text-sm text-slate-500 sm:inline">
+        {section.title}
+      </span>
+      <ChevronRight aria-hidden className="hidden size-3.5 shrink-0 text-slate-300 sm:block" />
+      {/*
+        The page's own name, lightly highlighted (client request, 18 Sep 2026):
+        with the titles gone from the pages, this is where a page says what it is.
+      */}
+      <span
+        aria-current="page"
+        className="truncate rounded-md bg-brand-50 px-2 py-0.5 text-sm font-semibold text-brand-700 ring-1 ring-inset ring-brand-100"
+      >
+        {current.label}
+      </span>
+    </nav>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
-  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { paneOpen } = useRecordLayout();
+  const { paneOpen, pageOpen, setPageHost } = useRecordLayout();
 
   /**
    * COLLAPSING IS A DESKTOP IDEA, and every class that acts on it is an `lg:`
    * one.
    *
    * On a phone the rail is already off-canvas, and full width when open, so a
-   * "collapsed" drawer would be a 64px column of icons laid over the page —
+   * "collapsed" drawer would be a 64px column of icons laid over the page -
    * strictly worse than the drawer, and reachable only by someone who collapsed
    * it at a desk and then picked up their phone. The stored preference is
    * carried on both; only the wide layout acts on it.
@@ -76,8 +137,8 @@ export function AppShell({ children }: { children: ReactNode }) {
    *
    * Every nav entry has carried a `permission` since the navigation was written
    * and nothing read it, so the sidebar offered all seventeen screens to
-   * everyone. Two of them answer 403 for a real production user — the reports,
-   * whose forms are deliberately inactive — and following those links produced a
+   * everyone. Two of them answer 403 for a real production user - the reports,
+   * whose forms are deliberately inactive - and following those links produced a
    * fully drawn page with "could not be loaded" on it, which reads as a fault to
    * retry rather than a door that is closed.
    *
@@ -85,7 +146,7 @@ export function AppShell({ children }: { children: ReactNode }) {
    * the server, which is the difference from the .NET app, where the Razor
    * partial was the only check.
    *
-   * A section whose every item is hidden hides its heading too — otherwise the
+   * A section whose every item is hidden hides its heading too - otherwise the
    * rail grows an empty "REPORTS" label with nothing under it.
    */
   const nav = useMemo(() => {
@@ -99,47 +160,100 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [user?.permissions]);
 
   return (
-    <div className="flex h-full bg-slate-50">
+    <div className="flex h-full bg-app">
       {sidebarOpen && (
         <div
           onClick={() => setSidebarOpen(false)}
-          className="fixed inset-0 z-30 bg-slate-900/50 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-30 bg-slate-900/40 lg:hidden"
           aria-hidden
         />
       )}
 
+      {/*
+        232px expanded, 64px collapsed. The rail carries five section headings
+        and seventeen destinations; at the 256px this was, the longest label
+        ("Ledger & Balances") still had 70px of air to its right on every screen.
+      */}
       <aside
         id="app-sidebar"
         className={clsx(
-          "fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col",
-          "bg-shell-900 transition-[transform,width] duration-200 ease-out",
+          "fixed inset-y-0 left-0 z-40 flex w-[232px] shrink-0 flex-col",
+          "border-r border-slate-200 bg-white",
+          "transition-[transform,width] duration-200 ease-out",
           "lg:static lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
           collapsed && "lg:w-16",
         )}
       >
+        {/*
+          THE COLLAPSE CONTROL LIVES HERE, in the brand block, at the client's
+          request (16 Sep 2026). It was in the top bar, one breakpoint away from
+          the hamburger, so that the same corner worked the navigation at every
+          width. On the rail it is on the thing it collapses, which is the more
+          obvious place to reach for - and it frees the top-left corner of the
+          bar for the breadcrumb that moved there on the same day.
+
+          COLLAPSED, THE BRAND MARK STANDS DOWN FOR IT. 64px holds one 32px
+          square and no more, and a rail that cannot be reopened from its own
+          header is worse than one with no logo in it. Little is lost: expanded
+          is the default state, and the mark is the first thing in it.
+        */}
         <div
           className={clsx(
-            "flex h-16 items-center gap-3 border-b border-white/10 px-5",
-            collapsed && "lg:justify-center lg:px-0",
+            "flex h-14 shrink-0 items-center gap-2.5 border-b border-slate-200 px-3",
+            collapsed && "lg:justify-center lg:gap-0 lg:px-0",
           )}
         >
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white shadow-lg">
+          <div
+            className={clsx(
+              "flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-xs font-bold text-white",
+              collapsed && "lg:hidden",
+            )}
+          >
             AB
           </div>
           <div className={clsx("min-w-0 leading-tight", collapsed && "lg:hidden")}>
-            <div className="truncate text-sm font-semibold text-white">Account Book</div>
-            <div className="truncate text-[11px] text-slate-400">D H Infra</div>
+            <div className="truncate text-sm font-semibold text-slate-900">Account Book</div>
+            <div className="truncate text-xs text-slate-500">D H Infra</div>
           </div>
+
+          {/*
+            Desktop only, and deliberately: on a phone the rail is off-canvas and
+            full width, so a collapsed 64px column laid over the page would be
+            strictly worse than the drawer. The X beside this is the phone's
+            answer, and the two never show at the same time.
+          */}
+          <Tooltip label={collapsed ? "Expand navigation" : "Collapse navigation"}>
+            <button
+              onClick={toggleCollapsed}
+              aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+              aria-expanded={!collapsed}
+              aria-controls="app-sidebar"
+              className={clsx(
+                "hidden size-8 shrink-0 items-center justify-center rounded-lg",
+                "text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900",
+                "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500",
+                "lg:inline-flex",
+                !collapsed && "ml-auto",
+              )}
+            >
+              {collapsed ? (
+                <PanelLeftOpen aria-hidden className="size-4" />
+              ) : (
+                <PanelLeftClose aria-hidden className="size-4" />
+              )}
+            </button>
+          </Tooltip>
+
           <button
             onClick={() => setSidebarOpen(false)}
             aria-label="Close navigation"
             /*
              * A 40px box, not the 28px this was. It only ever appears on a phone,
-             * where it is hit with a thumb — and it was the smallest control in
+             * where it is hit with a thumb - and it was the smallest control in
              * the application. The icon stays the same size; the padding grows.
              */
-            className="ml-auto rounded-md p-3 text-slate-400 hover:bg-white/10 hover:text-white lg:hidden"
+            className="ml-auto rounded-md p-3 text-slate-500 hover:bg-slate-100 hover:text-slate-900 lg:hidden"
           >
             <X className="size-4" />
           </button>
@@ -147,26 +261,26 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <nav
           className={clsx(
-            "scroll-subtle flex-1 overflow-y-auto px-3 py-4",
+            "scroll-subtle flex-1 overflow-y-auto px-2.5 py-3",
             collapsed && "lg:px-2",
           )}
           aria-label="Main"
         >
           {nav.map((section, sectionIndex) => (
-            <div key={section.title} className="mb-6 last:mb-2">
+            <div key={section.title} className="mb-4 last:mb-1">
               {/*
                 Collapsed, the heading has nowhere to go: "MASTERS" does not fit
-                in 64px, and truncating it to "MAS…" says less than nothing. A
+                in 64px, and truncating it to "MAS..." says less than nothing. A
                 hairline keeps the grouping visible instead. It is skipped above
                 the first section, where the brand block's own border already
                 draws that line.
               */}
               {collapsed && sectionIndex > 0 && (
-                <div aria-hidden className="mx-2 mb-3 hidden h-px bg-white/10 lg:block" />
+                <div aria-hidden className="mx-2 mb-2.5 hidden h-px bg-slate-200 lg:block" />
               )}
               <div
                 className={clsx(
-                  "mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500",
+                  "mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400",
                   collapsed && "lg:hidden",
                 )}
               >
@@ -186,7 +300,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                          * The label is hidden with `lg:hidden` rather than dropped
                          * from the tree, so the drawer on a phone still reads
                          * normally. Hidden text carries no accessible name, though,
-                         * so the collapsed rail names each link itself — and says
+                         * so the collapsed rail names each link itself - and says
                          * out loud which screens are not built yet, since those
                          * lose their "soon" badge to the narrower column.
                          */
@@ -194,32 +308,46 @@ export function AppShell({ children }: { children: ReactNode }) {
                         title={
                           collapsed
                             ? planned
-                              ? `${item.label} — not migrated yet`
+                              ? `${item.label} - not migrated yet`
                               : item.label
                             : undefined
                         }
                         className={({ isActive }) =>
                           clsx(
-                            "group relative flex items-center gap-2.5 rounded-lg px-3 py-2",
+                            // 36px rows. Seventeen of them plus five headings is
+                            // 780px, which fits a 13-inch laptop without the rail
+                            // scrolling - the thing that made the old 40px rows
+                            // worth changing.
+                            "group flex h-9 items-center gap-2.5 rounded-lg px-2.5",
                             "text-sm transition-colors duration-150",
                             collapsed && "lg:justify-center lg:px-0",
                             isActive
-                              ? "bg-white/10 font-medium text-white"
+                              ? "bg-brand-50 font-medium text-brand-700"
                               : planned
-                                ? "text-slate-500 hover:bg-white/5 hover:text-slate-300"
-                                : "text-slate-300 hover:bg-white/5 hover:text-white",
+                                ? "text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+                                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
                           )
                         }
                       >
                         {({ isActive }) => (
                           <>
-                            {isActive && (
-                              <span
-                                aria-hidden
-                                className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-brand-400"
-                              />
-                            )}
-                            <Icon aria-hidden className="size-4 shrink-0" />
+                            {/*
+                              SKY WHEN SELECTED, neutral dark grey otherwise. The
+                              pale fill alone is a weak signal at a glance down a
+                              17-row list; the fill plus a coloured mark is not,
+                              and neither is a coloured block.
+                            */}
+                            <Icon
+                              aria-hidden
+                              className={clsx(
+                                "size-4 shrink-0 transition-colors",
+                                isActive
+                                  ? "text-brand-600"
+                                  : planned
+                                    ? "text-slate-300"
+                                    : "text-slate-500 group-hover:text-slate-700",
+                              )}
+                            />
                             <span className={clsx("truncate", collapsed && "lg:hidden")}>
                               {item.label}
                             </span>
@@ -227,7 +355,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                               <span
                                 title="Not migrated yet"
                                 className={clsx(
-                                  "ml-auto rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-600 ring-1 ring-inset ring-slate-700",
+                                  "ml-auto rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-400 ring-1 ring-inset ring-slate-200",
                                   collapsed && "lg:hidden",
                                 )}
                               >
@@ -245,103 +373,76 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
 
-        <div className="border-t border-white/10 p-3">
+        <div className="shrink-0 border-t border-slate-200 p-2.5">
           <div
             className={clsx(
-              "flex items-center gap-2.5 rounded-lg px-2 py-2",
+              "flex items-center gap-2.5 rounded-lg px-1.5 py-1",
               collapsed && "lg:flex-col lg:gap-1 lg:px-0",
             )}
           >
             <div
               title={collapsed ? user?.userName : undefined}
-              className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-600 text-[11px] font-semibold text-white"
+              className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700 ring-1 ring-inset ring-brand-100"
             >
               {initials}
             </div>
             <div className={clsx("min-w-0 flex-1 leading-tight", collapsed && "lg:hidden")}>
-              <div className="truncate text-sm font-medium text-white">{user?.userName}</div>
-              <div className="truncate text-[11px] text-slate-400">
+              <div className="truncate text-sm font-medium text-slate-900">
+                {user?.userName}
+              </div>
+              <div className="truncate text-xs text-slate-500">
                 {user?.permissions.length ?? 0} permissions
               </div>
             </div>
-            <button
+            {/*
+              36px, and it stays 36px with a mouse. Sign out sits next to nothing
+              else, so a small target is both easy to miss and easy to hit by
+              accident on the way past - the reason the old 28px version carried
+              a touch-only override, which this size makes unnecessary.
+            */}
+            <IconButton
+              label="Sign out"
+              icon={LogOut}
+              size="md"
               onClick={() => void logout()}
-              aria-label="Sign out"
-              title="Sign out"
-              /*
-               * Bigger on touch, unchanged with a mouse. Sign out sits next to
-               * nothing else, so a 28px target was easy to miss and easy to hit
-               * by accident on the way past.
-               */
-              className="shrink-0 rounded-md p-3 text-slate-400 transition-colors hover:bg-white/10 hover:text-white lg:p-1.5"
-            >
-              <LogOut className="size-4" />
-            </button>
+            />
           </div>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/85 px-4 backdrop-blur lg:px-8">
-          {/*
-            `min-w-0` is what lets this side give way, and its absence was a real
-            bug: a flex item defaults to `min-width: auto` and refuses to shrink
-            below its own content, so the breadcrumb held the header open and the
-            header pushed past the viewport. EVERY screen scrolled sideways on a
-            phone as a result — 424px of header in a 390px window, measured — and
-            the three that did not were simply the ones with short names.
-          */}
-          <div className="flex min-w-0 items-center gap-3">
+        {/*
+          56px, opaque white, one hairline under it.
+
+          One job on each side: say where you are on the left, say whose data is
+          on screen on the right. The left gives way when width runs short and
+          the right does not - see the note on the scope picker below.
+        */}
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 lg:px-8">
+          <div className="flex min-w-0 items-center gap-2">
             <button
               onClick={() => setSidebarOpen(true)}
               aria-label="Open navigation"
-              className="-ml-1 shrink-0 rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 lg:hidden"
+              className="-ml-1 shrink-0 rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 lg:hidden"
             >
-              <Menu className="size-5" />
+              <Menu className="size-4" />
             </button>
 
-            {/*
-              THE COLLAPSE CONTROL SITS WHERE THE HAMBURGER SITS, one breakpoint
-              apart, so the same corner works the navigation at every width.
-
-              Putting it inside the rail was the other option and is the worse
-              one: collapsed, the rail is 64px of destinations with no room for a
-              control that is not one, and a toggle tucked under the sign-out
-              button is somewhere nobody looks.
-            */}
-            <button
-              onClick={toggleCollapsed}
-              aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-              aria-expanded={!collapsed}
-              aria-controls="app-sidebar"
-              title={collapsed ? "Expand navigation" : "Collapse navigation"}
-              className="-ml-1 hidden shrink-0 rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 lg:inline-flex"
-            >
-              {collapsed ? (
-                <PanelLeftOpen aria-hidden className="size-5" />
-              ) : (
-                <PanelLeftClose aria-hidden className="size-5" />
-              )}
-            </button>
-
-            <Breadcrumb pathname={location.pathname} />
+            <Breadcrumb />
           </div>
 
           {/*
             This side does NOT give way. The scope picker says whose data is on
             screen, and a reader who cannot see it is reading numbers without
-            knowing which site they belong to. The breadcrumb truncates instead —
-            the page below repeats its own name as a heading.
+            knowing which site they belong to.
           */}
           <div className="flex shrink-0 items-center gap-2">
-            {/* Temporary: here so the business can compare the two layouts on
-                real data and answer the question in doc 19. It goes when they do. */}
             <RecordLayoutPicker />
 
             <SiteScopePicker />
 
             {/* The financial year yields the width on a phone; the site does not. */}
-            <div className="hidden items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 ring-1 ring-inset ring-slate-200 sm:flex">
+            <div className="hidden h-9 items-center gap-2 rounded-lg bg-slate-50 px-2.5 ring-1 ring-inset ring-slate-200 sm:flex">
               <CalendarDays aria-hidden className="size-3.5 text-slate-400" />
               <span className="hidden text-xs text-slate-500 lg:inline">Financial year</span>
               <span className="tabular text-xs font-semibold text-slate-800">{fy}</span>
@@ -353,7 +454,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           Room for the docked record, and only while one is open.
 
           The pane is `position: fixed`, so without this it would sit ON TOP of
-          the right-hand columns of the grid — which would look like the split
+          the right-hand columns of the grid - which would look like the split
           layout while hiding exactly the data the split layout exists to keep
           visible. Narrow screens get no padding: there the pane is full width
           and covering the list is the only thing it can do.
@@ -369,12 +470,27 @@ export function AppShell({ children }: { children: ReactNode }) {
              * `sm:pr-[29rem]`, and the conditional lost: Tailwind emits `sm:`
              * rules before `lg:` ones, so at desktop width `lg:px-8` overrode
              * it and the padding stayed 32px. The pane then sat ON TOP of 415px
-             * of the list — the layout looked right in a screenshot and defeated
+             * of the list - the layout looked right in a screenshot and defeated
              * its own purpose. Measured in a real browser, not reasoned about.
              */
             paneOpen ? "pr-4 sm:pr-[29rem]" : "pr-4 lg:pr-8",
           )}
         >
+          {/*
+            Where a record goes when it takes the page.
+
+            It is a SIBLING of the routed page rather than a part of it, because
+            the element below is about to be hidden and the form that renders
+            into this one is written by the screen inside it. See `pageHost` in
+            `RecordLayoutContext` for why this is a portal target and not a
+            `fixed` overlay covering the content area.
+
+            Rendered ALWAYS, empty almost all of the time. A host that appeared
+            only once a record was open would not yet exist at the moment the
+            record asked where to go, and the first click would open nothing.
+          */}
+          <div ref={setPageHost} />
+
           {/*
             FULL WIDTH, no 1280px cap.
 
@@ -383,33 +499,23 @@ export function AppShell({ children }: { children: ReactNode }) {
             spent on margins while the grids underneath were scrolling
             sideways. The client asked for the width and the grids are the
             reason: 640px of unused desk is what a wide monitor was bought for.
+
+            HIDDEN, NOT UNMOUNTED, while a record has the page. The list keeps
+            its search, its sort, its cursor and its loaded rows, so the back
+            arrow returns to the screen the user left rather than to a fresh one
+            that has to fetch itself again - which is the difference between a
+            drill-down and a round trip.
+
+            The ATTRIBUTE, not a `hidden` class. `[hidden]` is display:none in
+            every browser's own stylesheet, so this does not depend on Tailwind
+            having emitted anything, and it is the markup that actually means
+            "not currently relevant" - which is what takes the list out of the
+            accessibility tree, so a screen reader is not offering a hundred rows
+            that are not on screen.
           */}
-          {children}
+          <div hidden={pageOpen}>{children}</div>
         </main>
       </div>
     </div>
-  );
-}
-
-function Breadcrumb({ pathname }: { pathname: string }) {
-  const section = NAV.find((group) => group.items.some((item) => item.to === pathname));
-  const item = section?.items.find((entry) => entry.to === pathname);
-  if (!item) {
-    return null;
-  }
-  return (
-    <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-sm">
-      {/*
-        The section and its separator go on a phone. They are the least useful
-        half — "Masters / Companies" says little more than "Companies" — and on a
-        390px screen they are the difference between a header that fits and one
-        that does not.
-      */}
-      <span className="hidden shrink-0 text-slate-400 sm:inline">{section?.title}</span>
-      <span aria-hidden className="hidden shrink-0 text-slate-300 sm:inline">
-        /
-      </span>
-      <span className="truncate font-medium text-slate-700">{item.label}</span>
-    </nav>
   );
 }

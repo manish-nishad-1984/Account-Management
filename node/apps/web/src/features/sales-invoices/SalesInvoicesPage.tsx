@@ -7,7 +7,13 @@ import {
 } from "@accountmanagement/contracts";
 import { Check, Plus, Undo2 } from "lucide-react";
 import { DataGrid, RowActions } from "../../components/DataGrid";
-import { Badge, Button, ConfirmDialog, PageHeader, SelectField } from "../../components/ui";
+import {
+  Badge,
+  Button,
+  ConfirmDialog,
+  PageHeader,
+  SelectField,
+} from "../../components/ui";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import {
   useCompanyOptions,
@@ -17,6 +23,11 @@ import {
 } from "./api";
 import { SalesInvoiceFormDialog } from "./SalesInvoiceFormDialog";
 import { usePermission } from "../../lib/permissions";
+import {
+  DocumentActions,
+  DocumentPdfError,
+  useDocumentPdf,
+} from "../document-templates/DocumentActions";
 import { useMasterScreen } from "../../lib/use-master-screen";
 import { formatDate, formatMoney } from "../../lib/format";
 
@@ -33,7 +44,8 @@ const TYPE_OPTIONS = [
   ...SALES_INVOICE_TYPES.map((value) => ({ value, label: value })),
 ];
 
-const isReturn = (type: string) => type === "Sales Return" || type === "Credit Note";
+const isReturn = (type: string) =>
+  type === "Sales Return" || type === "Credit Note";
 
 export function SalesInvoicesPage() {
   const canAdd = usePermission("sales-invoice", "add");
@@ -47,6 +59,7 @@ export function SalesInvoicesPage() {
   const [companyId, setCompanyId] = useState<string>("");
 
   const scope = useSiteScope();
+  const pdf = useDocumentPdf();
   const companies = useCompanyOptions();
   const query = useSalesInvoiceList(screen.listParams, {
     isApproved: approval === "all" ? undefined : approval === "approved",
@@ -61,7 +74,10 @@ export function SalesInvoicesPage() {
   const companyOptions = useMemo(
     () => [
       { value: "", label: "All companies" },
-      ...(companies.data?.rows ?? []).map((row) => ({ value: row.id, label: row.name })),
+      ...(companies.data?.rows ?? []).map((row) => ({
+        value: row.id,
+        label: row.name,
+      })),
     ],
     [companies.data],
   );
@@ -78,10 +94,13 @@ export function SalesInvoicesPage() {
               the purchase side, because a sales invoice cannot exist without the
               number the server gave it.
             */}
-            <div className="tabular font-medium text-slate-900">{row.original.salesInvoiceNo}</div>
+            <div className="tabular font-medium text-slate-900">
+              {row.original.salesInvoiceNo}
+            </div>
             <div className="text-xs text-slate-500">
               {formatDate(row.original.documentDate) || "No date"}
-              {row.original.customerInvoiceNo && ` · Their ref ${row.original.customerInvoiceNo}`}
+              {row.original.customerInvoiceNo &&
+                ` · Their ref ${row.original.customerInvoiceNo}`}
             </div>
           </div>
         ),
@@ -94,15 +113,21 @@ export function SalesInvoicesPage() {
         header: "Customer",
         cell: ({ row }) => (
           <div>
-            <div className="font-medium text-slate-900">{row.original.customerName}</div>
-            <div className="text-xs text-slate-500">{row.original.companyName}</div>
+            <div className="font-medium text-slate-900">
+              {row.original.customerName}
+            </div>
+            <div className="text-xs text-slate-500">
+              {row.original.companyName}
+            </div>
           </div>
         ),
       },
       {
         id: "siteName",
         header: "Site",
-        cell: ({ row }) => <span className="text-slate-600">{row.original.siteName ?? "—"}</span>,
+        cell: ({ row }) => (
+          <span className="text-slate-600">{row.original.siteName ?? "—"}</span>
+        ),
       },
       {
         id: "totalAmount",
@@ -114,7 +139,8 @@ export function SalesInvoicesPage() {
             </div>
             <div className="tabular text-xs text-slate-500">
               {formatMoney(row.original.totalGstAmount)} GST
-              {row.original.tds !== "0.00" && ` · less ${formatMoney(row.original.tds)} TDS`}
+              {row.original.tds !== "0.00" &&
+                ` · less ${formatMoney(row.original.tds)} TDS`}
             </div>
           </div>
         ),
@@ -131,7 +157,9 @@ export function SalesInvoicesPage() {
               <Badge tone="neutral">{row.original.invoiceType}</Badge>
             )}
             {row.original.paymentStatus && (
-              <span className="text-xs text-slate-500">{row.original.paymentStatus}</span>
+              <span className="text-xs text-slate-500">
+                {row.original.paymentStatus}
+              </span>
             )}
           </div>
         ),
@@ -201,7 +229,9 @@ export function SalesInvoicesPage() {
         meta: { defaultHidden: true },
         cell: ({ row }) =>
           row.original.createdAt ? (
-            <span className="tabular text-slate-600">{formatDate(row.original.createdAt)}</span>
+            <span className="tabular text-slate-600">
+              {formatDate(row.original.createdAt)}
+            </span>
           ) : (
             <span className="text-slate-300">—</span>
           ),
@@ -229,6 +259,12 @@ export function SalesInvoicesPage() {
                 }
               />
             )}
+            <DocumentActions
+              pdf={pdf}
+              documentType="sales-invoice"
+              id={row.original.id}
+              label={row.original.salesInvoiceNo}
+            />
             <RowActions
               capabilities={row.original.capabilities}
               label={row.original.salesInvoiceNo}
@@ -239,7 +275,7 @@ export function SalesInvoicesPage() {
         ),
       },
     ],
-    [openEdit, askDelete, setApprovalMutation],
+    [openEdit, askDelete, setApprovalMutation, pdf],
   );
 
   return (
@@ -247,6 +283,40 @@ export function SalesInvoicesPage() {
       <PageHeader
         title="Sales Invoices"
         description="What has been billed to a customer, and what is due"
+      />
+
+      <DocumentPdfError pdf={pdf} />
+
+      <DataGrid<SalesInvoiceRow>
+        // One row above the grid (client request, 18 Sep 2026): the screen's
+        // filters beside the search box and its actions at the right-hand end.
+        filters={
+          <>
+            <SelectField
+              labelHidden
+              label="Approval"
+              value={approval}
+              options={APPROVAL_OPTIONS}
+              onChange={(event) =>
+                setApproval(event.target.value as ApprovalFilter)
+              }
+            />
+            <SelectField
+              labelHidden
+              label="Type"
+              value={invoiceType}
+              options={TYPE_OPTIONS}
+              onChange={(event) => setInvoiceType(event.target.value)}
+            />
+            <SelectField
+              labelHidden
+              label="Company"
+              value={companyId}
+              options={companyOptions}
+              onChange={(event) => setCompanyId(event.target.value)}
+            />
+          </>
+        }
         actions={
           canAdd && (
             <Button icon={Plus} onClick={screen.openCreate}>
@@ -254,36 +324,6 @@ export function SalesInvoicesPage() {
             </Button>
           )
         }
-      />
-
-      <div className="mb-4 flex flex-wrap gap-3">
-        <div className="max-w-xs flex-1">
-          <SelectField
-            label="Approval"
-            value={approval}
-            options={APPROVAL_OPTIONS}
-            onChange={(event) => setApproval(event.target.value as ApprovalFilter)}
-          />
-        </div>
-        <div className="max-w-xs flex-1">
-          <SelectField
-            label="Type"
-            value={invoiceType}
-            options={TYPE_OPTIONS}
-            onChange={(event) => setInvoiceType(event.target.value)}
-          />
-        </div>
-        <div className="max-w-xs flex-1">
-          <SelectField
-            label="Company"
-            value={companyId}
-            options={companyOptions}
-            onChange={(event) => setCompanyId(event.target.value)}
-          />
-        </div>
-      </div>
-
-      <DataGrid<SalesInvoiceRow>
         gridKey="sales-invoices"
         columns={columns}
         searchPlaceholder="Search invoice number, challan number or customer"
@@ -320,8 +360,8 @@ export function SalesInvoicesPage() {
               ?
             </p>
             <p className="mt-2 text-xs text-slate-500">
-              The invoice and its lines are removed permanently. This cannot be undone, and the
-              number is not reissued.
+              The invoice and its lines are removed permanently. This cannot be
+              undone, and the number is not reissued.
             </p>
           </>
         }

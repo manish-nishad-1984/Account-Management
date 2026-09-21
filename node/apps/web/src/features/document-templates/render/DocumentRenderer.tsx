@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import {
-  DOCUMENT_FIELD_LABELS,
   ITEM_COLUMN_LABELS,
+  documentFieldLabel,
   PAGE_DIMENSIONS_MM,
   formatMoney,
   formatPercent,
@@ -88,6 +88,11 @@ const STYLESHEET = `
 .dt-signature-line { border-top: 0.75pt solid var(--dt-text); padding-top: 0.8mm; display: inline-block; min-width: 45mm; }
 .dt-divider { border: 0; border-top: 1pt solid var(--dt-primary); margin: 0; }
 .dt-pre { white-space: pre-wrap; }
+.dt-terms { font-size: 0.95em; }
+.dt-terms p { margin: 0 0 1mm; }
+.dt-terms ol, .dt-terms ul { margin: 0 0 1mm; padding-left: 5mm; }
+.dt-terms li { margin: 0 0 0.4mm; }
+.dt-terms h1, .dt-terms h2, .dt-terms h3, .dt-terms h4 { font-size: 1em; font-weight: 700; margin: 0 0 1mm; }
 `;
 
 /** The stylesheet, once per page that shows documents. Harmless if repeated. */
@@ -122,6 +127,8 @@ function fieldValue(document: PrintDocument, field: DocumentField): string | nul
       return f.dispatchBy;
     case "payment-terms":
       return f.paymentTerms;
+    case "delivery-date":
+      return f.deliveryImmediate ? "Immediate" : f.deliveryDate ? formatDate(f.deliveryDate) : null;
     case "site":
       return f.siteName;
     case "site-group":
@@ -245,7 +252,7 @@ function Block({ block, document, styles }: { block: TemplateBlock; document: Pr
       return (
         <div>
           {block.heading && <div className="dt-heading">{block.heading}</div>}
-          <div className="dt-strong">{document.party.name}</div>
+          <div className="dt-strong">{document.shippingName ?? document.party.name}</div>
           <div className="dt-pre">{document.shippingAddress ?? document.party.address ?? ""}</div>
         </div>
       );
@@ -260,7 +267,7 @@ function Block({ block, document, styles }: { block: TemplateBlock; document: Pr
           <dl className="dt-fields">
             {rows.map(([field, value]) => (
               <div key={field} style={{ display: "contents" }}>
-                <dt>{DOCUMENT_FIELD_LABELS[field]}</dt>
+                <dt>{documentFieldLabel(field, document.documentType)}</dt>
                 <dd>{value}</dd>
               </div>
             ))}
@@ -463,6 +470,23 @@ function Block({ block, document, styles }: { block: TemplateBlock; document: Pr
         <div>
           {block.heading && <div className="dt-heading">{block.heading}</div>}
           <div className="dt-pre">{document.description}</div>
+        </div>
+      );
+
+    case "terms":
+      if (!document.terms) return null;
+      return (
+        <div>
+          {block.heading && <div className="dt-heading">{block.heading}</div>}
+          {/*
+            HTML, AND THE ONE PLACE THIS RENDERER TRUSTS ANY. It is only ever the
+            order's terms as the API sends them, and the API runs them through
+            its allowlist sanitiser while assembling the document for print
+            (`print-documents.repository.ts`) — not only when they were saved,
+            because orders imported from the legacy database were never saved
+            through it. Nothing a template author types reaches this.
+          */}
+          <div className="dt-terms" dangerouslySetInnerHTML={{ __html: document.terms }} />
         </div>
       );
 

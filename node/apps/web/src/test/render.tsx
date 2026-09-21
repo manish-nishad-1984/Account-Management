@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
 import { vi } from "vitest";
@@ -55,6 +55,7 @@ export function renderWithAuth(
           // A test renders a screen that is already signed in; the restore from
           // the refresh cookie is over before any of this matters.
           isRestoring: false,
+          endedReason: null,
           login: vi.fn(),
           logout: vi.fn(),
         }}
@@ -104,4 +105,56 @@ export function routeFetch(routes: Array<[RegExp, unknown]>, fallback?: unknown)
     }
     return Promise.resolve(json({ message: `No test route for ${url.pathname}` }, 404));
   });
+}
+
+/**
+ * Choose an item in an `ItemCombobox`, the way a person does.
+ *
+ * The item dropdowns were native `<select>`s until 16 Sep 2026 and every test
+ * drove them with `selectOptions(…, id)`. They are comboboxes now: there is no
+ * `<option value="{uuid}">` to select, so a test picks BY NAME, which is what
+ * the user sees and types.
+ *
+ * Opening it, letting the debounced search settle and clicking the option is
+ * three steps that every one of those tests would otherwise repeat.
+ */
+/**
+ * Either `userEvent` itself or an instance from `userEvent.setup()`.
+ *
+ * The two have different signatures — the bare export takes an options argument
+ * the instance does not — and both are used across this suite. Naming only the
+ * methods these helpers call accepts either.
+ */
+type UserLike = {
+  click: (element: Element) => Promise<unknown>;
+  type: (element: Element, text: string) => Promise<unknown>;
+};
+
+export async function pickItem(
+  user: UserLike,
+  field: RegExp,
+  itemName: string | RegExp,
+) {
+  const box = screen.getByRole("combobox", { name: field });
+  await user.click(box);
+
+  // The list is filtered by a 200ms-debounced request, so the option arrives
+  // after the click rather than with it.
+  const option = await screen.findByRole("option", { name: itemName });
+  await user.click(option);
+}
+
+/**
+ * Type a name into an `ItemCombobox` and commit it as free text, taking the
+ * "Use ‘…’ as a typed name" option at the bottom of the list.
+ */
+export async function typeItemName(
+  user: UserLike,
+  field: RegExp,
+  name: string,
+) {
+  const box = screen.getByRole("combobox", { name: field });
+  await user.click(box);
+  await user.type(box, name);
+  await user.click(await screen.findByRole("option", { name: /as a typed name/i }));
 }

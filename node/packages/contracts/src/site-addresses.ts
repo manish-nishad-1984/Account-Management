@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { requiredText } from "./fields";
-import { siteLocationSchema } from "./site-locations";
+import { locationChoiceSchema } from "./site-locations";
 import { siteContactSchema } from "./sites";
 
 /**
@@ -71,7 +71,7 @@ export type AddressChoice = z.infer<typeof addressChoiceSchema>;
 export const siteDocumentOptionsSchema = z.object({
   billingAddress: z.string().nullable(),
   shippingAddresses: z.array(addressChoiceSchema),
-  locations: z.array(siteLocationSchema),
+  locations: z.array(locationChoiceSchema),
   contacts: z.array(siteContactSchema),
 });
 export type SiteDocumentOptions = z.infer<typeof siteDocumentOptionsSchema>;

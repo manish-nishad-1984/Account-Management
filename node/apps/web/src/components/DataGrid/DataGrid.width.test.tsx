@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataGrid } from "./DataGrid";
@@ -52,9 +53,13 @@ function columns(withActions: boolean): ColumnDef<Row, unknown>[] {
   return list;
 }
 
-function renderGrid(withActions = true) {
+function renderGrid(
+  withActions = true,
+  toolbar: { filters?: React.ReactNode; actions?: React.ReactNode } = {},
+) {
   return render(
     <DataGrid
+      {...toolbar}
       columns={columns(withActions)}
       rows={ROWS}
       total={ROWS.length}
@@ -97,13 +102,31 @@ describe("row actions", () => {
     ).toBeInTheDocument();
   });
 
-  /** Losing the words is only acceptable because hovering gives them back. */
-  it("say the same thing on hover", () => {
+  /**
+   * Losing the words is only acceptable because hovering gives them back.
+   *
+   * It was a `title` attribute and is now a real tooltip, so this drives the
+   * pointer rather than reading a string off the element. The reason for the
+   * change is that `title` and a styled tip cannot coexist - the browser draws
+   * its own a second later, in its own corner, saying the same thing - so the
+   * attribute had to go and the behaviour had to be pinned somewhere else.
+   *
+   * The tip is `aria-hidden` and the button keeps its `aria-label`, which is why
+   * this queries by TEXT: the label is not text content, so the only node that
+   * can match is the tip itself.
+   */
+  it("say the same thing on hover", async () => {
+    const user = userEvent.setup();
     renderGrid();
-    expect(screen.getByRole("button", { name: "Edit Anmol Adhesives" })).toHaveAttribute(
-      "title",
-      "Edit Anmol Adhesives",
-    );
+    const edit = screen.getByRole("button", { name: "Edit Anmol Adhesives" });
+
+    expect(screen.queryByText("Edit Anmol Adhesives")).not.toBeInTheDocument();
+
+    await user.hover(edit);
+    expect(screen.getByText("Edit Anmol Adhesives")).toBeInTheDocument();
+
+    await user.unhover(edit);
+    expect(screen.queryByText("Edit Anmol Adhesives")).not.toBeInTheDocument();
   });
 
   it("keeps Delete visibly destructive", () => {
@@ -128,8 +151,17 @@ describe("the floating actions column", () => {
   it("pins the actions header with it, so the two cannot part company", () => {
     renderGrid();
     const headers = screen.getAllByRole("columnheader");
-    expect(headers.at(-1)!.className).toContain("sticky");
-    expect(headers[0]!.className).not.toContain("sticky");
+    expect(headers.at(-1)!.className).toContain("right-0");
+    expect(headers[0]!.className).not.toContain("right-0");
+  });
+
+  /** Every header is pinned to the TOP, so the rows scroll under it (18 Sep 2026). */
+  it("keeps the header row in view while the rows scroll", () => {
+    renderGrid();
+    for (const header of screen.getAllByRole("columnheader")) {
+      expect(header.className).toContain("sticky");
+      expect(header.className).toContain("top-0");
+    }
   });
 
   it("leaves every other cell to scroll normally", () => {
@@ -149,5 +181,19 @@ describe("the floating actions column", () => {
     for (const cell of cells) {
       expect(cell.className).not.toContain("sticky");
     }
+  });
+});
+
+/** One row above the grid (client request, 18 Sep 2026): search, filters, count and actions together. */
+describe("the toolbar", () => {
+  it("puts the screen's filters and actions on the search row", () => {
+    renderGrid(true, {
+      filters: <select aria-label="Status" />,
+      actions: <button type="button">New request</button>,
+    });
+    const search = screen.getByRole("textbox", { name: "Search" });
+    const row = search.closest("div.border-b") as HTMLElement;
+    expect(within(row).getByRole("combobox", { name: "Status" })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "New request" })).toBeInTheDocument();
   });
 });

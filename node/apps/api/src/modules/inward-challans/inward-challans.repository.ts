@@ -332,7 +332,7 @@ export class InwardChallansRepository extends BaseRepository {
    * the date with `DateTime.Now`, though all three are displayed on the list it
    * feeds. `InsertMultipleItemInWordDetails`, in the same file, writes them.
    */
-  async create(input: CreateInwardChallan, actorId: string): Promise<InwardChallanDetail> {
+  async create(input: CreateInwardChallan & { isApproved?: boolean }, actorId: string): Promise<InwardChallanDetail> {
     const row = await writing(() =>
       this.db.transaction(async (tx) => {
         const [item] = await tx
@@ -367,7 +367,7 @@ export class InwardChallansRepository extends BaseRepository {
 
   async update(
     id: string,
-    input: UpdateInwardChallan,
+    input: UpdateInwardChallan & { isApproved?: boolean },
     actorId: string,
   ): Promise<InwardChallanDetail> {
     const { documentDate, vehicleNumber, ...rest } = input;

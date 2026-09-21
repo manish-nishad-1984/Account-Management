@@ -1,6 +1,9 @@
 import clsx from "clsx";
 import type { AddressChoice } from "@accountmanagement/contracts";
 import { SelectField } from "../../components/ui";
+// The density scale, so the shipping picker is the same 36px box as the Location
+// select beside it. See the note on CONTROL_BASE.
+import { CONTROL_BASE, LABEL_BASE, ringFor } from "../../components/ui/fields";
 import { useSiteDocumentOptions } from "./api";
 
 /**
@@ -64,8 +67,15 @@ export function SiteAddressFields({
 
   return (
     <div className="space-y-3">
+      {/*
+        The location select is full width, like the billing box and the shipping
+        picker under it. It was capped at 20rem when this panel was a narrow
+        column; in the paired layout that cap left two thirds of the row empty
+        above two full-width fields, which reads as a mistake rather than as
+        restraint.
+      */}
       {location && (
-        <div className="sm:max-w-xs">
+        <div>
           <SelectField
             label="Location"
             options={locationOptions}
@@ -102,13 +112,15 @@ export function SiteAddressFields({
               : (options.data?.billingAddress ??
                 "This site has no address. Add one on the Sites screen.")}
         </div>
-        <p className="mt-1 text-[11px] leading-4 text-slate-500">
+        <p className="mt-1 text-xs leading-4 text-slate-500">
           Always the site's own address, set when this is saved.
         </p>
       </div>
 
-      <fieldset>
-        <legend className="text-xs font-medium text-slate-600">Shipping address</legend>
+      <div>
+        <label htmlFor={SHIPPING_ID} className={LABEL_BASE}>
+          Shipping address
+        </label>
         {!chosenSite ? (
           <p className="mt-1 text-sm text-slate-500">Choose a site first.</p>
         ) : options.isLoading ? (
@@ -118,38 +130,111 @@ export function SiteAddressFields({
             This site has no addresses yet. Add them on the Sites or Site Location screen.
           </p>
         ) : (
-          <div
-            role="radiogroup"
-            aria-label="Shipping address"
-            className="scroll-subtle mt-1 max-h-56 overflow-y-auto rounded-lg ring-1 ring-inset ring-slate-200"
-          >
-            {savedElsewhere && (
-              <ShippingOption
-                label="Saved on this document"
-                address={current}
-                checked
-                onChoose={() => onShippingChange(current)}
-              />
+          <>
+            {/*
+              A PICKER, NOT A SCROLLING RADIO LIST (client request, 21 Sep 2026,
+              from a mockup).
+
+              Every address of a site was drawn as a radio row holding a wrapped
+              two- or three-line address, so a site with four of them was a 224px
+              scrolling panel inside a form that was already too tall — and the
+              chosen one was usually out of sight inside it. Collapsed to one
+              control with the choice shown underneath, it is four lines instead
+              of fifteen and the answer is always visible.
+
+              WHAT MUST NOT CHANGE, and has not: the value posted is still the
+              address TEXT, one of them at a time, copied onto the document so
+              that correcting the site later cannot rewrite where a delivery
+              went. Every choice is still offered, and `<optgroup>` carries the
+              source — site, site shipping, site delivery, location — which the
+              radio rows carried as a caption.
+            */}
+            <select
+              id={SHIPPING_ID}
+              className={clsx(CONTROL_BASE, ringFor(shippingError), "mt-1 px-2.5 pr-8")}
+              value={current}
+              aria-invalid={shippingError ? true : undefined}
+              aria-describedby={shippingError ? `${SHIPPING_ID}-error` : undefined}
+              onChange={(event) => onShippingChange(event.target.value)}
+            >
+              {/*
+                Disabled, so the picker cannot be used to go BACK to nothing —
+                the radio list it replaces had no way to un-choose either, and
+                changing that would be changing what the form can post.
+              */}
+              <option value="" disabled>
+                Choose a shipping address
+              </option>
+              {savedElsewhere && (
+                <optgroup label={SAVED_HERE}>
+                  <option value={current}>{oneLine(current)}</option>
+                </optgroup>
+              )}
+              {groupBySource(choices).map((group) => (
+                <optgroup key={group.source} label={SOURCE_LABEL[group.source]}>
+                  {group.choices.map((choice) => (
+                    <option key={choice.key} value={choice.address}>
+                      {oneLine(choice.address)}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+
+            {/*
+              The chosen address as it will be printed — the select collapses it
+              to one line, and an address is read in its own shape.
+            */}
+            {current !== "" && (
+              <div className="mt-1.5 rounded-md bg-brand-50/60 px-2.5 py-1.5 ring-1 ring-inset ring-brand-100">
+                <p className="whitespace-pre-line text-xs leading-4 text-slate-800">{current}</p>
+                <p className="mt-0.5 text-xs leading-4 text-slate-500">
+                  {savedElsewhere
+                    ? SAVED_HERE
+                    : SOURCE_LABEL[
+                        choices.find((choice) => choice.address === current)?.source ?? "site"
+                      ]}
+                </p>
+              </div>
             )}
-            {choices.map((choice) => (
-              <ShippingOption
-                key={choice.key}
-                label={SOURCE_LABEL[choice.source]}
-                address={choice.address}
-                checked={choice.address === current}
-                onChoose={() => onShippingChange(choice.address)}
-              />
-            ))}
-          </div>
+          </>
         )}
         {shippingError && (
-          <p className="mt-1 text-[11px] leading-4 text-rose-600" role="alert">
+          <p
+            id={`${SHIPPING_ID}-error`}
+            className="mt-1 text-xs leading-4 font-medium text-rose-600"
+            role="alert"
+          >
             {shippingError}
           </p>
         )}
-      </fieldset>
+      </div>
     </div>
   );
+}
+
+const SHIPPING_ID = "shipping-address";
+
+/** What a document carries that the site's list does not offer any more. */
+const SAVED_HERE = "Saved on this document";
+
+/** An address is stored with its line breaks; a dropdown option gets one line. */
+const oneLine = (address: string): string => address.replace(/\s+/g, " ").trim();
+
+/**
+ * The choices under their source heading, in the order the server sent them.
+ *
+ * Not `Object.groupBy` or a Map keyed by source: both would reorder the groups
+ * to key order, and the server sends the site's own address first on purpose.
+ */
+function groupBySource(choices: readonly AddressChoice[]) {
+  const groups: { source: AddressChoice["source"]; choices: AddressChoice[] }[] = [];
+  for (const choice of choices) {
+    const existing = groups.find((group) => group.source === choice.source);
+    if (existing) existing.choices.push(choice);
+    else groups.push({ source: choice.source, choices: [choice] });
+  }
+  return groups;
 }
 
 const SOURCE_LABEL: Record<AddressChoice["source"], string> = {
@@ -159,35 +244,3 @@ const SOURCE_LABEL: Record<AddressChoice["source"], string> = {
   location: "Location address",
 };
 
-function ShippingOption({
-  label,
-  address,
-  checked,
-  onChoose,
-}: {
-  label: string;
-  address: string;
-  checked: boolean;
-  onChoose: () => void;
-}) {
-  return (
-    <label
-      className={clsx(
-        "flex cursor-pointer items-start gap-2.5 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 hover:bg-slate-50",
-        checked && "bg-brand-50/60",
-      )}
-    >
-      <input
-        type="radio"
-        name="shipping-address"
-        checked={checked}
-        onChange={onChoose}
-        className="mt-0.5 size-3.5 shrink-0 border-slate-300 text-brand-600 focus:ring-brand-500"
-      />
-      <span className="min-w-0">
-        <span className="block whitespace-pre-line text-slate-800">{address}</span>
-        <span className="block text-[11px] text-slate-500">{label}</span>
-      </span>
-    </label>
-  );
-}

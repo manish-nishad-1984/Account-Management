@@ -250,7 +250,7 @@ export class PurchaseRequestsRepository extends BaseRepository {
    * back on submit — so the number was allocated when the form opened and
    * confirmed only when it was saved, if ever. Two open forms, one number.
    */
-  async create(input: CreatePurchaseRequest, actorId: string): Promise<PurchaseRequestDetail> {
+  async create(input: CreatePurchaseRequest & { isApproved?: boolean }, actorId: string): Promise<PurchaseRequestDetail> {
     const now = new Date();
 
     const row = await writing(() =>
@@ -280,7 +280,7 @@ export class PurchaseRequestsRepository extends BaseRepository {
    */
   async update(
     id: string,
-    input: UpdatePurchaseRequest,
+    input: UpdatePurchaseRequest & { isApproved?: boolean },
     actorId: string,
   ): Promise<PurchaseRequestDetail> {
     const { documentDate, ...rest } = input;

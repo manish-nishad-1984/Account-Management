@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { presetLayout, templateLayoutSchema, type TemplateLayoutInput } from "@accountmanagement/contracts";
 import { DocumentRenderer, DocumentStyles } from "./DocumentRenderer";
 import { sampleDocument } from "./sample-document";
+import { formatDate } from "../../../lib/format";
 
 /**
  * The renderer draws thumbnails, previews and the printed page, so what it
@@ -120,3 +121,63 @@ describe("DocumentRenderer", () => {
     expect(page.style.getPropertyValue("--dt-primary")).toBe("#be185d");
   });
 });
+
+/**
+ * A PURCHASE ORDER (client, 18 Sep 2026), drawn as the legacy order print laid
+ * it out: its own number label, the site as consignee, and its terms.
+ */
+describe("DocumentRenderer, for a purchase order", () => {
+  const order = () => sampleDocument("purchase-order");
+
+  it("draws the order with the Classic layout, titled and numbered as an order", () => {
+    draw(presetLayout("classic", "purchase-order"), order());
+
+    expect(screen.getByText("PURCHASE ORDER")).toBeInTheDocument();
+    expect(screen.getByText("PO No")).toBeInTheDocument();
+    expect(screen.queryByText("Invoice No")).not.toBeInTheDocument();
+    expect(screen.getByText("Consigner (Supplier)")).toBeInTheDocument();
+    expect(screen.getByText("This is a Computer Generated Purchase Order")).toBeInTheDocument();
+  });
+
+  /** A supplier is not paying into the company's account. */
+  it("prints no bank details and no discount column on an order", () => {
+    draw(presetLayout("classic", "purchase-order"), order());
+
+    expect(screen.queryByText("Company's Bank Details")).not.toBeInTheDocument();
+    expect(screen.queryByText("Disc/unit")).not.toBeInTheDocument();
+  });
+
+  it("sends the goods to the site, not back to the supplier", () => {
+    draw(layoutOf([{ id: "s", type: "shipping" }]), order());
+    expect(screen.getByText("Sample Site")).toBeInTheDocument();
+    expect(screen.queryByText("Sample Supplier Pvt Ltd")).not.toBeInTheDocument();
+  });
+
+  it("prints the terms with their formatting", () => {
+    const { container } = draw(layoutOf([{ id: "t", type: "terms" }]), {
+      ...order(),
+      terms: "<p>Terms &amp; Condition</p><ol><li>Deliver to gate 2</li></ol>",
+    });
+
+    expect(container.querySelector(".dt-terms ol li")).toHaveTextContent("Deliver to gate 2");
+    expect(screen.getByText("Terms & Condition")).toBeInTheDocument();
+  });
+
+  it("prints nothing for the terms block on an invoice, which has none", () => {
+    const { container } = draw(layoutOf([{ id: "t", type: "terms", heading: "Terms" }]));
+    expect(container.querySelector(".dt-terms")).toBeNull();
+    expect(screen.queryByText("Terms")).not.toBeInTheDocument();
+  });
+
+  it("gives the delivery date, or says Immediate", () => {
+    const fields = layoutOf([{ id: "f", type: "document-fields", fields: ["delivery-date"] }]);
+    const { unmount } = draw(fields, order());
+    // Formatted as the app formats every date; the month is "Sep" or "Sept" by ICU version.
+    expect(screen.getByText(formatDate("2026-09-21T00:00:00.000Z"))).toBeInTheDocument();
+    unmount();
+
+    draw(fields, { ...order(), fields: { ...order().fields, deliveryDate: null, deliveryImmediate: true } });
+    expect(screen.getByText("Immediate")).toBeInTheDocument();
+  });
+});
+

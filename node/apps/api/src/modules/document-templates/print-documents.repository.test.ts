@@ -2,7 +2,9 @@ import "reflect-metadata";
 import { beforeEach, describe, expect, it } from "vitest";
 import { NotFoundException } from "@nestjs/common";
 import {
+  DOCUMENT_TYPE_SUBJECTS,
   createPurchaseInvoiceSchema,
+  createPurchaseOrderSchema,
   createSalesInvoiceSchema,
   permission,
   printDocumentSchema,
@@ -12,6 +14,10 @@ import { PrintDocumentsRepository } from "./print-documents.repository";
 import { DocumentPrintController, DocumentTemplatesController } from "./document-templates.controller";
 import { SalesInvoicesRepository } from "../sales-invoices/sales-invoices.repository";
 import { PurchaseInvoicesRepository } from "../purchase-invoices/purchase-invoices.repository";
+import { PurchaseOrdersRepository } from "../purchase-orders/purchase-orders.repository";
+import { SalesInvoicesController } from "../sales-invoices/sales-invoices.controller";
+import { PurchaseInvoicesController } from "../purchase-invoices/purchase-invoices.controller";
+import { PurchaseOrdersController } from "../purchase-orders/purchase-orders.controller";
 import * as schema from "../../db/schema";
 import { freshDatabase } from "../../test/fresh-database";
 import type { Database } from "../../db/database";
@@ -29,6 +35,7 @@ describe("PrintDocumentsRepository (real PostgreSQL)", () => {
   let db: Database;
   let sales: SalesInvoicesRepository;
   let purchases: PurchaseInvoicesRepository;
+  let orders: PurchaseOrdersRepository;
   let repo: PrintDocumentsRepository;
   let companyId: string;
   let partyId: string;
@@ -40,7 +47,8 @@ describe("PrintDocumentsRepository (real PostgreSQL)", () => {
     db = await freshDatabase();
     sales = new SalesInvoicesRepository(db);
     purchases = new PurchaseInvoicesRepository(db);
-    repo = new PrintDocumentsRepository(db, sales, purchases);
+    orders = new PurchaseOrdersRepository(db);
+    repo = new PrintDocumentsRepository(db, sales, purchases, orders);
 
     await db.insert(schema.countries).values({ id: 1, name: "India" });
     await db.insert(schema.states).values({ id: 24, name: "Gujarat", stateCode: 24, countryId: 1 });
@@ -193,6 +201,108 @@ describe("PrintDocumentsRepository (real PostgreSQL)", () => {
     expect(printed.totals.totalAmount).toBe(invoice.totalAmount);
   });
 
+  describe("a purchase order", () => {
+    const orderLines = () => [
+      { itemId: cementId, unitId, quantity: "10", unitPrice: "400.00", gstPercent: "28" },
+      { itemId: null, itemName: "Loose sand", unitId, quantity: "2.5", unitPrice: "1000.00", gstPercent: "5" },
+    ];
+
+    const raise = (extra: Record<string, unknown> = {}) =>
+      orders.create(
+        createPurchaseOrderSchema.parse({
+          supplierId: partyId,
+          companyId,
+          siteId,
+          dispatchBy: "Road",
+          paymentTerms: "30 days",
+          deliveryDate: "2026-09-25",
+          terms: "<p>Rates are <strong>fixed</strong>.</p><ol><li>Deliver to site gate 2</li></ol>",
+          items: orderLines(),
+          ...extra,
+        }),
+        ACTOR,
+      );
+
+    it("prints in the same shape, titled as an order, with its own fields", async () => {
+      const order = await raise();
+      const printed = await repo.purchaseOrder(order.id);
+
+      expect(printDocumentSchema.parse(printed)).toEqual(printed);
+      expect(printed).toMatchObject({
+        documentType: "purchase-order",
+        title: "PURCHASE ORDER",
+        number: order.poNo,
+        fields: {
+          dispatchBy: "Road",
+          paymentTerms: "30 days",
+          deliveryImmediate: false,
+          siteName: "Akwada Lake Front",
+        },
+        party: { name: "VARDAN ENTERPRISE" },
+        terms: "<p>Rates are <strong>fixed</strong>.</p><ol><li>Deliver to site gate 2</li></ol>",
+      });
+      expect(printed.fields.deliveryDate).toMatch(/^2026-09-25/);
+    });
+
+    /** Printing the supplier's name over the delivery address sends them to themselves. */
+    it("ships to the site, not to the supplier", async () => {
+      const printed = await repo.purchaseOrder((await raise()).id);
+      expect(printed.shippingName).toBe("Akwada Lake Front");
+    });
+
+    it("agrees with the order's totals, with no discount, TDS or round-off", async () => {
+      const order = await raise();
+      const printed = await repo.purchaseOrder(order.id);
+
+      // 4000 at 28% and 2500 at 5%: 1120 + 125 of GST.
+      expect(printed.totals).toMatchObject({
+        subtotal: order.subtotal,
+        totalGstAmount: order.totalGstAmount,
+        totalAmount: order.totalAmount,
+        totalDiscount: "0.00",
+        tds: "0.00",
+        roundOff: "0.00",
+      });
+      expect(printed.lines.map((line) => [line.name, line.netAmount, line.hsnCode])).toEqual([
+        ["OPC 53 Grade Cement", "4000.00", "2523"],
+        ["Loose sand", "2500.00", null],
+      ]);
+      expect(printed.taxSummary.gstAmount).toBe(order.totalGstAmount);
+    });
+
+    it("says Immediate rather than a date when that was ticked", async () => {
+      const printed = await repo.purchaseOrder((await raise({ deliveryDate: null, deliveryImmediate: true })).id);
+      expect(printed.fields).toMatchObject({ deliveryDate: null, deliveryImmediate: true });
+    });
+
+    /**
+     * An order imported from the legacy database never went through a write, so
+     * never through the sanitiser — and the legacy print rendered this column raw.
+     */
+    it("sanitises terms that reached the table without being saved through the API", async () => {
+      const order = await raise();
+      await db
+        .update(schema.purchaseOrders)
+        .set({ terms: '<p onclick="steal()">Pay in 30 days</p><script>steal()</script><img src=x onerror=steal()>' })
+        .where(eq(schema.purchaseOrders.id, order.id));
+
+      const printed = await repo.purchaseOrder(order.id);
+
+      expect(printed.terms).toContain("Pay in 30 days");
+      expect(printed.terms).not.toMatch(/script|onclick|onerror|<img/i);
+    });
+
+    it("puts the order's billing address under the company name, as the legacy print did", async () => {
+      const order = await raise();
+      await db
+        .update(schema.purchaseOrders)
+        .set({ billingAddress: "Akwada Lake Front, Bhavnagar" })
+        .where(eq(schema.purchaseOrders.id, order.id));
+
+      expect((await repo.purchaseOrder(order.id)).company.address).toBe("Akwada Lake Front, Bhavnagar");
+    });
+  });
+
   it("is a 404 for an invoice that does not exist", async () => {
     await expect(repo.salesInvoice("00000000-0000-0000-0000-000000000999")).rejects.toBeInstanceOf(
       NotFoundException,
@@ -244,7 +354,24 @@ describe("template and print permissions", () => {
   it.each([
     ["salesInvoice", "sales-invoice.view"],
     ["purchaseInvoice", "purchase-invoice.view"],
+    ["purchaseOrder", "purchase-orders.view"],
   ])("printing with %s asks only for %s", (method, required) => {
     expect(permissionsOf(DocumentPrintController.prototype, method)).toEqual([required]);
+  });
+
+  /**
+   * Printing asks for the SAME right that opens the document's own screen. The
+   * order route once asked for `purchase-order.view`, a right nobody holds —
+   * the order module's subject is plural — and the test beside it agreed,
+   * because it only compared the route with a string typed next to it.
+   */
+  it.each([
+    ["salesInvoice", SalesInvoicesController, "list", "sales-invoice"],
+    ["purchaseInvoice", PurchaseInvoicesController, "list", "purchase-invoice"],
+    ["purchaseOrder", PurchaseOrdersController, "list", "purchase-order"],
+  ] as const)("printing with %s asks for what the document's own list asks for", (method, controller, list, type) => {
+    const printing = permissionsOf(DocumentPrintController.prototype, method);
+    expect(printing).toEqual(permissionsOf(controller.prototype, list));
+    expect(printing).toEqual([`${DOCUMENT_TYPE_SUBJECTS[type]}.view`]);
   });
 });

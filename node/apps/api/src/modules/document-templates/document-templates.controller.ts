@@ -152,4 +152,12 @@ export class DocumentPrintController {
     const document = await this.documents.purchaseInvoice(id);
     return { document, ...(await this.templates.forPrinting("purchase-invoice", document.companyId)) };
   }
+
+  /** `purchase-orders`, plural — see `DOCUMENT_TYPE_SUBJECTS`. */
+  @Get("purchase-order/:id")
+  @Permissions("purchase-orders.view")
+  async purchaseOrder(@Param("id", ParseUUIDPipe) id: string): Promise<PrintBundle> {
+    const document = await this.documents.purchaseOrder(id);
+    return { document, ...(await this.templates.forPrinting("purchase-order", document.companyId)) };
+  }
 }

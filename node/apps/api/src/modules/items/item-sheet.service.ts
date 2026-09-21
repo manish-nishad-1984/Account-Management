@@ -71,7 +71,11 @@ export class ItemSheetService {
    * corrects the file and re-uploads, and now every row that DID land is a
    * "already exists" error, so the second attempt fails harder than the first.
    */
-  async import(bytes: Buffer, actorId: string): Promise<ItemSheetImportResult> {
+  async import(
+    bytes: Buffer,
+    actorId: string,
+    isApproved: boolean,
+  ): Promise<ItemSheetImportResult> {
     let sheet;
     try {
       sheet = await readWorkbook(bytes, ITEM_SHEET_MAX_ROWS);
@@ -123,7 +127,7 @@ export class ItemSheetService {
         continue;
       }
 
-      const values = toCreateItem(row, unit.id);
+      const values = toCreateItem(row, unit.id, isApproved);
       const match = existing.get(row.name.toLowerCase());
 
       if (!match) {
@@ -169,36 +173,40 @@ export class ItemSheetService {
 /**
  * A parsed row as the item it will become.
  *
- * TWO deliberate departures from the legacy importer live here, and both are
- * forced rather than chosen.
+ * TWO departures from the legacy importer used to live here. Both are gone.
  *
- * **`isWithGst` is derived, not hard-coded false.** The legacy import writes
- * `IsWithGst = false` while also writing `Gstamount` and `Gstper`, which
- * produces exactly the contradiction `createItemSchema` refuses — GST figures
- * on an item marked as not carrying GST. It is not hypothetical: the production
- * row captured in `legacy-screens/05-item-master.md` has that shape, with
- * IsWithGST off and 18% / ₹4.86 populated beside it. Reproducing it would mean
- * importing rows that our own edit form then refuses to save, so the choice is
- * between weakening the validation and setting the flag honestly. An item with
- * a GST percentage is a GST item.
+ * `isWithGst` had to be derived from the percentage
+ * rather than copied, because the legacy import writes `IsWithGst = false` while
+ * also writing `Gstamount` and `Gstper` — the production row captured in
+ * `legacy-screens/05-item-master.md` has IsWithGST off with 18% / ₹4.86 beside
+ * it. That contradiction is gone along with the flag itself, removed at the
+ * business's request on 17 Sep 2026: a GST percentage is now the only thing that
+ * says an item carries GST, and it is carried across unchanged.
  *
- * **`isApproved` is true**, which our create form does NOT default to. This one
- * IS the legacy behaviour and is kept on purpose: the legacy list filters on
- * `IsApproved == true`, so an import that left items unapproved would load 758
- * rows that are invisible in the system they came from. Bulk import is the
- * approval — somebody deliberately uploaded the catalogue. Worth a line in
- * front of the business, because it means `item.add` grants in bulk what a
- * single create does not.
+ * `isApproved` was hard-coded true, on the reasoning that bulk import IS the
+ * approval — somebody deliberately uploaded the catalogue. That was flagged at
+ * the time as something the business should rule on, because it meant `item.add`
+ * granted in bulk what a single create did not. They ruled on 17 Sep 2026, and
+ * the other way: approval follows the WRITER'S OWN approve right, here exactly
+ * as on the create form. An importer who can approve imports approved rows; one
+ * who cannot sends them to the queue like anything else they enter.
+ *
+ * The legacy worry behind the hard-coded true does not apply to this system.
+ * There, the list filtered on `IsApproved == true`, so unapproved rows were
+ * invisible; here the items grid shows them with a "Not approved" badge.
  */
-function toCreateItem(row: ParsedItemRow, unitId: number): CreateItem {
+function toCreateItem(
+  row: ParsedItemRow,
+  unitId: number,
+  isApproved: boolean,
+): CreateItem & { isApproved: boolean } {
   return {
     name: row.name,
     unitId,
     pricePerUnit: row.pricePerUnit,
-    isWithGst: row.gstPercent !== null,
     gstPercent: row.gstPercent,
     gstAmount: row.gstAmount,
     hsnCode: row.hsnCode,
-    isApproved: true,
+    isApproved,
   };
 }

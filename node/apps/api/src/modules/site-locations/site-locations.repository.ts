@@ -13,7 +13,7 @@ import type {
   SortDirection,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
-import { siteLocationAddresses, siteLocations, sites } from "../../db/schema";
+import { siteLocations, sites } from "../../db/schema";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
@@ -33,9 +33,13 @@ export interface SiteLocationListRow {
  * Site locations, one entry per site. See `db/schema/site-locations.ts` for what
  * replaced the site groups and why the shape changed.
  *
- * THERE IS NO ENTRY TABLE. A site "has an entry" when it has a live location or
- * a location address, so the list is a query over `sites` filtered on those, and
- * deleting an entry empties both lists.
+ * THERE IS NO ENTRY TABLE. A site "has an entry" when it has a live location, so
+ * the list is a query over `sites` filtered on that, and deleting an entry
+ * soft-deletes them all.
+ *
+ * ONE LIST SINCE 17 SEP 2026. A location and its address are one row — see the
+ * contract for why the business reversed the two-list shape it chose on 15 Sep.
+ * `site_location_addresses` is no longer read; migration 0020 copied it in here.
  *
  * Every outer reference inside a `sql` template is written `${sites}.id`, not
  * `${sites.id}`. Drizzle renders the latter unqualified, and inside a subquery
@@ -49,13 +53,12 @@ export class SiteLocationsRepository extends BaseRepository {
   }
 
   private hasEntry() {
-    return sql`(
-      exists (select 1 from ${siteLocations} l where l.site_id = ${sites}.id and l.is_deleted = false)
-      or exists (select 1 from ${siteLocationAddresses} a where a.site_id = ${sites}.id)
+    return sql`exists (
+      select 1 from ${siteLocations} l where l.site_id = ${sites}.id and l.is_deleted = false
     )`;
   }
 
-  /** A search matches the site's name or any of its live location names. */
+  /** A search matches the site's name, a live location name, or its address. */
   private searchFilter(search: string | undefined) {
     if (!search) return undefined;
     const pattern = `%${search}%`;
@@ -63,7 +66,8 @@ export class SiteLocationsRepository extends BaseRepository {
       ${sites.name} ilike ${pattern}
       or exists (
         select 1 from ${siteLocations} l
-        where l.site_id = ${sites}.id and l.is_deleted = false and l.name ilike ${pattern}
+        where l.site_id = ${sites}.id and l.is_deleted = false
+          and (l.name ilike ${pattern} or l.address ilike ${pattern})
       )
     )`;
   }
@@ -86,14 +90,22 @@ export class SiteLocationsRepository extends BaseRepository {
       select count(*)::int from ${siteLocations} l
       where l.site_id = ${sites}.id and l.is_deleted = false
     )`;
+    /**
+     * How many pairs actually have an address — a PROGRESS figure, not a second
+     * list's length. After migration 0020 a site holds pairs with no address and
+     * pairs with no name, and "7 locations, 3 with an address" is what somebody
+     * tidying this up needs to see without opening the form.
+     */
     const addressCount = sql<number>`(
-      select count(*)::int from ${siteLocationAddresses} a where a.site_id = ${sites}.id
+      select count(*)::int from ${siteLocations} l
+      where l.site_id = ${sites}.id and l.is_deleted = false
+        and coalesce(l.address, '') <> ''
     )`;
     const locationNames = sql<string[]>`(
       select coalesce(array_agg(n.name order by n.name), '{}')
       from (
         select l.name from ${siteLocations} l
-        where l.site_id = ${sites}.id and l.is_deleted = false
+        where l.site_id = ${sites}.id and l.is_deleted = false and l.name <> ''
         order by l.name
         limit ${NAME_PREVIEW}
       ) n
@@ -129,8 +141,8 @@ export class SiteLocationsRepository extends BaseRepository {
   }
 
   /**
-   * A site's locations and addresses. An empty answer for a site with neither is
-   * a real answer — the form uses it to decide it is creating, not editing.
+   * A site's pairs. An empty answer for a site with none is a real answer — the
+   * form uses it to decide it is creating, not editing.
    */
   async findBySite(siteId: string, db: Database = this.db): Promise<SiteLocationDetail> {
     const [site] = await db
@@ -142,33 +154,38 @@ export class SiteLocationsRepository extends BaseRepository {
       throw new NotFoundException("Site not found");
     }
 
-    const [locations, addresses] = await Promise.all([
-      /**
-       * BY NAME, not by `created_at`. Every location added in one save shares a
-       * `created_at` — PostgreSQL's `now()` is the TRANSACTION's start time — so
-       * "the order they were keyed" is not recorded, and a sort on it falls back
-       * to whatever the ties happen to do. Name order is what the document forms
-       * show too.
-       */
-      db
-        .select({ id: siteLocations.id, name: siteLocations.name })
-        .from(siteLocations)
-        .where(and(eq(siteLocations.siteId, siteId), eq(siteLocations.isDeleted, false)))
-        .orderBy(siteLocations.name),
-      db
-        .select({ id: siteLocationAddresses.id, address: siteLocationAddresses.address })
-        .from(siteLocationAddresses)
-        .where(eq(siteLocationAddresses.siteId, siteId))
-        .orderBy(siteLocationAddresses.lineNumber),
-    ]);
+    /**
+     * BY NAME, not by `created_at`. Every location added in one save shares a
+     * `created_at` — PostgreSQL's `now()` is the TRANSACTION's start time — so
+     * "the order they were keyed" is not recorded, and a sort on it falls back to
+     * whatever the ties happen to do. Name order is what the document forms show
+     * too.
+     *
+     * Ascending puts the UNNAMED pairs at the top, which is where they want to
+     * be: those are the migrated addresses waiting for someone to name them.
+     */
+    const rows = await db
+      .select({
+        id: siteLocations.id,
+        name: siteLocations.name,
+        address: siteLocations.address,
+      })
+      .from(siteLocations)
+      .where(and(eq(siteLocations.siteId, siteId), eq(siteLocations.isDeleted, false)))
+      .orderBy(siteLocations.name);
 
-    return { siteId: site.id, siteName: site.name, locations, addresses };
+    return {
+      siteId: site.id,
+      siteName: site.name,
+      // The column is nullable; the contract says `string`. "" is the blank.
+      locations: rows.map((row) => ({ ...row, address: row.address ?? "" })),
+    };
   }
 
   /** Refused when the site already has an entry: that is an edit, not a create. */
   async create(siteId: string, input: SaveSiteLocations, actorId: string): Promise<SiteLocationDetail> {
     const existing = await this.findBySite(siteId);
-    if (existing.locations.length > 0 || existing.addresses.length > 0) {
+    if (existing.locations.length > 0) {
       throw new ConflictException(
         `${existing.siteName} already has locations. Open it from the list to change them.`,
       );
@@ -177,24 +194,40 @@ export class SiteLocationsRepository extends BaseRepository {
   }
 
   /**
-   * Writes a site's two lists, in one transaction.
+   * Writes a site's pairs, in one transaction.
    *
-   * LOCATIONS ARE MATCHED BY ID, because documents reference them by id: a row
-   * sent with its id is renamed in place, a row sent without one is new, and a
-   * stored location left out of the list is SOFT-deleted — the orders that name
-   * it keep the name they were raised with.
+   * PAIRS ARE MATCHED BY ID, because documents reference a location by id: a row
+   * sent with its id is updated in place, a row sent without one is new, and a
+   * stored pair left out of the list is SOFT-deleted — the orders that name it
+   * keep the name they were raised with.
    *
    * Removals are written before renames and inserts, so a person who deletes
    * "Block A" and adds a new "Block A" in one save does not trip the unique
    * index on a name that is on its way out.
-   *
-   * ADDRESSES ARE REPLACED outright. Nothing references them.
    */
   async save(siteId: string, input: SaveSiteLocations, actorId: string): Promise<SiteLocationDetail> {
-    const names = input.locations.map((row) => row.name.trim().toLowerCase());
-    const repeated = names.find((name, index) => names.indexOf(name) !== index);
+    /**
+     * A pair with BOTH halves blank is dropped rather than refused — that is what
+     * a `+` pressed once too often produces, and it is not a mistake worth a
+     * validation message. A pair with ONE half filled is kept: an address with no
+     * name yet is the state migration 0020 left every old address in, and a name
+     * with no address yet is a block somebody has just set up.
+     */
+    const pairs = input.locations
+      .map((row) => ({ id: row.id, name: row.name.trim(), address: row.address.trim() }))
+      .filter((row) => row.name !== "" || row.address !== "");
+
+    /**
+     * Only NAMED pairs are checked for duplicates. Several unnamed ones on a site
+     * is the normal state after the migration — BHAVNAGAR-RAJUBHAI arrived with
+     * eight — and refusing them would make that site unsaveable until every one
+     * had been named in a single sitting. The unique index carries the same
+     * exemption.
+     */
+    const named = pairs.filter((row) => row.name !== "").map((row) => row.name.toLowerCase());
+    const repeated = named.find((name, index) => named.indexOf(name) !== index);
     if (repeated !== undefined) {
-      const shown = input.locations[names.indexOf(repeated)]!.name.trim();
+      const shown = pairs.find((row) => row.name.toLowerCase() === repeated)!.name;
       throw new BadRequestException(`"${shown}" is listed twice. Each location name must be different.`);
     }
 
@@ -204,9 +237,7 @@ export class SiteLocationsRepository extends BaseRepository {
         const current = await this.findBySite(siteId, handle);
         const currentIds = new Set(current.locations.map((row) => row.id));
 
-        const sentIds = input.locations
-          .map((row) => row.id)
-          .filter((id): id is string => id !== null);
+        const sentIds = pairs.map((row) => row.id).filter((id): id is string => id !== null);
         const foreign = sentIds.find((id) => !currentIds.has(id));
         if (foreign !== undefined) {
           throw new BadRequestException("One of these locations does not belong to this site");
@@ -220,29 +251,25 @@ export class SiteLocationsRepository extends BaseRepository {
             .where(and(eq(siteLocations.siteId, siteId), inArray(siteLocations.id, removed)));
         }
 
-        for (const row of input.locations) {
-          const name = row.name.trim();
+        for (const row of pairs) {
+          // Stored as NULL rather than "", so "no address" is one value in the
+          // database instead of two that queries have to remember to both check.
+          const address = row.address === "" ? null : row.address;
+
           if (row.id === null) {
-            await tx.insert(siteLocations).values({ siteId, name, ...createdBy(actorId) });
+            await tx
+              .insert(siteLocations)
+              .values({ siteId, name: row.name, address, ...createdBy(actorId) });
             continue;
           }
+
           const before = current.locations.find((location) => location.id === row.id);
-          if (before && before.name !== name) {
+          if (before && (before.name !== row.name || before.address !== row.address)) {
             await tx
               .update(siteLocations)
-              .set({ name, ...updatedBy(actorId) })
+              .set({ name: row.name, address, ...updatedBy(actorId) })
               .where(and(eq(siteLocations.id, row.id), eq(siteLocations.siteId, siteId)));
           }
-        }
-
-        await tx.delete(siteLocationAddresses).where(eq(siteLocationAddresses.siteId, siteId));
-        const addresses = [...new Set(input.addresses.map((value) => value.trim()))].filter(
-          (value) => value !== "",
-        );
-        if (addresses.length > 0) {
-          await tx
-            .insert(siteLocationAddresses)
-            .values(addresses.map((address, index) => ({ siteId, address, lineNumber: index + 1 })));
         }
       }),
     );
@@ -250,15 +277,18 @@ export class SiteLocationsRepository extends BaseRepository {
     return this.findBySite(siteId);
   }
 
-  /** Empties both lists. Locations are soft-deleted, so documents keep their names. */
+  /**
+   * Empties the site's list. Pairs are SOFT-deleted, so documents keep the
+   * location name they were raised with.
+   *
+   * `site_location_addresses` is deliberately not touched. Nothing reads it, and
+   * it holds the only pre-pairing copy of these addresses — see migration 0020.
+   */
   async remove(siteId: string, actorId: string): Promise<void> {
     await this.findBySite(siteId);
-    await this.db.transaction(async (tx) => {
-      await tx
-        .update(siteLocations)
-        .set({ isDeleted: true, ...updatedBy(actorId) })
-        .where(and(eq(siteLocations.siteId, siteId), eq(siteLocations.isDeleted, false)));
-      await tx.delete(siteLocationAddresses).where(eq(siteLocationAddresses.siteId, siteId));
-    });
+    await this.db
+      .update(siteLocations)
+      .set({ isDeleted: true, ...updatedBy(actorId) })
+      .where(and(eq(siteLocations.siteId, siteId), eq(siteLocations.isDeleted, false)));
   }
 }

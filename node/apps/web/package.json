@@ -18,6 +18,8 @@
     "@tanstack/react-query": "^5.62.0",
     "@tanstack/react-table": "^8.21.3",
     "clsx": "^2.1.1",
+    "html2canvas-pro": "^2.4.3",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.38.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

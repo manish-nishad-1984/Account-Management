@@ -1,9 +1,24 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
-import { Plus, Trash2 } from "lucide-react";
-import { createPurchaseOrderSchema, type PurchaseOrderDetail } from "@accountmanagement/contracts";
+import {
+  Boxes,
+  Building2,
+  FileBadge,
+  MapPin,
+  Phone,
+  Plus,
+  ScrollText,
+  ShoppingCart,
+  Trash2,
+  Truck,
+} from "lucide-react";
+import {
+  createPurchaseOrderSchema,
+  type PurchaseOrderDetail,
+  type SupplierRow,
+} from "@accountmanagement/contracts";
 import { purchaseOrderTotal } from "@accountmanagement/domain";
 import {
   Alert,
@@ -11,15 +26,17 @@ import {
   CheckboxField,
   FormDialog,
   FormSection,
+  IconButton,
   SelectField,
   TextAreaField,
   TextField,
+  SummaryStrip,
 } from "../../components/ui";
 import { applyServerErrors, unshownValidationMessage } from "../../lib/crud";
 import { text } from "../../lib/form-values";
 import { formatMoney, formatQuantity } from "../../lib/format";
 import { useAllUnits } from "../items/api";
-import { useItemOptions } from "../purchase-requests/api";
+import { ItemCombobox } from "../items/ItemCombobox";
 import {
   useCompanyOptions,
   useCreatePurchaseOrder,
@@ -29,9 +46,12 @@ import {
 } from "./api";
 import { SiteAddressFields } from "../sites/SiteAddressFields";
 import { SiteContactSelect } from "../sites/SiteContactSelect";
+import { GstBreakdown } from "../invoices/GstBreakdown";
+import { useLatestPriceFill } from "../invoices/useLatestPriceFill";
 import { TermsField } from "./TermsField";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { todayInput } from "../../lib/dates";
+import { SavedDocumentPdfButton } from "../document-templates/DocumentActions";
 
 /**
  * The purchase order form.
@@ -166,7 +186,6 @@ export function PurchaseOrderFormDialog({
 
   const scope = useSiteScope();
   const units = useAllUnits();
-  const itemOptions = useItemOptions("");
   const suppliers = useSupplierOptions();
   const companies = useCompanyOptions();
   const create = useCreatePurchaseOrder();
@@ -181,13 +200,28 @@ export function PurchaseOrderFormDialog({
     setValue,
     watch,
     control,
-    formState: { errors },
+    getValues,
+    formState: { errors, isSubmitted, isDirty },
   } = useForm<FormValues, unknown, Submitted>({
     resolver: zodResolver(createPurchaseOrderSchema),
     defaultValues: EMPTY,
   });
 
-  const { fields, append, remove } = useFieldArray({ control, name: "items" });
+  const { fields, insert, remove } = useFieldArray({ control, name: "items" });
+
+  /**
+   * Which line the cursor belongs in after `+`, or null.
+   *
+   * Set before the insert and consumed by the effect below, because the row does
+   * not exist to focus until React has rendered it. The same mechanism the
+   * invoice grid uses.
+   */
+  const focusLine = useRef<number | null>(null);
+  useEffect(() => {
+    if (focusLine.current === null) return;
+    document.getElementById(`field-item-on-line-${focusLine.current + 1}`)?.focus();
+    focusLine.current = null;
+  }, [fields]);
 
   /** Set when someone clears an old order's quantity split; sent as an empty list. */
   const [clearSplit, setClearSplit] = useState(false);
@@ -227,6 +261,33 @@ export function PurchaseOrderFormDialog({
    * while the screen showed zeros. The regression test below it now types.
    */
   const lines = useWatch({ control, name: "items" });
+
+  /**
+   * CHOOSING AN ITEM FILLS ITS LATEST PRICE, UNIT AND GST, and the picker below
+   * sets a blank quantity to 1 (client request, 17 Sep 2026).
+   *
+   * The same hook the two invoice forms use, so a purchase order and the invoice
+   * raised against it agree on what "the latest price" means rather than having
+   * two implementations that can drift apart.
+   *
+   * `direction: "in"` — a purchase order BUYS, so the price to offer is the one
+   * last paid to a supplier, not the one last charged to a customer. Sales
+   * invoices pass "out". Backwards, this would quote a selling price to a
+   * supplier.
+   *
+   * NOTHING IS FILLED FOR DISCOUNT, because a purchase order has no discount
+   * column — see `purchase-order-total.ts` for why that is deliberate.
+   */
+  const latestPrice = useLatestPriceFill({
+    direction: "in",
+    currentItemId: (index) => getValues(`items.${index}.itemId`),
+    fill: (index, price) => {
+      const options = { shouldDirty: true, shouldValidate: isSubmitted };
+      setValue(`items.${index}.unitPrice`, price.unitPrice, options);
+      setValue(`items.${index}.unitId`, price.unitId, options);
+      setValue(`items.${index}.gstPercent`, price.gstPercent ?? "", options);
+    },
+  });
   const totals = useMemo(
     () =>
       purchaseOrderTotal.compute(
@@ -274,14 +335,33 @@ export function PurchaseOrderFormDialog({
   const companyRows = companies.data?.rows ?? [];
   const companyOptions = companyRows.map((row) => ({ value: row.id, label: row.name }));
 
-  const items = itemOptions.data?.rows ?? [];
-  const itemTotal = itemOptions.data?.total ?? 0;
-  const itemsTruncated = itemTotal > items.length;
-  const itemChoices = items.map((item) => ({ value: item.id, label: item.name }));
+  /*
+    The item list is no longer loaded here. `ItemCombobox` runs its own search
+    per picker, keyed by the term, so every unsearched picker shares one request
+    and a search only fetches what was typed. What went with it: `itemsTruncated`
+    and the Alert that admitted the dropdown was showing 200 of 758 items — the
+    limitation it warned about no longer exists.
+  */
 
   const chosenCompanyId = watch("companyId");
   const chosenCompany = companyRows.find((row) => row.id === chosenCompanyId);
   const immediate = watch("deliveryImmediate");
+
+  /**
+   * WHO IS BEING ORDERED FROM, shown the moment the supplier is chosen (client
+   * request, 21 Sep 2026): their mobile number, address and GST number, so the
+   * person raising the order can check they have the right one without leaving
+   * this screen for Suppliers.
+   *
+   * Read off the row already loaded for the dropdown — `useSupplierOptions`
+   * fetches every supplier's mobile, GST number, area and pincode for exactly
+   * this list, so choosing one costs no second request. `area` and `pincode`
+   * are what the LIST row carries; the building name is on the detail payload
+   * only, fetched one supplier at a time, and not worth a second round trip for
+   * a box whose job is a quick check rather than the full postal address.
+   */
+  const chosenSupplierId = watch("supplierId");
+  const chosenSupplier = (suppliers.data?.rows ?? []).find((row) => row.id === chosenSupplierId);
 
   /**
    * The site, location, shipping address and terms editor.
@@ -315,6 +395,9 @@ export function PurchaseOrderFormDialog({
       }
       formError={formError}
       pending={pending}
+      footerStart={
+        orderId !== null ? <SavedDocumentPdfButton documentType="purchase-order" id={orderId} dirty={isDirty} /> : undefined
+      }
       submitLabel={isEdit ? "Save changes" : "Add purchase order"}
       // Wider than every other form dialog, because this one's body is a grid.
       size="xl"
@@ -323,7 +406,15 @@ export function PurchaseOrderFormDialog({
         <p className="py-8 text-center text-sm text-slate-500">Loading order…</p>
       ) : (
         <>
-          <FormSection title="Supplier" columns={2}>
+          {/*
+            TWO TO A ROW (client request, 21 Sep 2026): neither card fills a
+            1500px line on its own, and stacked they pushed the products — the
+            part of the document people actually work in — below the fold. Under
+            1280px they stack, where half a line is too narrow for a labelled
+            field.
+          */}
+          <div className="grid gap-4 xl:grid-cols-2">
+          <FormSection icon={Building2} title="Supplier" columns={2}>
             <SelectField
               label="Supplier"
               required
@@ -339,9 +430,10 @@ export function PurchaseOrderFormDialog({
               error={errors.buyersPurchaseNo?.message}
               {...register("buyersPurchaseNo")}
             />
+            {chosenSupplier && <SupplierSummary supplier={chosenSupplier} />}
           </FormSection>
 
-          <FormSection title="Order" columns={2}>
+          <FormSection icon={ShoppingCart} title="Order" columns={2}>
             <SelectField
               label="Company"
               required
@@ -391,6 +483,7 @@ export function PurchaseOrderFormDialog({
               </Alert>
             )}
           </FormSection>
+          </div>
 
           {/* ---------------------------------------------------------------- */}
           {/*
@@ -400,8 +493,8 @@ export function PurchaseOrderFormDialog({
             into half the dialog and cut off after the Unit column, and the
             button sits in the space where the price and GST boxes should be.
           */}
-          <FormSection title="Products" columns={1}>
-            <div className="overflow-x-auto">
+          <FormSection icon={Boxes} title="Products" columns={1}>
+            <div className="relative overflow-x-auto">
               <table className="w-full min-w-[52rem] text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -419,50 +512,57 @@ export function PurchaseOrderFormDialog({
                 <tbody>
                   {fields.map((field, index) => (
                     <tr key={field.id} className="border-b border-slate-100 align-top">
-                      <td className="py-2 pr-2 text-slate-400">{index + 1}</td>
-                      <td className="py-2 pr-2">
-                        <SelectField
+                      <td className="py-2.5 pr-2 text-slate-400">{index + 1}</td>
+                      {/*
+                        ONE CONTROL, ONE LINE.
+
+                        This cell was a dropdown with a second text box under it
+                        whenever no item was chosen — which is most of the time
+                        on a new order — so every line was two controls tall and
+                        three lines took the height of six. The box existed
+                        because the dropdown could only offer 200 of 758 items;
+                        `ItemCombobox` searches the server, so the whole
+                        catalogue is reachable and the typed name moved inside
+                        the list as its last option. See that file.
+                      */}
+                      <td className="py-1 pr-2">
+                        <ItemCombobox
+                          id={`field-item-on-line-${index + 1}`}
                           label={`Item on line ${index + 1}`}
                           labelHidden
-                          placeholder="Choose an item"
-                          options={itemChoices}
-                          error={errors.items?.[index]?.itemId?.message}
-                          {...register(`items.${index}.itemId`, {
+                          allowFreeText
+                          // `String(...)`: `useWatch` widens a field of the form's
+                          // INPUT type, which zod's coercion leaves as `{}` here.
+                          // The old code only ever asked whether it was truthy.
+                          itemId={String(lines?.[index]?.itemId ?? "")}
+                          itemName={String(lines?.[index]?.itemName ?? "")}
+                          error={
+                            errors.items?.[index]?.itemId?.message ??
+                            errors.items?.[index]?.itemName?.message
+                          }
+                          onPick={(pickedId) => {
+                            setValue(`items.${index}.itemId`, pickedId, { shouldDirty: true });
                             // Choosing a catalogue item CLEARS the free text.
-                            // React Hook Form keeps the value of an unmounted
-                            // field, so without this a name typed before an item
-                            // was picked would be submitted alongside it and sit
-                            // in `item_name` forever, contradicting the item the
-                            // line actually references.
-                            onChange: (event) => {
-                              if (event.target.value) {
-                                setValue(`items.${index}.itemName`, "");
-                              }
-                            },
-                          })}
+                            // React Hook Form keeps the value of a field that is
+                            // no longer shown, so without this a name typed
+                            // before an item was picked would be submitted
+                            // alongside it and sit in `item_name` forever,
+                            // contradicting the item the line references.
+                            setValue(`items.${index}.itemName`, "", { shouldDirty: true });
+                            // A blank quantity becomes 1; one already typed is
+                            // left alone, because the person meant it.
+                            if (!String(getValues(`items.${index}.quantity`) ?? "").trim()) {
+                              setValue(`items.${index}.quantity`, "1", { shouldDirty: true });
+                            }
+                            if (pickedId) latestPrice.onItemChosen(index, pickedId);
+                          }}
+                          onTypeName={(name) => {
+                            setValue(`items.${index}.itemName`, name, { shouldDirty: true });
+                            setValue(`items.${index}.itemId`, "", { shouldDirty: true });
+                          }}
                         />
-                        {/*
-                          THE FREE-TEXT NAME APPEARS ONLY WHEN NO ITEM IS
-                          CHOSEN, which is the only time it does anything.
-
-                          It used to be a second box under every row, so every
-                          line was two controls tall whether it needed one or
-                          not, and three lines of an ordinary order took the
-                          height of six.
-                        */}
-                        {!lines?.[index]?.itemId && (
-                          <div className="mt-1">
-                            <TextField
-                              label={`Or name the product on line ${index + 1}`}
-                              labelHidden
-                              placeholder="…or type a name"
-                              error={errors.items?.[index]?.itemName?.message}
-                              {...register(`items.${index}.itemName`)}
-                            />
-                          </div>
-                        )}
                       </td>
-                      <td className="py-2 pr-2">
+                      <td className="py-1 pr-2">
                         <TextField
                           label={`Quantity on line ${index + 1}`}
                           labelHidden
@@ -471,7 +571,7 @@ export function PurchaseOrderFormDialog({
                           {...register(`items.${index}.quantity`)}
                         />
                       </td>
-                      <td className="py-2 pr-2">
+                      <td className="py-1 pr-2">
                         <SelectField
                           label={`Unit on line ${index + 1}`}
                           labelHidden
@@ -481,20 +581,26 @@ export function PurchaseOrderFormDialog({
                           {...register(`items.${index}.unitId`)}
                         />
                       </td>
-                      <td className="py-2 pr-2">
+                      <td className="py-1 pr-2">
                         {/*
                           NEVER type="number" for money — it returns a float and
                           this system holds money as a decimal string end to end.
                         */}
-                        <TextField
-                          label={`Price on line ${index + 1}`}
-                          labelHidden
-                          inputMode="decimal"
-                          error={errors.items?.[index]?.unitPrice?.message}
-                          {...register(`items.${index}.unitPrice`)}
-                        />
+                        <div className="relative">
+                          <TextField
+                            label={`Price on line ${index + 1}`}
+                            labelHidden
+                            inputMode="decimal"
+                            error={errors.items?.[index]?.unitPrice?.message}
+                            {...register(`items.${index}.unitPrice`)}
+                          />
+                          {/* Where the filled price came from, as on the invoices. */}
+                          <div className="absolute right-3.5 top-[0.95rem] flex">
+                            {latestPrice.hintFor(lines?.[index]?.itemId)}
+                          </div>
+                        </div>
                       </td>
-                      <td className="py-2 pr-2">
+                      <td className="py-1 pr-2">
                         <TextField
                           label={`GST percent on line ${index + 1}`}
                           labelHidden
@@ -503,24 +609,41 @@ export function PurchaseOrderFormDialog({
                           {...register(`items.${index}.gstPercent`)}
                         />
                       </td>
-                      <td className="tabular py-4 pr-2 text-right text-slate-600">
+                      <td className="tabular py-2.5 pr-2 text-right text-slate-600">
                         {formatMoney(totals.lines[index]?.gstAmount ?? "0")}
                       </td>
-                      <td className="tabular py-4 pr-2 text-right font-medium text-slate-900">
+                      <td className="tabular py-2.5 pr-2 text-right font-medium text-slate-900">
                         {formatMoney(totals.lines[index]?.total ?? "0")}
                       </td>
-                      <td className="py-3">
-                        <Button
-                          variant="ghost"
-                          icon={Trash2}
-                          title={`Remove line ${index + 1}`}
-                          // The last line is not removable: an order with no
-                          // lines has no total and the contract refuses it, so
-                          // the button would produce an error rather than a
-                          // result.
-                          disabled={fields.length === 1}
-                          onClick={() => remove(index)}
-                        />
+                      {/*
+                        ADD AND REMOVE ON THE LINE ITSELF, which is how the
+                        invoice grid already worked. The Add button was a block
+                        under the table, so adding a line meant leaving the row,
+                        and a new line always went to the END however far up the
+                        order you were working. `+` inserts after THIS line and
+                        puts the cursor in it.
+                      */}
+                      <td className="py-1">
+                        <div className="flex justify-end gap-0.5">
+                          <IconButton
+                            label={`Add a line after line ${index + 1}`}
+                            icon={Plus}
+                            tone="operation"
+                            size="sm"
+                            onClick={() => {
+                              focusLine.current = index + 1;
+                              insert(index + 1, EMPTY_LINE);
+                            }}
+                          />
+                          <IconButton
+                            label={`Remove line ${index + 1}`}
+                            icon={Trash2}
+                            tone="destructive"
+                            size="sm"
+                            onClick={() => remove(index)}
+                            disabled={fields.length === 1}
+                          />
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -546,32 +669,45 @@ export function PurchaseOrderFormDialog({
               </table>
             </div>
 
-            <div>
-              <Button variant="secondary" icon={Plus} onClick={() => append(EMPTY_LINE)}>
-                Add product
-              </Button>
+            {/*
+              THE TOTAL BELONGS WITH THE LINES (client request, 21 Sep 2026), as
+              one strip under the lines it is the sum of, rather than three
+              bordered tiles in a section of its own.
+            */}
+            {/* The strip, the GST it is made of, and where the figures come from. */}
+            <div className="grid gap-2">
+              <SummaryStrip
+                items={[
+                  { label: "Sub total", value: formatMoney(totals.subtotal) },
+                  { label: "Total GST", value: formatMoney(totals.totalGst) },
+                  { label: "Total amount", value: formatMoney(totals.grandTotal), strong: true },
+                ]}
+              />
+
+              <GstBreakdown
+                lines={(lines ?? []).map((line, index) => ({
+                  gstPercent: String(line?.gstPercent ?? "") || null,
+                  netAmount: totals.lines[index]?.netAmount ?? "0",
+                  gstAmount: totals.lines[index]?.gstAmount ?? "0",
+                }))}
+              />
+              <p className="text-xs leading-4 text-slate-500">
+                Calculated on the server when this is saved, using the same function shown here. The
+                old screen computed these in the browser and stored whatever was posted.
+              </p>
             </div>
-
-            {itemsTruncated && (
-              <Alert tone="info">
-                Showing the first {items.length} of {itemTotal} items. If the one you need is not
-                listed, type its name beside the dropdown — an order line can name a product that
-                is not in the catalogue.
-              </Alert>
-            )}
           </FormSection>
 
-          <FormSection title="Totals" columns={2}>
-            <Summary label="Sub total" value={formatMoney(totals.subtotal)} />
-            <Summary label="Total GST" value={formatMoney(totals.totalGst)} />
-            <Summary label="Total amount" value={formatMoney(totals.grandTotal)} strong />
-            <p className="text-xs text-slate-500 sm:col-span-2">
-              Calculated on the server when this is saved, using the same function shown here. The
-              old screen computed these in the browser and stored whatever was posted.
-            </p>
-          </FormSection>
-
-          <FormSection title="Delivery and contacts" columns={2}>
+          {/*
+            TWO TO A ROW AT 42/58 (client request, 21 Sep 2026): neither card
+            fills a 1500px line on its own, and stacked they pushed the products
+            — the part of the document people actually work in — below the fold.
+            The split is uneven because delivery is short boxes and addresses are
+            long lines that wrap. Under 1280px they stack, where half a line is
+            too narrow for a labelled field.
+          */}
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,42fr)_minmax(0,58fr)]">
+          <FormSection icon={Truck} title="Delivery and contacts" columns={3}>
             <CheckboxField
               label="Deliver immediately"
               hint="The legacy form's Immediate option"
@@ -627,7 +763,7 @@ export function PurchaseOrderFormDialog({
             site's own — the rules of 15 Sep 2026, which replaced the legacy
             panels that split the order's quantity across several addresses.
           */}
-          <FormSection title="Location and addresses" columns={1}>
+          <FormSection icon={MapPin} title="Location and addresses" columns={1}>
             <SiteAddressFields
               siteId={chosenSiteId}
               shippingAddress={shippingAddress}
@@ -669,9 +805,9 @@ export function PurchaseOrderFormDialog({
               </Alert>
             )}
           </FormSection>
+          </div>
 
-          {/* Same reason as Products: these stack, they do not sit side by side. */}
-          <FormSection title="Terms and conditions" columns={1}>
+          <FormSection icon={ScrollText} title="Terms and conditions" columns={1}>
             <TermsField
               value={terms}
               template={termsTemplate}
@@ -701,15 +837,36 @@ export function PurchaseOrderFormDialog({
   );
 }
 
-function Summary({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+/**
+ * The chosen supplier's mobile, address and GST number, so the person raising
+ * the order can check they have the right supplier without a trip to Suppliers.
+ *
+ * Any of the three can be missing on a real record — a supplier is not required
+ * to carry a mobile number or a GST number — and each is shown only when there
+ * is something to show, rather than as a row reading "Mobile: —".
+ */
+function SupplierSummary({ supplier }: { supplier: SupplierRow }) {
+  const address = [supplier.area, supplier.pincode].filter(Boolean).join(", ");
+  const facts = [
+    { icon: Phone, label: "Mobile", value: supplier.mobile },
+    { icon: MapPin, label: "Address", value: address || null },
+    { icon: FileBadge, label: "GST number", value: supplier.gstNo },
+  ].filter((fact) => fact.value);
+
+  if (facts.length === 0) return null;
+
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
-      <div
-        className={`tabular mt-0.5 ${strong ? "text-lg font-semibold text-slate-900" : "text-slate-800"}`}
-      >
-        {value}
-      </div>
+    <div className="flex flex-wrap gap-x-5 gap-y-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 sm:col-span-2">
+      {facts.map((fact) => (
+        <div key={fact.label} className="flex items-start gap-1.5 text-xs">
+          <fact.icon aria-hidden className="mt-0.5 size-3.5 shrink-0 text-slate-400" />
+          <span>
+            <span className="sr-only">{fact.label}: </span>
+            <span className="text-slate-700">{fact.value}</span>
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
+

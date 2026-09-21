@@ -26,6 +26,7 @@ function renderShell({ userId = "u1" }: { userId?: string } = {}) {
           user: { id: userId, userName: "tester", permissions: ["supplier.view"] },
           isAuthenticated: true,
           isRestoring: false,
+        endedReason: null,
           login: vi.fn(),
           logout: vi.fn(),
         }}

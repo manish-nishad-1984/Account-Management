@@ -38,6 +38,7 @@ import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { actorId } from "../../common/actor";
+import { approvalOnUpdate, approvedOnCreate } from "../../common/approval";
 import type { AccessTokenClaims } from "../auth/token.service";
 
 /** From `Form.FormName` = "Inward Challan", not from the `ItemInWord` controller. */
@@ -137,7 +138,10 @@ export class InwardChallansController {
     @Body(new ZodValidationPipe(createInwardChallanSchema)) body: CreateInwardChallan,
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<InwardChallanDetail> {
-    return this.challans.create(body, actorId(caller));
+    return this.challans.create(
+      { ...body, isApproved: approvedOnCreate(caller, SUBJECT) },
+      actorId(caller),
+    );
   }
 
   @Patch(":id")
@@ -147,7 +151,11 @@ export class InwardChallansController {
     @Body(new ZodValidationPipe(updateInwardChallanSchema)) body: UpdateInwardChallan,
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<InwardChallanDetail> {
-    return this.challans.update(id, body, actorId(caller));
+    return this.challans.update(
+      id,
+      { ...body, ...approvalOnUpdate(caller, SUBJECT) },
+      actorId(caller),
+    );
   }
 
   /** Its own right. `ItemInWordIsApproved` checks nothing at all. */

@@ -225,7 +225,7 @@ describe("ItemPriceHistoryRepository (real PostgreSQL)", () => {
 
       await db
         .update(schema.items)
-        .set({ isWithGst: true, gstPercent: "28.00" })
+        .set({ gstPercent: "28.00" })
         .where(eq(schema.items.id, cementId));
 
       const row = (await repo.forItem(cementId, LIMIT)).rows[0]!;

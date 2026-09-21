@@ -368,7 +368,7 @@ export class SalesInvoicesRepository extends BaseRepository {
   }
 
   /** Creates an invoice, its lines and its NUMBER in one transaction. */
-  async create(input: CreateSalesInvoice, actorId: string): Promise<SalesInvoiceDetail> {
+  async create(input: CreateSalesInvoice & { isApproved?: boolean }, actorId: string): Promise<SalesInvoiceDetail> {
     const now = new Date();
     const { items: lines, tds, roundOff, ...header } = input;
     const { totals, rows } = this.priced(lines, {
@@ -427,7 +427,7 @@ export class SalesInvoicesRepository extends BaseRepository {
    */
   async update(
     id: string,
-    input: UpdateSalesInvoice,
+    input: UpdateSalesInvoice & { isApproved?: boolean },
     actorId: string,
   ): Promise<SalesInvoiceDetail> {
     const now = new Date();

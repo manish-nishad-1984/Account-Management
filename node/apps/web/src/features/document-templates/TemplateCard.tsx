@@ -88,7 +88,7 @@ export function TemplateCard({
     >
       <div className="relative border-b border-slate-100 bg-slate-50 p-3">
         {template.isDefault && (
-          <span className="absolute left-2 top-2 z-10 rounded-full bg-brand-600 px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm">
+          <span className="absolute left-2 top-2 z-10 rounded-full bg-brand-600 px-2 py-0.5 text-xs font-semibold text-white shadow-sm">
             Default
           </span>
         )}

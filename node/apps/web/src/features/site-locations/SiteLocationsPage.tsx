@@ -1,6 +1,10 @@
 import { useMemo } from "react";
+import clsx from "clsx";
 import type { ColumnDef } from "@tanstack/react-table";
-import { SITE_LOCATION_SORT_FIELDS, type SiteLocationRow } from "@accountmanagement/contracts";
+import {
+  SITE_LOCATION_SORT_FIELDS,
+  type SiteLocationRow,
+} from "@accountmanagement/contracts";
 import { Plus } from "lucide-react";
 import { DataGrid, RowActions } from "../../components/DataGrid";
 import { Button, ConfirmDialog, PageHeader } from "../../components/ui";
@@ -11,14 +15,17 @@ import { useMasterScreen } from "../../lib/use-master-screen";
 
 /**
  * Site Location — the screen that was Site Groups, renamed and reshaped by the
- * business on 15 Sep 2026. One row per site that has locations or addresses.
+ * business on 15 Sep 2026 and again on 17 Sep, when a location and its address
+ * became one PAIR. One row per site that has any.
  *
  * The rights are still the `group` ones: they were granted on the legacy Group
  * form, and renaming the subject would take the screen from everyone who has it.
  */
 export function SiteLocationsPage() {
   const canAdd = usePermission("group", "add");
-  const screen = useMasterScreen<SiteLocationRow>({ defaultSortBy: "siteName" });
+  const screen = useMasterScreen<SiteLocationRow>({
+    defaultSortBy: "siteName",
+  });
   const query = useSiteLocationList(screen.listParams);
   const remove = useDeleteSiteLocations();
 
@@ -29,7 +36,11 @@ export function SiteLocationsPage() {
       {
         id: "siteName",
         header: "Site",
-        cell: ({ row }) => <div className="font-medium text-slate-900">{row.original.siteName}</div>,
+        cell: ({ row }) => (
+          <div className="font-medium text-slate-900">
+            {row.original.siteName}
+          </div>
+        ),
       },
       {
         id: "locationCount",
@@ -49,15 +60,35 @@ export function SiteLocationsPage() {
       },
       {
         id: "addressCount",
-        header: "Addresses",
-        cell: ({ row }) => (
-          <span
-            className="tabular inline-flex min-w-6 justify-center rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600"
-            title="Addresses offered as shipping addresses for this site"
-          >
-            {row.original.addressCount}
-          </span>
-        ),
+        header: "With address",
+        /*
+          A PROGRESS figure, not a second list's length. Migration 0020 carried
+          every old address across as a pair with no name, so a site can hold
+          pairs that are half filled in either direction — and "16 locations, 6
+          with an address" is what someone tidying this up needs to see without
+          opening the form. Amber while any pair is still missing its address.
+        */
+        cell: ({ row }) => {
+          const { addressCount, locationCount } = row.original;
+          const complete = addressCount === locationCount;
+          return (
+            <span
+              className={clsx(
+                "tabular inline-flex min-w-6 justify-center rounded-md px-1.5 py-0.5 text-xs font-medium",
+                complete
+                  ? "bg-slate-100 text-slate-600"
+                  : "bg-amber-50 text-amber-700",
+              )}
+              title={
+                complete
+                  ? "Every location here has an address"
+                  : `${locationCount - addressCount} of these have no address yet`
+              }
+            >
+              {addressCount}/{locationCount}
+            </span>
+          );
+        },
       },
       {
         id: "actions",
@@ -80,6 +111,11 @@ export function SiteLocationsPage() {
       <PageHeader
         title="Site Location"
         description="The locations inside each site, and the addresses its deliveries can go to"
+      />
+
+      <DataGrid<SiteLocationRow>
+        // One row above the grid (client request, 18 Sep 2026): the screen's
+        // filters beside the search box and its actions at the right-hand end.
         actions={
           canAdd ? (
             <Button icon={Plus} onClick={screen.openCreate}>
@@ -87,9 +123,6 @@ export function SiteLocationsPage() {
             </Button>
           ) : undefined
         }
-      />
-
-      <DataGrid<SiteLocationRow>
         gridKey="site-locations"
         columns={columns}
         searchPlaceholder="Search site or location"
@@ -115,11 +148,14 @@ export function SiteLocationsPage() {
           <>
             <p>
               Remove every location and address of{" "}
-              <span className="font-medium text-slate-900">{screen.deleteTarget?.siteName}</span>?
+              <span className="font-medium text-slate-900">
+                {screen.deleteTarget?.siteName}
+              </span>
+              ?
             </p>
             <p className="mt-2 text-xs text-slate-500">
-              The site itself is not affected. Orders and invoices that already name one of these
-              locations keep showing it.
+              The site itself is not affected. Orders and invoices that already
+              name one of these locations keep showing it.
             </p>
           </>
         }

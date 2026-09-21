@@ -32,6 +32,7 @@ import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { actorId } from "../../common/actor";
+import { approvalOnUpdate, approvedOnCreate } from "../../common/approval";
 import type { AccessTokenClaims } from "../auth/token.service";
 
 /**
@@ -107,7 +108,10 @@ export class PurchaseRequestsController {
     @Body(new ZodValidationPipe(createPurchaseRequestSchema)) body: CreatePurchaseRequest,
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<PurchaseRequestDetail> {
-    return this.requests.create(body, actorId(caller));
+    return this.requests.create(
+      { ...body, isApproved: approvedOnCreate(caller, SUBJECT) },
+      actorId(caller),
+    );
   }
 
   @Patch(":id")
@@ -117,7 +121,11 @@ export class PurchaseRequestsController {
     @Body(new ZodValidationPipe(updatePurchaseRequestSchema)) body: UpdatePurchaseRequest,
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<PurchaseRequestDetail> {
-    return this.requests.update(id, body, actorId(caller));
+    return this.requests.update(
+      id,
+      { ...body, ...approvalOnUpdate(caller, SUBJECT) },
+      actorId(caller),
+    );
   }
 
   /**

@@ -24,6 +24,7 @@ function renderShell(permissions: string[]) {
           user: { id: "u1", userName: "tester", permissions },
           isAuthenticated: true,
           isRestoring: false,
+        endedReason: null,
           login: vi.fn(),
           logout: vi.fn(),
         }}

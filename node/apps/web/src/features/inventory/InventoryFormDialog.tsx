@@ -1,5 +1,6 @@
+import { PackageCheck } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
 import {
@@ -10,7 +11,7 @@ import { Alert, FormDialog, FormSection, SelectField, TextAreaField, TextField }
 import { applyServerErrors, unshownValidationMessage } from "../../lib/crud";
 import { text } from "../../lib/form-values";
 import { useAllUnits } from "../items/api";
-import { useItemOptions } from "../purchase-requests/api";
+import { ItemCombobox } from "../items/ItemCombobox";
 import {
   useCreateInventoryInward,
   useInventoryInward,
@@ -47,7 +48,6 @@ export function InventoryFormDialog({
   const detail = useInventoryInward(open && isEdit ? recordId : null);
   const scope = useSiteScope();
   const units = useAllUnits();
-  const itemOptions = useItemOptions("");
   const create = useCreateInventoryInward();
   const update = useUpdateInventoryInward();
   const [formError, setFormError] = useState<string | null>(null);
@@ -57,6 +57,8 @@ export function InventoryFormDialog({
     handleSubmit,
     reset,
     setError,
+    setValue,
+    control,
     formState: { errors },
   } = useForm<FormValues, unknown, Submitted>({
     resolver: zodResolver(createInventoryInwardSchema),
@@ -101,9 +103,8 @@ export function InventoryFormDialog({
     label: unit.name,
   }));
 
-  const items = itemOptions.data?.rows ?? [];
-  const itemTotal = itemOptions.data?.total ?? 0;
-  const itemsTruncated = itemTotal > items.length;
+  /** Watched rather than registered: `ItemCombobox` is a controlled picker. */
+  const itemId = useWatch({ control, name: "itemId" });
 
   return (
     <FormDialog
@@ -126,25 +127,24 @@ export function InventoryFormDialog({
         <p className="py-8 text-center text-sm text-slate-500">Loading arrival…</p>
       ) : (
         <>
-          <FormSection title="What arrived" columns={2}>
-            <SelectField
+          <FormSection icon={PackageCheck} title="What arrived" columns={2}>
+            {/*
+              NO `allowFreeText`. An arrival must name a catalogue item — there
+              is nowhere on this document for a typed name to go — so the picker
+              offers the catalogue and nothing else. The Alert that used to say
+              "showing the first 200 of 758, add it to Items first if it is not
+              listed" is gone with it: the search reaches all 758.
+            */}
+            <ItemCombobox
               label="Item"
               required
-              autoFocus
               className="sm:col-span-2"
-              placeholder={itemOptions.isLoading ? "Loading items…" : "Choose an item"}
-              options={items.map((item) => ({ value: item.id, label: item.name }))}
+              itemId={String(itemId ?? "")}
               error={errors.itemId?.message}
-              {...register("itemId")}
+              onPick={(picked) =>
+                setValue("itemId", picked, { shouldDirty: true, shouldValidate: true })
+              }
             />
-
-            {itemsTruncated && (
-              <Alert tone="info" className="sm:col-span-2">
-                Showing the first {items.length} of {itemTotal} items. Unlike a purchase
-                request, an arrival must name a catalogue item — add it to Items first if
-                it is not listed.
-              </Alert>
-            )}
 
             <TextField
               label="Quantity"

@@ -29,6 +29,7 @@ import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 import { actorId } from "../../common/actor";
+import { approvalOnUpdate, approvedOnCreate } from "../../common/approval";
 import type { AccessTokenClaims } from "../auth/token.service";
 
 /**
@@ -104,7 +105,10 @@ export class InventoryInwardController {
     @Body(new ZodValidationPipe(createInventoryInwardSchema)) body: CreateInventoryInward,
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<InventoryInwardDetail> {
-    return this.inventory.create(body, actorId(caller));
+    return this.inventory.create(
+      { ...body, isApproved: approvedOnCreate(caller, SUBJECT) },
+      actorId(caller),
+    );
   }
 
   @Patch(":id")
@@ -114,7 +118,11 @@ export class InventoryInwardController {
     @Body(new ZodValidationPipe(updateInventoryInwardSchema)) body: UpdateInventoryInward,
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<InventoryInwardDetail> {
-    return this.inventory.update(id, body, actorId(caller));
+    return this.inventory.update(
+      id,
+      { ...body, ...approvalOnUpdate(caller, SUBJECT) },
+      actorId(caller),
+    );
   }
 
   /**

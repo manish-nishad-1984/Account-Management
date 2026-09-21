@@ -100,11 +100,11 @@ export function TermsField({
                 onClick={() => choose(entry.key)}
                 aria-pressed={template === entry.key}
                 className={clsx(
-                  "rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors",
+                  "rounded px-1.5 py-0.5 text-xs font-medium transition-colors",
                   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500",
                   template === entry.key
                     ? "bg-brand-600 text-white"
-                    : "text-slate-500 hover:bg-slate-200/70 hover:text-slate-800",
+                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-800",
                 )}
               >
                 {entry.label}

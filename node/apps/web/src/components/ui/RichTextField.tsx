@@ -149,7 +149,7 @@ export function RichTextField({
               // the click fires, so a click-driven Bold has nothing to embolden.
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => run(command)}
-              className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-200/70 hover:text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
+              className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
             >
               <Icon aria-hidden className="size-3.5" />
             </button>

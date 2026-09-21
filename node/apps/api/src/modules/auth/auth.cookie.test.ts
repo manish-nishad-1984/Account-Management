@@ -21,7 +21,7 @@ import { ENV } from "../../config/env";
 const USER = { id: "u1", userName: "tester", permissions: [] };
 
 /** A minimal env, shaped like the real one for the fields the cookie uses. */
-const env = (nodeEnv: string) => ({ NODE_ENV: nodeEnv, REFRESH_TOKEN_TTL_DAYS: 30 });
+const env = (nodeEnv: string) => ({ NODE_ENV: nodeEnv, REFRESH_TOKEN_IDLE_MINUTES: 45 });
 
 async function boot(nodeEnv = "production") {
   const auth = {
@@ -88,7 +88,7 @@ describe("the refresh-token cookie", () => {
 
     /**
      * The point of the cookie. If the token is also in the JSON, script on the
-     * page can still read a 30-day credential and `httpOnly` has bought nothing.
+     * page can still read the session's credential and `httpOnly` has bought nothing.
      */
     it("does NOT return the refresh token in the body", async () => {
       const response = await request(app.getHttpServer())
@@ -109,8 +109,23 @@ describe("the refresh-token cookie", () => {
       expect(cookie).toContain("HttpOnly");
       expect(cookie).toContain("SameSite=Lax");
       expect(cookie).toContain(`Path=${REFRESH_COOKIE_PATH}`);
-      // 30 days, so the cookie and the stored token expire together.
-      expect(cookie).toContain(`Max-Age=${30 * 24 * 60 * 60}`);
+    });
+
+    /**
+     * A SESSION cookie (18 Sep 2026): reopening the browser means signing in
+     * again. Any Max-Age or Expires would carry the session across a restart.
+     */
+    it("is a session cookie, gone when the browser closes — and so is its hint", async () => {
+      const response = await request(app.getHttpServer())
+        .post("/api/v1/auth/login")
+        .send({ userName: "tester", password: "pw" });
+
+      const cookies = ([] as string[]).concat(response.headers["set-cookie"] ?? []);
+      const ours = cookies.filter((c) => c.startsWith(`${REFRESH_COOKIE}=`) || c.startsWith(`${SESSION_HINT_COOKIE}=`));
+      expect(ours).toHaveLength(2);
+      for (const cookie of ours) {
+        expect(cookie).not.toMatch(/Max-Age|Expires/i);
+      }
     });
 
     it("marks it Secure outside development", async () => {

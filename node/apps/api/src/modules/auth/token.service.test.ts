@@ -98,10 +98,11 @@ describe("TokenService", () => {
     expect(a.refreshToken).not.toBe(b.refreshToken);
   });
 
-  it("sets the refresh token expiry from configuration", async () => {
+  /** 45 minutes without use, not a month: the idle rule of 18 Sep 2026. */
+  it("expires the refresh token after the configured idle minutes", async () => {
     const issued = await service.issue(claims);
-    const days = (issued.refreshTokenExpiresAt.getTime() - Date.now()) / 86_400_000;
-    expect(days).toBeGreaterThan(29.9);
-    expect(days).toBeLessThan(30.1);
+    const minutes = (issued.refreshTokenExpiresAt.getTime() - Date.now()) / 60_000;
+    expect(minutes).toBeGreaterThan(44.9);
+    expect(minutes).toBeLessThan(45.1);
   });
 });

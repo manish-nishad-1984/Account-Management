@@ -109,20 +109,43 @@ describe("CompanyFormDialog", () => {
   });
 
   /**
-   * The client-side rule is the SAME Zod schema the server validates with. This
-   * asserts it actually runs — the value of sharing the contract is that a
-   * malformed GST number never reaches the network.
+   * GST AND PAN HAVE NO FORMAT RULE — length is the only thing checked, and the
+   * business asked for exactly that on 17 Sep 2026.
+   *
+   * This is the test that would have failed had the old GSTIN pattern been left
+   * in place, so it is the one that locks the loosening in: a value that the
+   * official format rejects outright must now save.
    */
-  it("refuses a malformed GST number without calling the API", async () => {
+  it("accepts a GST number that does not match the official format", async () => {
     vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(json(detail)));
     renderDialog(null);
 
-    await userEvent.type(screen.getByLabelText(/company name/i), "Bad GST Co");
+    await userEvent.type(screen.getByLabelText(/company name/i), "Odd GST Co");
     await userEvent.type(screen.getByLabelText(/gst number/i), "NOTAGST");
+    await userEvent.type(screen.getByLabelText(/^pan$/i), "NOTAPAN");
     await userEvent.click(screen.getByRole("button", { name: /create company/i }));
 
-    expect(await screen.findByText(/must be 15 characters/i)).toBeInTheDocument();
-    expect(findCall("POST")).toBe(-1);
+    await waitFor(() => expect(findCall("POST")).not.toBe(-1));
+    expect(bodyOf(findCall("POST")).gstNo).toBe("NOTAGST");
+    expect(bodyOf(findCall("POST")).panNo).toBe("NOTAPAN");
+  });
+
+  /**
+   * The cap is enforced by the input itself, so over-long text cannot be typed
+   * in the first place. `maxLength` is what makes the limit felt as the box
+   * stopping rather than as an error after the fact.
+   */
+  it("stops typing at the character limit on GST and PAN", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(() => Promise.resolve(json(detail)));
+    renderDialog(null);
+
+    const gst = screen.getByLabelText(/gst number/i) as HTMLInputElement;
+    const pan = screen.getByLabelText(/^pan$/i) as HTMLInputElement;
+    expect(gst.maxLength).toBe(15);
+    expect(pan.maxLength).toBe(10);
+
+    await userEvent.type(gst, "A1A1A2S5E4F15465999");
+    expect(gst.value).toHaveLength(15);
   });
 
   it("requires a name", async () => {

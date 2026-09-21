@@ -1,35 +1,227 @@
 @import "tailwindcss";
 
-/*
-  Account Book design tokens.
+/* ==========================================================================
+   Account Book design tokens
+   --------------------------------------------------------------------------
+   ONE PLACE. Nothing below this block hard-codes a colour, a radius or a
+   control height, and no screen component does either.
 
-  Restrained on purpose: this is a ledger, and colour here carries meaning rather
-  than decoration. Indigo is the single action colour; emerald and rose are
-  reserved for money received and money owed, so they never appear as styling.
-*/
+   The leverage here is deliberate: the application had already routed every
+   accent through `brand-*` and every neutral through `slate-*` — 737 class
+   usages across 30 files — so re-pointing those two ramps re-skins the whole
+   product without editing a page. That is the difference between a design
+   system and a coat of paint: the next screen somebody writes with
+   `text-slate-500` is already on-theme, and the one after that cannot drift.
+
+   The direction is a clean light SaaS interface: near-white surfaces, hairline
+   borders, near-black text, and sky blue carrying every interactive meaning.
+   ========================================================================== */
 @theme {
   --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", monospace;
 
-  --color-brand-50: #eef2ff;
-  --color-brand-100: #e0e7ff;
-  --color-brand-200: #c7d2fe;
-  --color-brand-300: #a5b4fc;
-  --color-brand-400: #818cf8;
-  --color-brand-500: #6366f1;
-  --color-brand-600: #4f46e5;
-  --color-brand-700: #4338ca;
-  --color-brand-800: #3730a3;
-  --color-brand-900: #312e81;
+  /* ---------------------------------------------------------------- neutrals
+     The `slate-*` NAME IS KEPT AND THE VALUES ARE NOT. Renaming the ramp would
+     have meant rewriting 737 class names for no visual gain; re-pointing it
+     costs one block and reaches every one of them.
 
-  /* Sidebar: a cool near-black that keeps indigo legible on top of it. */
-  --color-shell-800: #1a2233;
-  --color-shell-900: #141b29;
-  --color-shell-950: #0d121c;
+     Two steps carry more than a shade. `slate-500` is secondary text and was
+     #64748b (4.8:1 on white); it is now #5f6368 (6.0:1), so every hint,
+     description and helper line in the application got more legible rather than
+     less as part of a lightening pass. `slate-400` is the decorative role —
+     placeholders, chevrons, the icon inside an empty state — and was #94a3b8
+     (2.8:1), below the point where a chevron reads as an affordance; #8e8ea0 is
+     3.2:1 and never carries text that matters on its own. */
+  /*
+   * WHITE IS NOT #ffffff HERE, and this one line is why the cards stopped
+   * glaring (17 Sep 2026).
+   *
+   * 42 places say `bg-white` and mean "a card". Re-pointing the token moves all
+   * 42 with no page edited, exactly as the slate ramp did - and it is one line
+   * to put back if the softer ground is not wanted.
+   *
+   * #fbfbfc rather than something warmer: on a monitor at 100% brightness the
+   * difference from pure white is barely nameable, but it takes the peak
+   * luminance off the largest areas on the screen, which is where a working
+   * day's glare comes from. The card still reads as raised, because the ground
+   * behind it moved down too (#f1f2f4) and the pair keeps 1.08:1 of separation.
+   *
+   * `text-white` rides along on button labels; on the brand fill that is 5.9:1,
+   * so nothing that has to be read got worse.
+   */
+  --color-white: #fbfbfc;
 
-  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
-  --shadow-raised: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 6px -2px rgb(15 23 42 / 0.06);
+  /*
+   * RETUNED FOR LONG SESSIONS, 17 Sep 2026, after users reported eye strain.
+   * Every figure below was measured, not guessed; the ratios are against the
+   * card surface unless said otherwise.
+   *
+   * The headline change is at the DARK end. Primary text was #0d0d0d on #ffffff
+   * — 19.4:1. That is far past AAA (7:1), and past the point where more contrast
+   * helps: at maximum luminance difference a light background bleeds into the
+   * letterforms (halation), which is a well-known cause of fatigue over a
+   * working day. 14.7:1 is still comfortably AAA and stops the glare.
+   *
+   * The other end was the opposite problem: #8e8ea0 placeholders sat at 3.2:1
+   * and FAILED AA outright, and the #d3d4da control ring at 1.5:1 was close to
+   * invisible — so people were squinting at the faint things and being dazzled
+   * by the dark ones at the same time.
+   */
+  --color-slate-50: #f5f6f8;   /* muted surface: table header, inset panel    */
+  --color-slate-100: #e9ebef;  /* subtle border, hover tint, skeleton         */
+  --color-slate-200: #dfe2e7;  /* the border - darker, to survive on off-white*/
+  --color-slate-300: #a6abb6;  /* control ring 2.2:1, and the "—" absent mark */
+  --color-slate-400: #656b75;  /* muted/placeholder - now 5.2:1, was 3.2 FAIL */
+  --color-slate-500: #5a6068;  /* secondary text 6.1:1                        */
+  --color-slate-600: #3f444b;  /* body text 9.5:1                             */
+  --color-slate-700: #33363a;  /* strong body text                            */
+  --color-slate-800: #292d33;  /* headings                                    */
+  --color-slate-900: #22262b;  /* primary text 14.7:1 - was #0d0d0d at 19.4   */
+  --color-slate-950: #15181c;
+
+  /* ------------------------------------------------------------------- brand
+     Sky, and the one place it is tuned rather than taken from Tailwind is
+     `600` — the shade that carries white text on every primary button and
+     black-on-white meaning on every operation icon.
+
+     Sky-600 (#0284c7) is 4.1:1 against white: under AA for the 13px text that
+     sits on it. #0277b5 is the same hue (201deg against 199deg) two steps deeper
+     and 4.9:1, so the button reads identically and passes. `500` is left at
+     #0ea5e9 — the approved accent — where it does the jobs that are not text:
+     focus rings, the active indicator, a status dot. */
+  --color-brand-50: #f0f9ff;   /* soft accent fill: selected nav, selected row */
+  --color-brand-100: #e0f2fe;
+  --color-brand-200: #bae6fd;
+  --color-brand-300: #7dd3fc;
+  --color-brand-400: #38bdf8;
+  /*
+   * THE FOCUS RING, and it was failing WCAG before this change rather than
+   * because of it: #0ea5e9 is 2.77:1 on pure white, where a focus indicator is
+   * a UI component and owes 3:1 (WCAG 1.4.11). A ring a keyboard user cannot
+   * locate is the one that matters most - it is the only thing telling them
+   * where they are. #0b8ecb is 3.5:1 on a card and 3.3:1 on the page ground.
+   */
+  --color-brand-500: #0b8ecb;  /* the accent: focus ring, active marker, dot   */
+  --color-brand-600: #0277b5;  /* interactive: button fill, operation icon     */
+  --color-brand-700: #0369a1;  /* hover, and accent text that must be read     */
+  --color-brand-800: #075985;
+  --color-brand-900: #0c4a6e;
+
+  /* ------------------------------------------------------------------ status
+     Restrained on purpose. A ledger that shouts in four colours at once is
+     harder to read than one that whispers in three: these are desaturated
+     against Tailwind's defaults so a table of badges reads as data rather than
+     as a warning light. Each `600` still clears 4.5:1 on white, because each is
+     used for text and for icons as well as for fills. */
+  --color-rose-50: #fdf3f3;
+  --color-rose-100: #fbe4e4;
+  --color-rose-200: #f5cccc;
+  --color-rose-300: #eaadad;
+  --color-rose-400: #dd8785;
+  --color-rose-500: #d0605d;
+  --color-rose-600: #c43d39;   /* destructive: delete icon, error text (5.2:1) */
+  --color-rose-700: #a83230;
+  --color-rose-800: #8a2a28;
+  --color-rose-900: #732523;
+
+  --color-emerald-50: #f0faf4;
+  --color-emerald-100: #d9f0e3;
+  --color-emerald-200: #b6e3c9;
+  --color-emerald-300: #8bd0ab;
+  --color-emerald-400: #57b98a;
+  --color-emerald-500: #2e9e6b;
+  --color-emerald-600: #1f7d53;  /* 4.9:1 - was #22885a at 4.4, under AA */
+  --color-emerald-700: #1c6f4a;
+  --color-emerald-800: #175a3d;
+  --color-emerald-900: #134a33;
+
+  --color-amber-50: #fdf8ec;
+  --color-amber-100: #fbeecb;
+  --color-amber-200: #f5dda2;
+  --color-amber-300: #ebc46c;
+  --color-amber-400: #dfa82f;
+  --color-amber-500: #c98f18;
+  --color-amber-600: #8f610e;    /* 5.2:1 - was #ab7511 at 4.0, under AA */
+  --color-amber-700: #8a5d0f;
+  --color-amber-800: #714c10;
+  --color-amber-900: #5c3e0e;
+
+  /* ---------------------------------------------------------- semantic names
+     Aliases over the ramps above, so new code can say what it MEANS rather than
+     which step it wants. `bg-surface` on a card survives a decision to make
+     cards #fcfcfd; `bg-white` does not.
+
+     Additions, not replacements: these resolve to the same values the existing
+     slate/brand classes do, so the two vocabularies cannot drift apart. */
+  --color-app: #f1f2f4;            /* the ground the application sits on       */
+  --color-surface: #fbfbfc;        /* cards, table bodies, dialogs             */
+  --color-surface-muted: #f5f6f8;  /* table headers, footers, inset panels     */
+  --color-line: #dfe2e7;           /* the border                               */
+  --color-line-subtle: #e9ebef;    /* a divider inside a surface               */
+  --color-ink: #22262b;            /* primary text                             */
+  --color-ink-secondary: #5a6068;  /* secondary text                           */
+  --color-ink-muted: #656b75;      /* muted text                               */
+  --color-primary: #0277b5;
+  --color-primary-hover: #0369a1;
+  --color-primary-soft: #f0f9ff;
+  --color-operation: #0277b5;      /* add / edit / view / upload / refresh     */
+  --color-operation-soft: #f0f9ff;
+  --color-destructive: #c43d39;
+  --color-success: #1f7d53;
+  --color-warning: #8f610e;
+
+  /* ------------------------------------------------------------------- type
+     THE BODY SIZE IS 14px, AND `text-sm` IS HOW THE APPLICATION SPELLS IT.
+
+     Re-pointed rather than replaced, for the reason the colour ramps were: every
+     place that says `text-sm` means "body text". Rewriting them to `text-[14px]`
+     would be a diff per call site to land in the same place, and would leave the
+     next person a choice between two spellings of one size - which is how a 13px
+     table ends up under 14px prose.
+
+     13px WAS TOO SMALL, 17 Sep 2026. It is a fine size for a dashboard somebody
+     glances at; this is an ERP that people read for eight hours, and at that
+     duration the eye pays for every point of size it is not given. 14px is the
+     smallest body size worth defending for sustained reading, and the supporting
+     sizes move with it: `text-xs` 12px -> 13px, so a form label is legible
+     rather than merely present.
+
+     THE LINE HEIGHT MATTERS AS MUCH AS THE SIZE and is the cheaper of the two.
+     20px on 13px was 1.54; 22px on 14px is 1.57, and the extra 2px of leading is
+     what stops a dense grid reading as a solid block. It also grows a table row
+     from 40px to 42px on its own - the row is sized by its line box, not by a
+     fixed height - which is the spacing increase the grid wanted anyway, without
+     a second change to make it happen.
+
+     Both are pinned in px rather than left as ratios, so a 13px line and a 14px
+     line in the same row still sit on one baseline grid.
+  */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.375rem;
+
+  /* -------------------------------------------------------------- dimensions
+     ROUNDED-XL IS RE-POINTED FROM 12px TO 10px, and that is the whole of the
+     card-radius change: every card in the application already says rounded-xl
+     and not one of them had to be touched. Controls keep rounded-md (6px) and
+     buttons rounded-lg (8px), both already inside the approved range. */
+  --radius-xl: 0.625rem;
+
+  /* Named heights, so "how tall is a control" has an answer rather than a
+     convention. 36px for a control and 40px for a grid row are the density
+     these screens were measured at: the purchase order form carries 22 fields
+     and a line grid, and every 4px on a control is another 90px of scrolling. */
+  --spacing-control: 2.25rem;   /* 36px - input, select, button, picker        */
+  --spacing-control-sm: 2rem;   /* 32px - a control inside a table cell        */
+  --spacing-row: 2.5rem;        /* 40px - a data grid row                      */
+
+  /* Minimal, and that is the brief. A card is separated from the page by its
+     border; the shadow only stops it looking painted on. */
+  --shadow-card: 0 1px 2px 0 rgb(13 13 13 / 0.04);
+  --shadow-raised: 0 2px 8px -2px rgb(13 13 13 / 0.08), 0 1px 3px -1px rgb(13 13 13 / 0.06);
+  --shadow-pop: 0 4px 16px -4px rgb(13 13 13 / 0.12), 0 2px 6px -2px rgb(13 13 13 / 0.06);
 }
 
 html,
@@ -39,10 +231,27 @@ body,
 }
 
 body {
-  @apply bg-slate-50 text-slate-700 antialiased;
+  @apply bg-app text-slate-700 antialiased;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
+/*
+ * EVERY ICON IN THE APPLICATION IS A THIN LINE, set once.
+ *
+ * Lucide draws at stroke-width 2, which at 14px reads as a glyph rather than as
+ * a line drawing and is the loudest thing on an otherwise quiet screen. 1.5 is
+ * the approved weight.
+ *
+ * LucideProvider in App.tsx is what sets it for the application; this rule is
+ * the backstop for an icon rendered outside that tree - a portal mounted by a
+ * test, a preview surface - so the two can never disagree. A deliberate
+ * per-icon strokeWidth prop still wins: it lands on the element as a
+ * presentation attribute and this selector is a single class, so raising the
+ * weight where one is genuinely wanted still works.
+ */
+svg.lucide {
+  stroke-width: 1.5;
+}
 /*
  * Money, quantities and identifiers must align digit-for-digit down a column,
  * and must never be broken across two lines.
@@ -142,17 +351,29 @@ body {
   @apply pointer-events-none text-slate-400;
 }
 
-/* A quiet scrollbar for the sidebar, so it does not fight the dark surface. */
+/*
+ * A quiet scrollbar.
+ *
+ * It was white-on-transparent, for a scrollbar that only ever appeared on the
+ * dark navigation rail. The rail is light now, so the same rule drew an
+ * invisible thumb on a white surface - the sidebar, the item listbox and every
+ * panel body using this class scrolled with nothing to say that they could.
+ * Ink at the same weights instead.
+ */
 .scroll-subtle {
   scrollbar-width: thin;
-  scrollbar-color: rgb(255 255 255 / 0.12) transparent;
+  scrollbar-color: rgb(13 13 13 / 0.18) transparent;
 }
 .scroll-subtle::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 .scroll-subtle::-webkit-scrollbar-thumb {
-  background-color: rgb(255 255 255 / 0.12);
+  background-color: rgb(13 13 13 / 0.18);
   border-radius: 9999px;
+}
+.scroll-subtle::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(13 13 13 / 0.3);
 }
 
 @media (prefers-reduced-motion: reduce) {

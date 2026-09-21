@@ -36,7 +36,6 @@ export interface ItemListRow {
   unitId: number;
   unitName: string;
   pricePerUnit: string;
-  isWithGst: boolean;
   gstPercent: string | null;
   gstAmount: string | null;
   hsnCode: string | null;
@@ -48,7 +47,6 @@ const DETAIL_COLUMNS = {
   name: items.name,
   unitId: items.unitId,
   pricePerUnit: items.pricePerUnit,
-  isWithGst: items.isWithGst,
   gstPercent: items.gstPercent,
   gstAmount: items.gstAmount,
   hsnCode: items.hsnCode,
@@ -229,7 +227,7 @@ export class ItemsRepository extends BaseRepository {
    * `writing`. Checking the unit exists first would be two statements with a gap
    * in the middle; the constraint has no gap.
    */
-  async create(input: CreateItem, actorId: string): Promise<ItemDetail> {
+  async create(input: CreateItem & { isApproved?: boolean }, actorId: string): Promise<ItemDetail> {
     const name = normalizeItemName(input.name);
     await this.refuseDuplicateName(name, null);
 
@@ -251,7 +249,7 @@ export class ItemsRepository extends BaseRepository {
    * same transaction. The current row is read `FOR UPDATE` first, so two people
    * saving at once each record the price they actually replaced.
    */
-  async update(id: string, input: UpdateItem, actorId: string): Promise<ItemDetail> {
+  async update(id: string, input: UpdateItem & { isApproved?: boolean }, actorId: string): Promise<ItemDetail> {
     const values =
       input.name === undefined ? input : { ...input, name: normalizeItemName(input.name) };
     if (values.name !== undefined) {

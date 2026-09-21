@@ -19,7 +19,6 @@ const CEMENT = {
   unitId: 1,
   unitName: "Bag",
   pricePerUnit: "395.00",
-  isWithGst: true,
   gstPercent: "18.00",
   gstAmount: "71.10",
   hsnCode: "2523",

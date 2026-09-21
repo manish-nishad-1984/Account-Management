@@ -92,9 +92,7 @@ export class TokenService {
     // Refresh tokens are opaque random strings, not JWTs. Only their SHA-256 is
     // stored, so a database leak does not yield usable sessions.
     const refreshToken = randomBytes(32).toString("base64url");
-    const refreshTokenExpiresAt = new Date(
-      Date.now() + this.env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
-    );
+    const refreshTokenExpiresAt = new Date(Date.now() + this.env.REFRESH_TOKEN_IDLE_MINUTES * 60 * 1000);
 
     return {
       accessToken,

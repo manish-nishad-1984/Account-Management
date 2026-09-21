@@ -37,7 +37,6 @@ function routes() {
           name: EXISTING.name,
           unitId: 1,
           pricePerUnit: "395.00",
-          isWithGst: false,
           gstPercent: null,
           gstAmount: null,
           hsnCode: null,

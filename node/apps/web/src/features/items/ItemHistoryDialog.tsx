@@ -89,7 +89,7 @@ function MasterPriceChanges({ itemId }: { itemId: string | null }) {
       )}
       {changes && changes.rows.length > 0 && (
         <>
-          <div className="max-h-64 overflow-auto rounded-lg ring-1 ring-slate-200">
+          <div className="relative max-h-64 overflow-auto rounded-lg ring-1 ring-slate-200">
             <table
               aria-label="Item master price changes"
               className="w-full min-w-[40rem] border-collapse text-sm"
@@ -215,7 +215,7 @@ export function ItemHistoryDialog({
             dialog sideways — nine columns do not fit a narrow window, and a
             modal that scrolls horizontally moves its own close button off screen.
           */}
-          <div className="max-h-[26rem] overflow-auto rounded-lg ring-1 ring-slate-200">
+          <div className="relative max-h-[26rem] overflow-auto rounded-lg ring-1 ring-slate-200">
             <table className="w-full min-w-[52rem] border-collapse text-sm">
               <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-500">
                 <tr>

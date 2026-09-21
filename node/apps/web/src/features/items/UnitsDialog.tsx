@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { createUnitSchema, type UnitRow } from "@accountmanagement/contracts";
 import { Pencil, Plus, Trash2 } from "lucide-react";
-import { Alert, Button, Modal, TextField } from "../../components/ui";
+import {
+  Alert,
+  Button,
+  IconButton,
+  Modal,
+  TextField,
+} from "../../components/ui";
 import { ApiError } from "../../lib/api-client";
 import { useAllUnits, useCreateUnit, useDeleteUnit, useUpdateUnit } from "./api";
 
@@ -149,14 +155,11 @@ export function UnitsDialog({ open, onClose }: { open: boolean; onClose: () => v
                     />
                   )}
                   {unit.capabilities.canDelete && (
-                    <Button
-                      variant="ghost"
+                    <IconButton
+                      label={`Delete ${unit.name}`}
                       icon={Trash2}
-                      className="px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                      aria-label={`Delete ${unit.name}`}
-                      // No confirmation step: a unit in use is refused by the
-                      // server with the count, and one that is not in use has
-                      // nothing pointing at it to lose.
+                      tone="destructive"
+                      size="sm"
                       onClick={() => void askRemove(unit)}
                     />
                   )}

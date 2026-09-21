@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft, FileDown, Printer } from "lucide-react";
 import { DOCUMENT_TYPES, presetLayout, type DocumentType } from "@accountmanagement/contracts";
 import { Alert, Button } from "../../components/ui";
 import { describeLoadError } from "../../lib/load-error";
@@ -42,6 +42,23 @@ export function PrintDocumentPage() {
     [template, documentType],
   );
   const page = pageSizeMm(layout.page);
+
+  const [saving, setSaving] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const downloadPdf = async () => {
+    if (!bundle.data) return;
+    setSaving(true);
+    setPdfError(null);
+    try {
+      // Loaded on the click; see pdf.tsx for why.
+      const { saveDocumentPdf } = await import("./pdf");
+      await saveDocumentPdf(layout, bundle.data.document);
+    } catch {
+      setPdfError("The PDF could not be made in this browser. Use Print, and choose Save as PDF there.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (!documentType) {
     return (
@@ -86,7 +103,7 @@ export function PrintDocumentPage() {
           value={template ? template.id : BUILT_IN}
           onChange={(event) => setSearch({ template: event.target.value }, { replace: true })}
           disabled={!bundle.data}
-          className="h-8 rounded-md border-0 bg-white px-2.5 pr-8 text-sm text-slate-800 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-brand-600"
+          className="h-8 rounded-md border-0 bg-white px-2.5 pr-8 text-sm text-slate-800 ring-1 ring-inset ring-slate-300 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
         >
           {templates.map((t) => (
             <option key={t.id} value={t.id}>
@@ -98,10 +115,23 @@ export function PrintDocumentPage() {
             Classic (built in){bundle.data?.defaultTemplateId === null ? " (default)" : ""}
           </option>
         </select>
+        {/*
+          Download saves the file at once, with this layout; Print goes through
+          the browser's dialog, whose Save as PDF keeps the text selectable.
+        */}
+        <Button variant="secondary" icon={FileDown} onClick={() => void downloadPdf()} disabled={!bundle.data || saving}>
+          {saving ? "Saving PDF…" : "Download PDF"}
+        </Button>
         <Button icon={Printer} onClick={() => window.print()} disabled={!bundle.data}>
-          Print / Save PDF
+          Print
         </Button>
       </div>
+
+      {pdfError && (
+        <div className="px-4 pt-4 print:hidden">
+          <Alert>{pdfError}</Alert>
+        </div>
+      )}
 
       {bundle.isError ? (
         <div className="p-6 print:hidden">
@@ -112,7 +142,7 @@ export function PrintDocumentPage() {
           Loading…
         </p>
       ) : (
-        <div className="overflow-x-auto p-6 print:overflow-visible print:p-0">
+        <div className="relative overflow-x-auto p-6 print:overflow-visible print:p-0">
           <div className="dt-print-sheet mx-auto shadow-lg" style={{ width: `${page.width}mm` }}>
             <DocumentRenderer layout={layout} document={bundle.data.document} />
           </div>

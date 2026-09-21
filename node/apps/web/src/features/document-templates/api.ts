@@ -66,11 +66,20 @@ export const useMakeDefaultTemplate = () =>
 
 export const useDeleteTemplate = () => useTemplateMutation((id: string) => deleteRequest(`/${RESOURCE}/${id}`));
 
+/**
+ * One query for a document's print bundle, shared by the print page and the PDF
+ * buttons on the lists, so a PDF saved from a list and the print page opened
+ * after it are the same fetch.
+ */
+export const printBundleQuery = (documentType: DocumentType, id: string) => ({
+  queryKey: ["document-print", documentType, id] as const,
+  queryFn: ({ signal }: { signal?: AbortSignal }) =>
+    apiRequest(`/document-print/${documentType}/${id}`, { schema: bundleSchema, signal }),
+});
+
 /** A document ready to print, with the templates that may print it. */
 export const usePrintBundle = (documentType: DocumentType, id: string | null) =>
   useQuery({
-    queryKey: ["document-print", documentType, id],
+    ...printBundleQuery(documentType, id ?? ""),
     enabled: id !== null,
-    queryFn: ({ signal }) =>
-      apiRequest(`/document-print/${documentType}/${id}`, { schema: bundleSchema, signal }),
   });

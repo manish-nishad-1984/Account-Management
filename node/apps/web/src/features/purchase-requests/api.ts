@@ -1,12 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  itemRowSchema,
-  listResponseSchema,
   purchaseRequestDetailSchema,
   purchaseRequestRowSchema,
   type CreatePurchaseRequest,
-  type ItemRow,
-  type ListResponse,
   type PurchaseRequestDetail,
   type PurchaseRequestRow,
   type UpdatePurchaseRequest,
@@ -99,24 +95,13 @@ export const useSetApproval = () => {
  */
 
 /**
- * Every item, for the item dropdown.
+ * `useItemOptions` MOVED TO `features/items/api.ts`, where a hook that fetches
+ * `/items` always belonged.
  *
- * 758 items in production, which is over the 200-row cap — so this is the first
- * dropdown in the app that CANNOT show everything. It loads the first page for
- * the common case and the form falls back to free text, which the document
- * supports natively (`item_name`). A search-as-you-type control replaces this
- * when the item list is next touched; the cap is stated in the form so the
- * limitation is visible rather than silent.
+ * It lived here because purchase requests were the first screen to need an item
+ * dropdown, and five other modules then imported it from this file. That was
+ * merely odd until the shared `ItemCombobox` was written: it lives in
+ * `features/items`, so leaving the hook here would have had the items module
+ * importing from purchase-requests while purchase-requests imported the control
+ * back from items.
  */
-export const useItemOptions = (search: string) =>
-  useQuery({
-    queryKey: ["items", "options", search],
-    queryFn: ({ signal }) => {
-      const params = new URLSearchParams({ limit: "200", sortBy: "name" });
-      if (search.trim()) params.set("search", search.trim());
-      return apiRequest<ListResponse<ItemRow>>(`/items?${params.toString()}`, {
-        schema: listResponseSchema(itemRowSchema) as never,
-        signal,
-      });
-    },
-  });

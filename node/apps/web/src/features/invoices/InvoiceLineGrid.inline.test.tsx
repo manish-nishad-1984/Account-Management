@@ -19,7 +19,6 @@ const CEMENT = {
   unitId: 1,
   unitName: "Bag",
   pricePerUnit: "395.00",
-  isWithGst: false,
   gstPercent: null,
   gstAmount: null,
   hsnCode: null,
@@ -74,21 +73,29 @@ describe("the invoice line grid, one row per line", () => {
     expect(screen.getByText("3 lines")).toBeInTheDocument();
   });
 
-  it("offers a typed name from inside the dropdown, and can go back to the list", async () => {
+  /**
+   * ONE CONTROL FOR BOTH STATES since 16 Sep 2026.
+   *
+   * This was a dropdown carrying a "Not in the list — type a name" option that
+   * SWAPPED the cell for a text box, plus a button to swap back — three controls
+   * and a `typing` map remembering which half each line was showing. The picker
+   * searches the whole catalogue now, so a typed name is simply its last option
+   * and there is nothing to swap.
+   */
+  it("offers a typed name from inside the picker, and goes back to the list", async () => {
     const user = userEvent.setup();
     open();
 
-    const select = await screen.findByLabelText(/item on line 1/i);
-    await user.selectOptions(select, "Not in the list — type a name");
+    const box = await screen.findByRole("combobox", { name: /item on line 1/i });
+    await user.click(box);
+    await user.type(box, "Loose sand");
 
-    const name = screen.getByLabelText(/product name on line 1/i);
-    await user.type(name, "Loose sand");
-    expect(name).toHaveValue("Loose sand");
-    expect(screen.queryByLabelText(/item on line 1/i)).not.toBeInTheDocument();
+    await user.click(await screen.findByRole("option", { name: /as a typed name/i }));
+    expect(box).toHaveValue("Loose sand");
 
-    await user.click(screen.getByRole("button", { name: "Choose an item from the list on line 1" }));
-
-    expect(screen.getByLabelText(/item on line 1/i)).toHaveValue("");
-    expect(screen.queryByLabelText(/product name on line 1/i)).not.toBeInTheDocument();
+    // The SAME box goes back to the catalogue — there is no second control.
+    await user.click(box);
+    await user.click(await screen.findByRole("option", { name: "OPC Cement" }));
+    expect(box).toHaveValue("OPC Cement");
   });
 });

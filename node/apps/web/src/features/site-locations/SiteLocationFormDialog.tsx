@@ -1,33 +1,48 @@
 import { useEffect, useRef, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
-import { Alert, Button, FormDialog, FormSection, TextField } from "../../components/ui";
+import clsx from "clsx";
+import { Building2, MapPin, Plus, Trash2 } from "lucide-react";
+import {
+  Alert,
+  Button,
+  FormDialog,
+  FormSection,
+  IconButton,
+  TextField,
+} from "../../components/ui";
 import { ApiError } from "../../lib/api-client";
+import { CONTROL_BASE, ringFor } from "../../components/ui/fields";
 import { useSiteList } from "../sites/api";
 import { useSaveSiteLocations, useSiteLocations } from "./api";
 import { SiteCombobox } from "./SiteCombobox";
 
 /**
- * A site's locations and addresses — the Site Location form, 15 Sep 2026.
+ * A site's locations, each with the address deliveries to it go to — the Site
+ * Location form.
  *
- * In the order the business described it: FIRST the site, picked by typing;
- * THEN the location names, one box each, with a + to add the next; THEN the
- * addresses, as many as the site has.
+ * ONE LIST OF PAIRS since 17 Sep 2026. It was two independent lists, chosen by
+ * the business on 15 Sep and reversed by them two days later: "Block A" and
+ * "Plot 5, Bardoli Road" are one place, and two lists could not say which
+ * address belonged to which block — the one thing a delivery needs to know.
  *
- * PICKING A SITE THAT ALREADY HAS LOCATIONS OPENS THEM. Someone who chooses
- * "Add" and picks a site with an entry is looking to change that site's list;
- * refusing with "already exists" would make them close the form and find the
- * row. The form loads what is there and says so.
+ * PICKING A SITE THAT ALREADY HAS PAIRS OPENS THEM. Someone who chooses "Add"
+ * and picks a site with an entry is looking to change that site's list; refusing
+ * with "already exists" would make them close the form and find the row. The
+ * form loads what is there and says so.
  *
- * NO `react-hook-form`, as on the site groups form it replaces: both fields that
- * matter are lists, and the one scalar is a combobox with state of its own.
+ * EITHER HALF MAY BE LEFT BLANK, and that is not laxness. Migration 0020 carried
+ * every address from the old two-list shape across as a pair with NO NAME —
+ * nothing recorded which name went with which address, and inventing a pairing
+ * would have put a wrong address on a live site. Those rows are what this form
+ * exists to let someone name. A row with both halves blank is dropped on save.
  *
- * Blank rows are dropped on save rather than refused. A + pressed once too often
- * is not a mistake worth a validation message.
+ * NO `react-hook-form`: the field that matters is a list, and the one scalar is
+ * a combobox with state of its own.
  */
-interface LocationDraft {
+interface PairDraft {
   /** The stored location's id; null for one added in this form. */
   id: string | null;
   name: string;
+  address: string;
   /** Stable React key, because two new rows both have a null id. */
   key: number;
 }
@@ -44,17 +59,19 @@ export function SiteLocationFormDialog({
 }) {
   const isEdit = siteId !== null;
   const [chosenSiteId, setChosenSiteId] = useState<string | null>(null);
-  const [locations, setLocations] = useState<LocationDraft[]>([]);
-  const [addresses, setAddresses] = useState<string[]>([]);
+  const [pairs, setPairs] = useState<PairDraft[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const nextKey = useRef(1);
   const focusKey = useRef<number | null>(null);
 
-  const newRow = (name = "", id: string | null = null): LocationDraft => ({
+  const newRow = (name = "", address = "", id: string | null = null): PairDraft => ({
     id,
     name,
+    address,
     key: nextKey.current++,
   });
+
+  const isBlank = (row: PairDraft) => row.name.trim() === "" && row.address.trim() === "";
 
   /**
    * Every site, not the ones this person is scoped to: a master screen. A list
@@ -65,7 +82,7 @@ export function SiteLocationFormDialog({
 
   const target = isEdit ? siteId : chosenSiteId;
   const detail = useSiteLocations(open && target ? target : null);
-  const exists = (detail.data?.locations.length ?? 0) > 0 || (detail.data?.addresses.length ?? 0) > 0;
+  const exists = (detail.data?.locations.length ?? 0) > 0;
   const save = useSaveSiteLocations();
 
   /** The site whose stored rows are already in the form. */
@@ -76,8 +93,7 @@ export function SiteLocationFormDialog({
     loadedFor.current = null;
     setFormError(null);
     setChosenSiteId(null);
-    setLocations([newRow()]);
-    setAddresses([]);
+    setPairs([newRow()]);
   }, [open, siteId]);
 
   /**
@@ -86,29 +102,31 @@ export function SiteLocationFormDialog({
    * each refetch hands over a new `data`; applying every one of them would wipe
    * whatever had been typed since. The full suite caught exactly that.
    *
-   * A site with no locations keeps a still-blank row rather than swapping it for
-   * a new one, so the box the cursor is in is not replaced under it.
+   * A site with no pairs keeps a still-blank row rather than swapping it for a
+   * new one, so the box the cursor is in is not replaced under it.
    */
   useEffect(() => {
     if (!open || !target || !detail.data || detail.data.siteId !== target) return;
     if (loadedFor.current === target) return;
     loadedFor.current = target;
     const stored = detail.data.locations;
-    setLocations((current) =>
+    setPairs((current) =>
       stored.length > 0
-        ? stored.map((row) => newRow(row.name, row.id))
-        : current.length === 1 && current[0]!.id === null && current[0]!.name === ""
+        ? stored.map((row) => newRow(row.name, row.address, row.id))
+        : current.length === 1 && current[0]!.id === null && isBlank(current[0]!)
           ? current
           : [newRow()],
     );
-    setAddresses(detail.data.addresses.map((row) => row.address));
   }, [open, target, detail.data]);
 
-  const insertLocationAfter = (index: number) => {
+  const insertAfter = (index: number) => {
     const row = newRow();
     focusKey.current = row.key;
-    setLocations((current) => [...current.slice(0, index + 1), row, ...current.slice(index + 1)]);
+    setPairs((current) => [...current.slice(0, index + 1), row, ...current.slice(index + 1)]);
   };
+
+  const patch = (key: number, change: Partial<PairDraft>) =>
+    setPairs((current) => current.map((row) => (row.key === key ? { ...row, ...change } : row)));
 
   const onSubmit = async () => {
     setFormError(null);
@@ -118,10 +136,9 @@ export function SiteLocationFormDialog({
     }
 
     const body = {
-      locations: locations
-        .map((row) => ({ id: row.id, name: row.name.trim() }))
-        .filter((row) => row.name !== ""),
-      addresses: addresses.map((address) => address.trim()).filter((address) => address !== ""),
+      locations: pairs
+        .map((row) => ({ id: row.id, name: row.name.trim(), address: row.address.trim() }))
+        .filter((row) => row.name !== "" || row.address !== ""),
     };
 
     try {
@@ -134,18 +151,21 @@ export function SiteLocationFormDialog({
 
   const siteName = detail.data?.siteName ?? siteRows.find((row) => row.id === target)?.name;
 
+  /** Rows carried over by the migration: an address, still waiting for a name. */
+  const unnamed = pairs.filter((row) => row.name.trim() === "" && row.address.trim() !== "").length;
+
   return (
     <FormDialog
       open={open}
       onClose={onClose}
       onSubmit={onSubmit}
       title={isEdit ? `Edit site location${siteName ? ` — ${siteName}` : ""}` : "Add site location"}
-      description="Choose a site, then list the locations inside it and the addresses deliveries can go to"
+      description="Choose a site, then add each location with the address deliveries to it go to"
       formError={formError}
       pending={save.isPending}
       submitLabel="Save"
     >
-      <FormSection title="Site" columns={1}>
+      <FormSection icon={Building2} title="Site" columns={1}>
         {isEdit ? (
           <div>
             <div className="text-xs font-medium text-slate-600">Site</div>
@@ -169,121 +189,110 @@ export function SiteLocationFormDialog({
       {target && detail.isLoading ? (
         <p className="py-6 text-center text-sm text-slate-500">Loading the site's locations…</p>
       ) : (
-        <>
-          <FormSection
-            title="Locations"
-            description="The places inside the site. Documents raised for the site can name one."
-            columns={1}
-          >
-            <div className="space-y-2">
-              {locations.map((row, index) => (
-                <div key={row.key} className="flex items-start gap-2">
-                  <div className="min-w-0 flex-1">
-                    <TextField
-                      label={`Location name ${index + 1}`}
-                      labelHidden
-                      placeholder="Location name, e.g. Block A"
-                      value={row.name}
-                      disabled={!target}
-                      ref={(element) => {
-                        if (element && focusKey.current === row.key) {
-                          focusKey.current = null;
-                          element.focus();
-                        }
-                      }}
-                      onChange={(event) => {
-                        const name = event.currentTarget.value;
-                        setLocations((current) =>
-                          current.map((draft) => (draft.key === row.key ? { ...draft, name } : draft)),
-                        );
-                      }}
-                      onKeyDown={(event) => {
-                        // Enter adds the next location rather than submitting the form.
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          insertLocationAfter(index);
-                        }
-                      }}
-                    />
-                  </div>
-                  <Button
-                    variant="secondary"
-                    icon={Plus}
-                    className="px-2 py-2"
-                    disabled={!target}
-                    aria-label={`Add a location after ${index + 1}`}
-                    title="Add another location"
-                    onClick={() => insertLocationAfter(index)}
-                  />
-                  <Button
-                    variant="ghost"
-                    icon={Trash2}
-                    className="px-2 py-2 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                    aria-label={`Remove location ${index + 1}`}
-                    title={`Remove location ${index + 1}`}
-                    disabled={!target}
-                    onClick={() =>
-                      setLocations((current) =>
-                        current.length === 1
-                          ? [newRow()]
-                          : current.filter((draft) => draft.key !== row.key),
-                      )
-                    }
-                  />
-                </div>
-              ))}
-              {isEdit || exists ? (
-                <p className="text-[11px] text-slate-500">
-                  A location removed here stays on the orders and invoices that already name it.
-                </p>
-              ) : null}
+        <FormSection
+          title="Locations and addresses"
+          icon={MapPin}
+          description="One row per place: what it is called, and where deliveries to it go"
+          columns={1}
+        >
+          <div className="space-y-2">
+            {/*
+              Says which box is which ONCE, instead of a label on every row.
+              Hidden below `sm`, where the two boxes stack and their placeholders
+              do the same job with less furniture.
+            */}
+            <div className="hidden gap-2 sm:grid sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto]">
+              <span className="text-xs font-medium text-slate-600">Location</span>
+              <span className="text-xs font-medium text-slate-600">Address</span>
+              {/* Holds the headings over their boxes, clear of the two buttons. */}
+              <span className="w-[4.5rem]" aria-hidden />
             </div>
-          </FormSection>
 
-          <FormSection
-            title="Addresses"
-            description="Offered as shipping addresses on orders and invoices for this site"
-            columns={1}
-          >
-            <div className="space-y-2">
-              {addresses.length === 0 && <p className="text-sm text-slate-500">None yet.</p>}
+            {unnamed > 0 && (
+              <Alert tone="info">
+                {unnamed === 1
+                  ? "One address here has no location name yet."
+                  : `${unnamed} addresses here have no location name yet.`}{" "}
+                They came from the old separate address list, which never recorded which
+                location each one belonged to. Name them as you go — nothing is lost
+                meanwhile, and they are still offered as shipping addresses.
+              </Alert>
+            )}
 
-              {addresses.map((address, index) => (
-                <div key={index} className="flex items-start gap-2">
+            {pairs.map((row, index) => (
+              <div key={row.key} className="flex items-start gap-2">
+                <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+                  <TextField
+                    label={`Location name ${index + 1}`}
+                    labelHidden
+                    placeholder="e.g. Block A"
+                    value={row.name}
+                    disabled={!target}
+                    ref={(element) => {
+                      if (element && focusKey.current === row.key) {
+                        focusKey.current = null;
+                        element.focus();
+                      }
+                    }}
+                    onChange={(event) => patch(row.key, { name: event.currentTarget.value })}
+                    onKeyDown={(event) => {
+                      // Enter adds the next pair rather than submitting the form.
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        insertAfter(index);
+                      }
+                    }}
+                  />
                   <textarea
                     rows={2}
-                    value={address}
+                    value={row.address}
                     disabled={!target}
-                    onChange={(event) => {
-                      const text = event.currentTarget.value;
-                      setAddresses((current) => current.map((row, at) => (at === index ? text : row)));
-                    }}
+                    onChange={(event) => patch(row.key, { address: event.currentTarget.value })}
                     aria-label={`Address ${index + 1}`}
                     placeholder="Full address, with the PIN code"
-                    className="min-w-0 flex-1 rounded-lg border-0 px-2.5 py-2 text-sm shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-brand-500"
-                  />
-                  <Button
-                    variant="ghost"
-                    icon={Trash2}
-                    className="mt-1 px-2 py-2 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                    aria-label={`Remove address ${index + 1}`}
-                    title={`Remove address ${index + 1}`}
-                    onClick={() => setAddresses((current) => current.filter((_row, at) => at !== index))}
+                    className={clsx(CONTROL_BASE, ringFor(undefined), "min-w-0 px-2.5")}
                   />
                 </div>
-              ))}
+                <IconButton
+                  label={`Add a location after ${index + 1}`}
+                  icon={Plus}
+                  tone="operation"
+                  size="md"
+                  onClick={() => insertAfter(index)}
+                  disabled={!target}
+                />
+                <IconButton
+                  label={`Remove location ${index + 1}`}
+                  icon={Trash2}
+                  tone="destructive"
+                  size="md"
+                  onClick={() =>
+                    setPairs((current) =>
+                      current.length === 1 ? [newRow()] : current.filter((d) => d.key !== row.key),
+                    )
+                  }
+                  disabled={!target}
+                />
+              </div>
+            ))}
 
-              <Button
-                variant="secondary"
-                icon={Plus}
-                disabled={!target}
-                onClick={() => setAddresses((current) => [...current, ""])}
-              >
-                Add address
-              </Button>
-            </div>
-          </FormSection>
-        </>
+            <Button
+              variant="outline"
+              size="sm"
+              icon={Plus}
+              disabled={!target}
+              onClick={() => insertAfter(pairs.length - 1)}
+            >
+              Add pair
+            </Button>
+
+            {isEdit || exists ? (
+              <p className="text-xs text-slate-500">
+                A location removed here stays on the orders and invoices that already name it.
+              </p>
+            ) : null}
+          </div>
+        </FormSection>
       )}
     </FormDialog>
   );

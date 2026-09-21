@@ -112,16 +112,16 @@ export function CompaniesPage() {
       <PageHeader
         title="Companies"
         description="Billing entities — GST registration, invoice prefix and bank details"
-        actions={
-          canAdd ? (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              Add company
-            </Button>
-          ) : undefined
-        }
       />
 
       <DataGrid<CompanyRow>
+        // One row above the grid (client request, 18 Sep 2026): the screen's
+        // filters beside the search box and its actions at the right-hand end.
+        actions={canAdd ? (
+            <Button icon={Plus} onClick={screen.openCreate}>
+              Add company
+            </Button>
+          ) : undefined}
         gridKey="companies"
         columns={columns}
         searchPlaceholder="Search name, GST or PAN"

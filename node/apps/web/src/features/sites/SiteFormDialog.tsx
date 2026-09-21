@@ -2,16 +2,20 @@ import { useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
-import { Plus, Trash2 } from "lucide-react";
+import clsx from "clsx";
+import { Building2, Home, Plus, Trash2, Truck, Users } from "lucide-react";
 import { createSiteSchema, type SiteDetail } from "@accountmanagement/contracts";
 import {
   Button,
   CheckboxField,
+  EmptyRow,
   FormDialog,
   FormSection,
+  IconButton,
   TextAreaField,
   TextField,
 } from "../../components/ui";
+import { CONTROL_BASE, ringFor } from "../../components/ui/fields";
 import { applyServerErrors, unshownValidationMessage } from "../../lib/crud";
 import { text } from "../../lib/form-values";
 import {
@@ -161,18 +165,23 @@ export function SiteFormDialog({
         <p className="py-8 text-center text-sm text-slate-500">Loading site…</p>
       ) : (
         <>
-          <FormSection title="Site">
+          <FormSection
+            title="Site details"
+            description="Basic information about the site."
+            icon={Building2}
+          >
             <TextField
               label="Site name"
               required
               autoFocus
+              placeholder="e.g. Ahmedabad Riverfront"
               error={errors.name?.message}
               {...register("name")}
             />
             <CheckboxField
               label="Active"
               hint="Inactive sites stay on the list but are marked"
-              className="self-end pb-2.5"
+              className="self-end pb-2"
               {...register("isActive")}
             />
           </FormSection>
@@ -183,13 +192,29 @@ export function SiteFormDialog({
             one is the site's main contact: the Sites list shows it.
           */}
           <FormSection
-            title="Contacts"
-            description="The first contact is shown on the Sites list"
+            title="Site contacts"
+            description="The first contact is shown on the Sites list."
+            icon={Users}
             columns={1}
+            action={
+              <Button
+                variant="outline"
+                size="sm"
+                icon={Plus}
+                onClick={() => appendContact({ name: "", phone: "" })}
+              >
+                Add contact
+              </Button>
+            }
           >
             <div className="space-y-2">
               {contactRows.length === 0 && (
-                <p className="text-sm text-slate-500">No contacts yet.</p>
+                /* NO BUTTON HERE. The section header already carries "Add
+                   contact", and two identical buttons six lines apart is a
+                   choice the reader has to make for no reason - it also made
+                   `getByRole("button", {name: /add contact/i})` ambiguous, which
+                   is the accessibility version of the same complaint. */
+                <EmptyRow>No contacts yet.</EmptyRow>
               )}
 
               {contactRows.map((row, index) => (
@@ -198,7 +223,7 @@ export function SiteFormDialog({
                     <TextField
                       label={`Contact ${index + 1} name`}
                       labelHidden
-                      placeholder="Name"
+                      placeholder="Enter contact name"
                       error={errors.contacts?.[index]?.name?.message}
                       {...register(`contacts.${index}.name`)}
                     />
@@ -206,87 +231,109 @@ export function SiteFormDialog({
                       label={`Contact ${index + 1} phone`}
                       labelHidden
                       inputMode="tel"
-                      placeholder="Phone number"
+                      placeholder="Enter phone number"
                       error={errors.contacts?.[index]?.phone?.message}
                       {...register(`contacts.${index}.phone`)}
                     />
                   </div>
-                  <Button
-                    variant="ghost"
+                  <IconButton
+                    label={`Remove contact ${index + 1}`}
                     icon={Trash2}
-                    className="px-2 py-2 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                    aria-label={`Remove contact ${index + 1}`}
-                    title={`Remove contact ${index + 1}`}
+                    tone="destructive"
+                    size="md"
                     onClick={() => removeContact(index)}
                   />
                 </div>
               ))}
-
-              <Button
-                variant="secondary"
-                icon={Plus}
-                onClick={() => appendContact({ name: "", phone: "" })}
-              >
-                Add contact
-              </Button>
             </div>
           </FormSection>
 
-          <FormSection title="Address">
-            <TextAreaField
-              label="Address"
-              rows={2}
-              className="sm:col-span-2"
-              error={errors.address?.message}
-              {...register("address")}
-            />
-          </FormSection>
+          {/*
+            THE TWO ADDRESS SECTIONS SIT SIDE BY SIDE, 40/60, WHEN THERE IS ROOM.
 
-          <FormSection
-            title="Delivery addresses"
-            description="Offered on invoices and orders raised for this site"
-          >
-            <div className="space-y-2 sm:col-span-2">
-              {drafts.length === 0 && (
-                <p className="text-sm text-slate-500">
-                  None yet. Documents will offer the address above.
-                </p>
-              )}
+            `@container` on the wrapper and `@4xl` on the spans, not `lg:` — the
+            question is how wide THIS form is, not how wide the window is. The
+            same two sections are stacked in a 48rem dialog and side by side on a
+            1600px record page at one unchanged window size, which a viewport
+            breakpoint cannot express. 56rem is above the widest dialog, so the
+            dialog never splits them into two 300px columns.
 
-              {drafts.map((draft, index) => (
-                <div key={draft.id ?? `new-${index}`} className="flex items-start gap-2">
-                  <textarea
-                    rows={2}
-                    value={draft.address}
-                    onChange={(event) => setDraft(index, event.currentTarget.value)}
-                    aria-label={`Delivery address ${index + 1}`}
-                    placeholder="Where deliveries go"
-                    className="min-w-0 flex-1 rounded-lg border-0 px-2.5 py-2 text-sm shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-brand-500"
-                  />
+            40/60 because the right-hand one is a list that grows and the
+            left-hand one is a single box that does not.
+          */}
+          <div className="@container">
+            <div className="grid gap-4 @4xl:grid-cols-5">
+              <FormSection
+                title="Site address"
+                description="Main address of the site."
+                icon={Home}
+                columns={1}
+                className="@4xl:col-span-2"
+              >
+                <TextAreaField
+                  label="Address"
+                  labelHidden
+                  rows={3}
+                  required
+                  placeholder="Enter complete address..."
+                  hint="This will be used as the main site address."
+                  error={errors.address?.message}
+                  {...register("address")}
+                />
+              </FormSection>
+
+              <FormSection
+                title="Delivery addresses"
+                description="Addresses used for deliveries, invoices and orders."
+                icon={Truck}
+                columns={1}
+                className="@4xl:col-span-3"
+                action={
                   <Button
-                    type="button"
-                    variant="ghost"
-                    icon={Trash2}
-                    className="mt-1 px-2 py-2 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                    aria-label={`Remove delivery address ${index + 1}`}
-                    title={`Remove delivery address ${index + 1}`}
-                    onClick={() =>
-                      setDrafts((current) => current.filter((_row, at) => at !== index))
-                    }
-                  />
-                </div>
-              ))}
-
-              <Button
-                type="button"
-                variant="secondary"
-                icon={Plus}
-                onClick={() => setDrafts((current) => [...current, { id: null, address: "" }])}
+                    variant="outline"
+                    size="sm"
+                    icon={Plus}
+                    onClick={() => setDrafts((current) => [...current, { id: null, address: "" }])}
+                  >
+                    Add address
+                  </Button>
+                }
               >
-                Add address
-              </Button>
+                <div className="space-y-2">
+                  {drafts.length === 0 && (
+                    <EmptyRow>
+                      No delivery addresses yet. Documents will offer the site address above.
+                    </EmptyRow>
+                  )}
+
+                  {drafts.map((draft, index) => (
+                    <div key={draft.id ?? `new-${index}`} className="flex items-start gap-2">
+                      <textarea
+                        rows={2}
+                        value={draft.address}
+                        onChange={(event) => setDraft(index, event.currentTarget.value)}
+                        aria-label={`Delivery address ${index + 1}`}
+                        placeholder="Enter delivery address..."
+                        /* The shared control, not a hand-rolled one: this box was
+                           4px taller than every other field and had its own
+                           radius, which is exactly the drift the scale prevents. */
+                        className={clsx(CONTROL_BASE, ringFor(undefined), "min-w-0 flex-1 px-2.5")}
+                      />
+                      <IconButton
+                        label={`Remove delivery address ${index + 1}`}
+                        icon={Trash2}
+                        tone="destructive"
+                        size="md"
+                        onClick={() =>
+                          setDrafts((current) => current.filter((_row, at) => at !== index))
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              </FormSection>
             </div>
-          </FormSection>
+          </div>
         </>
       )}
     </FormDialog>

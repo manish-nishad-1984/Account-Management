@@ -5,12 +5,20 @@ import {
   type ColumnDef,
 } from "@tanstack/react-table";
 import clsx from "clsx";
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import type { GridColumnDefault, SortDirection } from "@accountmanagement/contracts";
 import { ChevronLeft, ChevronRight, Columns3, Inbox, Search } from "lucide-react";
-import { Button, EmptyState } from "../ui";
+import { Button, EmptyState, TextField } from "../ui";
 import { CustomizeColumns } from "./CustomizeColumns";
 import { useGridPreferences } from "../../lib/grid-preferences";
+import { useFitHeight } from "../../lib/use-fit-height";
 
 /**
  * What to call a column in the customise panel.
@@ -47,6 +55,13 @@ export interface DataGridProps<T> {
   search: string;
   onSearchChange: (value: string) => void;
   searchPlaceholder?: string;
+  /**
+   * The screen's own filters, in the toolbar beside the search box, and its
+   * actions (Add, Upload, a direction switch) at the right-hand end of it — one
+   * row above the grid instead of three (client request, 18 Sep 2026).
+   */
+  filters?: ReactNode;
+  actions?: ReactNode;
 
   sortBy: string | undefined;
   sortDir: SortDirection;
@@ -59,6 +74,18 @@ export interface DataGridProps<T> {
   onNext: () => void;
   pageIndex: number;
   emptyMessage?: string;
+
+  /**
+   * How many rows a page holds, and the sizes on offer.
+   *
+   * OPTIONAL AS A SET. `useMasterScreen.gridProps` supplies all three, so all
+   * thirteen screens get the control with no edit of their own; a grid driven by
+   * hand and passing none of them keeps a footer with just the pager in it,
+   * which is what the width test renders.
+   */
+  pageSize?: number;
+  pageSizeOptions?: readonly number[];
+  onPageSizeChange?: (size: number) => void;
 
   /**
    * A footer row of aggregates, keyed by column id.
@@ -139,11 +166,20 @@ export function DataGrid<T>({
   onPrevious,
   onNext,
   pageIndex,
+  pageSize,
+  pageSizeOptions,
+  onPageSizeChange,
   emptyMessage = "Nothing to show",
   footer,
   onRowClick,
   selectedRowId = null,
+  filters,
+  actions,
 }: DataGridProps<T>) {
+  // The label and the select are two elements in a grid that may be on screen
+  // more than once, so the id cannot be a constant.
+  const pageSizeId = useId();
+
   /**
    * What the customise panel lists, derived from the column definitions the
    * screen already passes rather than from a second list to keep in step.
@@ -225,7 +261,14 @@ export function DataGrid<T>({
    * when the window does or when the columns change, and the latter re-runs
    * this effect anyway.
    */
-  const scrollerRef = useRef<HTMLDivElement>(null);
+  /*
+    The same box scrolls both ways: sideways for wide column sets, and down
+    within the height left on the page, so the page itself never scrolls and its
+    scrollbar never stands beside this one (client request, 18 Sep 2026). The
+    header row and any totals row stay pinned while the rows move.
+  */
+  const fitted = useFitHeight();
+  const scrollerRef = fitted.ref;
   const [scrollAtEnd, setScrollAtEnd] = useState(true);
 
   useEffect(() => {
@@ -245,44 +288,59 @@ export function DataGrid<T>({
   /** The last column, when it is the row actions, is the one that floats. */
   const stickyColumnId =
     effectiveColumns.at(-1)?.id === "actions" ? "actions" : null;
-  const stickyCell = (isSticky: boolean, background: string) =>
+  const stickyCell = (isSticky: boolean, background: string, layer = "z-10") =>
     isSticky && [
-      "sticky right-0 z-10",
+      "sticky right-0",
+      layer,
       background,
       !scrollAtEnd && "shadow-[-6px_0_10px_-6px_rgba(15,23,42,0.18)]",
     ];
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-card">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 px-4 py-3">
-        <div className="relative">
-          <input
-            aria-label="Search"
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card">
+      {/*
+        THE LIST TOOLBAR, and it is the same shape on every list screen: what you
+        are looking for on the left, what you are looking at on the right.
+
+        The search box is the shared `TextField`, not a hand-rolled input. It was
+        the latter, 4px taller than every other control in the application and
+        with its own radius, which is exactly the drift a design system exists to
+        prevent - and it cost a label, since it had only an `aria-label` where
+        every other field here has a real `<label>`.
+      */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-2.5">
+        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
+          <TextField
+            label="Search"
+            labelHidden
+            icon={Search}
             placeholder={searchPlaceholder}
             value={search}
             onChange={(event) => onSearchChange(event.currentTarget.value)}
-            className="w-72 rounded-lg border-0 py-2 pl-9 pr-3 text-sm text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 transition-shadow placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-brand-500"
+            className={filters ? "w-full sm:w-48" : "w-full sm:w-72"}
           />
-          <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          {/* Each filter one width, so three of them and the actions still share a line at 1366px. */}
+          {filters && <div className="flex flex-wrap items-center gap-3 [&_select]:w-40">{filters}</div>}
         </div>
-        <div className="flex items-center gap-3">
-        {gridKey && (
-          <Button
-            type="button"
-            variant="secondary"
-            icon={Columns3}
-            className="px-2.5 py-2 text-xs lg:py-1.5"
-            onClick={() => setCustomising(true)}
-          >
-            Columns
-          </Button>
-        )}
-        {total !== null && (
-          <span data-testid="record-count" className="text-sm text-slate-500">
-            <span className="tabular font-medium text-slate-700">{total}</span>{" "}
-            {total === 1 ? "record" : "records"}
-          </span>
-        )}
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+          {gridKey && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              icon={Columns3}
+              onClick={() => setCustomising(true)}
+            >
+              Columns
+            </Button>
+          )}
+          {total !== null && (
+            <span data-testid="record-count" className="text-sm text-slate-500">
+              <span className="tabular font-medium text-slate-700">{total}</span>{" "}
+              {total === 1 ? "record" : "records"}
+            </span>
+          )}
+          {actions}
         </div>
       </div>
 
@@ -302,14 +360,36 @@ export function DataGrid<T>({
       )}
 
       {error && (
-        <div role="alert" className="border-b border-rose-200 bg-rose-50 px-4 py-2.5 text-sm text-rose-700">
+        <div role="alert" className="border-b border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
           {error}
         </div>
       )}
 
-      <div ref={scrollerRef} className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200/80 text-sm">
-          <thead className="bg-slate-50">
+      {/*
+        `relative` IS LOAD BEARING, and it is not about positioning anything.
+
+        A hidden label is `position: absolute` — that is what `sr-only` is — and
+        an absolutely positioned element is laid out against its nearest
+        POSITIONED ancestor, not its nearest scrolling one. With no positioned
+        ancestor, the `sr-only` labels inside a 52rem line grid resolved against
+        the page itself, landed at x=486, and were not clipped by this scroller
+        at all: on a 390px phone the whole DOCUMENT scrolled sideways by 97px to
+        reach three invisible 1px labels. Measured on the purchase order record
+        page, where nothing visible was out of place — which is what made it hard
+        to see.
+
+        Making the scroller positioned puts them back inside it, where they
+        scroll with the table they belong to. Every horizontal scroller in the
+        application carries this for the same reason.
+      */}
+      <div ref={scrollerRef} className="relative overflow-auto" style={{ maxHeight: fitted.height }}>
+        {/*
+          13px and a 40px row. The grids this replaces run to twelve columns, and
+          the 44px rows they started at meant eight records to a laptop screen -
+          for a screen whose whole job is comparing one row with another.
+        */}
+        <table className="min-w-full text-sm">
+          <thead className="border-b border-slate-200 bg-surface-muted">
             {table.getHeaderGroups().map((group) => (
               <tr key={group.id}>
                 {group.headers.map((header) => {
@@ -323,8 +403,10 @@ export function DataGrid<T>({
                       key={header.id}
                       scope="col"
                       className={clsx(
-                        "px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-500",
-                        stickyCell(field === stickyColumnId, "bg-slate-50"),
+                        "whitespace-nowrap px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-[0.05em] text-slate-500",
+                        // Pinned to the top; the actions header is pinned right as well, above both.
+                        "sticky top-0 bg-surface-muted shadow-[inset_0_-1px_0_var(--color-slate-200)]",
+                        field === stickyColumnId ? stickyCell(true, "bg-surface-muted", "z-30") : "z-20",
                       )}
                     >
                       {sortable ? (
@@ -341,7 +423,7 @@ export function DataGrid<T>({
                             negative margin returns exactly what the padding adds.
                           */
                           className={clsx(
-                            "-my-3 inline-flex items-center gap-1 py-3 hover:text-slate-800",
+                            "-my-2.5 inline-flex items-center gap-1 py-2.5 hover:text-slate-800",
                             active && "text-brand-700",
                           )}
                         >
@@ -364,7 +446,9 @@ export function DataGrid<T>({
               Array.from({ length: 6 }, (_, rowIndex) => (
                 <tr key={rowIndex}>
                   {effectiveColumns.map((_, cellIndex) => (
-                    <td key={cellIndex} className="px-4 py-3">
+                    // A skeleton ROW, at the height of a real one, so the table
+                    // does not jump by 40px per row when the data lands.
+                    <td key={cellIndex} className="px-4 py-2.5">
                       <div className="h-3 w-24 animate-pulse rounded bg-slate-100" />
                     </td>
                   ))}
@@ -421,7 +505,7 @@ export function DataGrid<T>({
                       <td
                         key={cell.id}
                         className={clsx(
-                          "px-4 py-3 text-slate-600",
+                          "px-4 py-2.5 text-slate-600",
                           stickyCell(
                             cell.column.id === stickyColumnId,
                             selected
@@ -442,14 +526,15 @@ export function DataGrid<T>({
           {/* Shown even when the page is empty: a total of zero is the answer
               to "did my filter work", and the source loses it precisely then. */}
           {footer && !isLoading && (
-            <tfoot className="border-t-2 border-slate-200 bg-slate-50">
+            <tfoot className="border-t-2 border-slate-200 bg-surface-muted">
               <tr>
                 {effectiveColumns.map((column, index) => (
                   <td
                     key={column.id ?? index}
                     className={clsx(
-                      "whitespace-nowrap px-4 py-3 text-sm font-semibold text-slate-800",
-                      stickyCell(column.id === stickyColumnId, "bg-slate-50"),
+                      "whitespace-nowrap px-4 py-2.5 text-sm font-semibold text-slate-800",
+                      "sticky bottom-0 bg-surface-muted shadow-[inset_0_2px_0_var(--color-slate-200)]",
+                      column.id === stickyColumnId ? stickyCell(true, "bg-surface-muted", "z-30") : "z-20",
                     )}
                   >
                     {column.id ? footer[column.id] : null}
@@ -461,15 +546,54 @@ export function DataGrid<T>({
         </table>
       </div>
 
-      <div className="flex items-center justify-between border-t border-slate-200/80 bg-slate-50/40 px-4 py-3">
-        <span className="text-sm text-slate-500">Page <span className="tabular font-medium text-slate-700">{pageIndex + 1}</span></span>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-slate-200 bg-surface-muted px-4 py-2">
+        <div className="flex items-center gap-3">
+          {/*
+            HOW MANY ROWS, asked for on 16 Sep 2026 and answered here rather than
+            on thirteen screens - the same property that made the redesign cheap.
+
+            It sits with the pager because that is the one control it changes the
+            meaning of: pick 100 and "Page 2" is a different set of rows than it
+            was a moment ago. Next to the search box, which is the other place it
+            could go, it would read as a filter.
+          */}
+          {onPageSizeChange && pageSize !== undefined && pageSizeOptions && (
+            <div className="flex items-center gap-1.5">
+              <label htmlFor={pageSizeId} className="text-sm text-slate-500">
+                Rows
+              </label>
+              <select
+                id={pageSizeId}
+                value={pageSize}
+                onChange={(event) => onPageSizeChange(Number(event.target.value))}
+                className="tabular h-8 rounded-md border-0 bg-white py-0 pl-2 pr-7 text-sm text-slate-900 ring-1 ring-inset ring-slate-200 transition-shadow focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
+              >
+                {pageSizeOptions.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <span className="text-sm text-slate-500">
+            Page <span className="tabular font-medium text-slate-700">{pageIndex + 1}</span>
+          </span>
+        </div>
         <div className="flex gap-2">
-          <Button variant="secondary" icon={ChevronLeft} disabled={!canGoBack} onClick={onPrevious}>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={ChevronLeft}
+            disabled={!canGoBack}
+            onClick={onPrevious}
+          >
             Previous
           </Button>
-          <Button variant="secondary" disabled={!canGoForward} onClick={onNext}>
+          <Button variant="secondary" size="sm" disabled={!canGoForward} onClick={onNext}>
             Next
-            <ChevronRight aria-hidden className="size-4" />
+            <ChevronRight aria-hidden className="size-3.5" />
           </Button>
         </div>
       </div>

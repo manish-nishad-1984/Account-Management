@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PurchaseOrderFormDialog } from "./PurchaseOrderFormDialog";
-import { renderWithAuth, routeFetch } from "../../test/render";
+import { pickItem, renderWithAuth, routeFetch, typeItemName } from "../../test/render";
 
 /**
  * THE TEST THIS FILE EXISTS FOR is "computes the line and the totals as they are
@@ -39,7 +39,7 @@ const UNIT = {
 /**
  * A catalogue item, for the tests that need the dropdown to have one.
  *
- * EVERY field `itemRowSchema` requires, `isWithGst` included. A fixture missing
+ * EVERY field `itemRowSchema` requires. A fixture missing
  * one fails the parse INSIDE the query, so the dropdown never resolves and the
  * failure reads as "the select is broken" rather than "the fixture is short" —
  * the trap the sales form's company fixture sprang in §5r.
@@ -50,7 +50,6 @@ const ITEM = {
   unitId: 1,
   unitName: "Bag",
   pricePerUnit: "395.00",
-  isWithGst: true,
   gstPercent: "18.00",
   gstAmount: "0.00",
   hsnCode: "25232910",
@@ -101,11 +100,11 @@ const routes = () =>
 const SUPPLIER = {
   id: "22222222-2222-4222-8222-222222222222",
   name: "Asian Granito",
-  mobile: null,
+  mobile: "98250 44444",
   email: null,
-  gstNo: null,
+  gstNo: "24AAAAA0000A1Z5",
   area: "Navrangpura",
-  pincode: null,
+  pincode: "380009",
   isApproved: true,
   openingBalance: null,
   capabilities: { canEdit: true, canDelete: true, canApprove: true },
@@ -190,7 +189,50 @@ describe("PurchaseOrderFormDialog", () => {
 
     expect(within(grid()).getAllByRole("row").length).toBeGreaterThan(1);
     expect(screen.getByLabelText(/quantity on line 1/i)).toHaveValue("");
-    expect(screen.getByRole("button", { name: /add product/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /add a line after line 1/i })).toBeInTheDocument();
+  });
+
+  /**
+   * WHO IS BEING ORDERED FROM (client request, 21 Sep 2026): choosing a
+   * supplier shows their mobile, address and GST number, read off the row
+   * already loaded for the dropdown rather than a second request.
+   */
+  it("shows the chosen supplier's mobile, address and GST number", async () => {
+    const user = userEvent.setup();
+    fullRoutes();
+    open();
+
+    expect(screen.queryByText(SUPPLIER.mobile)).not.toBeInTheDocument();
+
+    await screen.findByRole("option", { name: SUPPLIER.name });
+    await user.selectOptions(screen.getByLabelText(/^supplier/i), SUPPLIER.id);
+
+    expect(await screen.findByText(SUPPLIER.mobile)).toBeInTheDocument();
+    expect(screen.getByText("Navrangpura, 380009")).toBeInTheDocument();
+    expect(screen.getByText(SUPPLIER.gstNo)).toBeInTheDocument();
+  });
+
+  /** A supplier with none of the three carries no empty rows either. */
+  it("shows nothing for a supplier with no mobile, address or GST number on file", async () => {
+    const user = userEvent.setup();
+    const bare = { ...SUPPLIER, id: "bare-supplier", mobile: null, gstNo: null, area: null, pincode: null };
+    routeFetch([
+      [/\/document-options/, SITE_OPTIONS],
+      [/\/items/, list([ITEM])],
+      [/\/units/, list([UNIT])],
+      [/\/suppliers/, list([bare])],
+      [/\/companies/, list([COMPANY])],
+      [/\/purchase-orders/, list([])],
+    ]);
+    open();
+
+    await screen.findByRole("option", { name: SUPPLIER.name });
+    const supplierField = screen.getByLabelText(/^supplier/i) as HTMLSelectElement;
+    await user.selectOptions(supplierField, bare.id);
+    await waitFor(() => expect(supplierField.value).toBe(bare.id));
+
+    expect(screen.queryByText(/mobile/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/gst number/i)).not.toBeInTheDocument();
   });
 
   it("computes the line and the totals as they are typed", async () => {
@@ -223,9 +265,17 @@ describe("PurchaseOrderFormDialog", () => {
     await user.type(screen.getByLabelText(/gst percent on line 1/i), "18");
 
     await waitFor(() => {
-      // Sub total 3,000.00 appears only in the totals panel; the grid shows the
-      // line's own net through its Amount column.
-      expect(screen.getByText("3,000.00")).toBeInTheDocument();
+      /*
+        SCOPED TO THE "Sub total" BOX rather than searched for across the page.
+
+        The comment here used to say 3,000.00 appeared only in the totals panel.
+        That stopped being true on 17 Sep 2026, when the GST split was added
+        under the totals and the same figure became the taxable value of the 18%
+        row. An unscoped `getByText` then fails with "multiple elements", which
+        reads as a broken total when both numbers are in fact right.
+      */
+      const subTotal = screen.getByText(/^Sub total$/i).parentElement!;
+      expect(within(subTotal).getByText("3,000.00")).toBeInTheDocument();
     });
   });
 
@@ -237,7 +287,7 @@ describe("PurchaseOrderFormDialog", () => {
     await user.type(screen.getByLabelText(/quantity on line 1/i), "1");
     await user.type(screen.getByLabelText(/price on line 1/i), "1000.00");
 
-    await user.click(screen.getByRole("button", { name: /add product/i }));
+    await user.click(screen.getByRole("button", { name: /add a line after line 1/i }));
 
     await user.type(await screen.findByLabelText(/quantity on line 2/i), "1");
     await user.type(screen.getByLabelText(/price on line 2/i), "500.00");
@@ -269,39 +319,47 @@ describe("PurchaseOrderFormDialog", () => {
   });
 
   /**
-   * The free-text product name used to sit under EVERY row, so a line was two
-   * controls tall whether it needed one or not. It is the alternative to the
-   * dropdown, and it only means anything while the dropdown is empty.
+   * The free-text product name used to sit in a SECOND box under every row, so a
+   * line was two controls tall whether it needed one or not. Since 16 Sep 2026 it
+   * is the last option inside the item picker itself — offered after the user has
+   * seen that nothing matches, rather than beside the dropdown inviting a guess.
+   *
+   * It still EXISTS, because an order may legitimately name something that is not
+   * in the catalogue. What changed is that it is no longer the workaround for a
+   * dropdown that could only show 200 of 758 items.
    */
   describe("the free-text product name", () => {
-    it("is offered while no catalogue item is chosen", async () => {
+    it("is not a second box on every row any more", async () => {
       open();
       await screen.findByRole("table");
 
-      expect(screen.getByLabelText(/or name the product on line 1/i)).toBeInTheDocument();
+      expect(screen.queryByLabelText(/or name the product on line 1/i)).not.toBeInTheDocument();
+      expect(screen.getByRole("combobox", { name: /item on line 1/i })).toBeInTheDocument();
     });
 
-    it("disappears once an item is chosen", async () => {
+    it("is offered inside the picker once what was typed matches nothing", async () => {
       const user = userEvent.setup();
       fullRoutes();
       open();
       await screen.findByRole("table");
 
-      await user.type(screen.getByLabelText(/or name the product on line 1/i), "Loose sand");
-      await user.selectOptions(screen.getByLabelText(/item on line 1/i), "44444444-4444-4444-8444-444444444444");
+      const box = screen.getByRole("combobox", { name: /item on line 1/i });
+      await user.click(box);
+      await user.type(box, "Loose sand");
 
-      expect(screen.queryByLabelText(/or name the product on line 1/i)).not.toBeInTheDocument();
+      expect(
+        await screen.findByRole("option", { name: /use .*loose sand.* as a typed name/i }),
+      ).toBeInTheDocument();
     });
 
     /**
      * The name is CLEARED, not merely hidden.
      *
-     * React Hook Form keeps the value of an unmounted field, so a name typed
-     * before an item was picked would otherwise be posted beside it and sit in
-     * `item_name` contradicting the item the line references. That cannot be
-     * asserted from the DOM — the placeholder option is disabled, so there is no
-     * way back to an empty select — so it is asserted where it matters, in the
-     * request body.
+     * React Hook Form keeps the value of a field that is no longer shown, so a
+     * name committed before an item was picked would otherwise be posted beside
+     * it and sit in `item_name` contradicting the item the line references. It
+     * cannot be asserted from the DOM — one box now shows both states — so it is
+     * asserted where it matters, in the request body.
      */
     it("posts the chosen item with no leftover free text", async () => {
       const user = userEvent.setup();
@@ -309,8 +367,9 @@ describe("PurchaseOrderFormDialog", () => {
       open();
       await screen.findByRole("table");
 
-      await user.type(screen.getByLabelText(/or name the product on line 1/i), "Loose sand");
-      await user.selectOptions(screen.getByLabelText(/item on line 1/i), "44444444-4444-4444-8444-444444444444");
+      // Commit a typed name first, then change your mind and pick the real item.
+      await typeItemName(user, /item on line 1/i, "Loose sand");
+      await pickItem(user, /item on line 1/i, "OPC 53 Grade Cement");
 
       await user.selectOptions(screen.getByLabelText(/^supplier/i), "22222222-2222-4222-8222-222222222222");
       await user.selectOptions(screen.getByLabelText(/^company/i), "33333333-3333-4333-8333-333333333333");
@@ -450,18 +509,23 @@ describe("PurchaseOrderFormDialog", () => {
       fullRoutes();
       open();
 
-      const group = await screen.findByRole("radiogroup", { name: /shipping address/i });
-      expect(within(group).getAllByRole("radio")).toHaveLength(3);
-      expect(within(group).getByText("Location address")).toBeInTheDocument();
+      const shipping = (await screen.findByLabelText(/^shipping address/i)) as HTMLSelectElement;
+      // Three addresses and the "choose one" placeholder, each under the source
+      // it came from — the caption the radio rows used to carry.
+      await waitFor(() => expect(within(shipping).getAllByRole("option")).toHaveLength(4));
+      expect(shipping.querySelector('optgroup[label="Location address"]')).not.toBeNull();
 
-      await user.click(within(group).getByRole("radio", { name: /Gate 3, Plot 9, Mora/ }));
+      await user.selectOptions(shipping, "Gate 3, Plot 9, Mora");
       // Choosing another moves the one choice; it never adds a second.
-      await user.click(within(group).getByRole("radio", { name: /Block A gate, Hazira/ }));
-      expect(within(group).getAllByRole("radio", { checked: true })).toHaveLength(1);
+      await user.selectOptions(shipping, "Block A gate, Hazira");
+      expect(shipping.value).toBe("Block A gate, Hazira");
+      // And the chosen one is shown in full beneath the picker, not only
+      // collapsed into the closed select.
+      expect(screen.getAllByText("Block A gate, Hazira").length).toBeGreaterThan(1);
 
       await user.selectOptions(screen.getByLabelText(/^supplier/i), SUPPLIER.id);
       await user.selectOptions(screen.getByLabelText(/^company/i), COMPANY.id);
-      await user.selectOptions(screen.getByLabelText(/item on line 1/i), ITEM.id);
+      await pickItem(user, /item on line 1/i, ITEM.name);
       await user.selectOptions(screen.getByLabelText(/unit on line 1/i), String(UNIT.id));
       await user.type(screen.getByLabelText(/quantity on line 1/i), "2");
       await user.type(screen.getByLabelText(/price on line 1/i), "100");
@@ -488,7 +552,7 @@ describe("PurchaseOrderFormDialog", () => {
 
       await user.selectOptions(screen.getByLabelText(/^supplier/i), SUPPLIER.id);
       await user.selectOptions(screen.getByLabelText(/^company/i), COMPANY.id);
-      await user.selectOptions(screen.getByLabelText(/item on line 1/i), ITEM.id);
+      await pickItem(user, /item on line 1/i, ITEM.name);
       await user.selectOptions(screen.getByLabelText(/unit on line 1/i), String(UNIT.id));
       await user.type(screen.getByLabelText(/quantity on line 1/i), "2");
       await user.type(screen.getByLabelText(/price on line 1/i), "100");
@@ -593,8 +657,11 @@ describe("PurchaseOrderFormDialog", () => {
         openOrder();
 
         expect(await screen.findByText(/delivery split from the old screen/i)).toBeInTheDocument();
-        const group = await screen.findByRole("radiogroup", { name: /shipping address/i });
-        expect(within(group).getByRole("radio", { name: /Typed by hand, long ago/ })).toBeChecked();
+        // An address the site's list does not offer any more stays chosen, under
+        // its own heading in the picker, rather than being quietly dropped.
+        const shipping = (await screen.findByLabelText(/^shipping address/i)) as HTMLSelectElement;
+        await waitFor(() => expect(shipping.value).toBe("Typed by hand, long ago"));
+        expect(shipping.querySelector('optgroup[label="Saved on this document"]')).not.toBeNull();
         // A contact typed on the old form is not on the site's list; it stays, labelled.
         const contact = screen.getByLabelText(/^contact person/i) as HTMLSelectElement;
         await waitFor(() =>

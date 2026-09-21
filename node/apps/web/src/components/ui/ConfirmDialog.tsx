@@ -52,10 +52,10 @@ export function ConfirmDialog({
     >
       <div className="space-y-3">
         <div className="flex items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-rose-50">
-            <AlertTriangle aria-hidden className="size-4.5 text-rose-600" />
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-rose-50 ring-1 ring-inset ring-rose-100">
+            <AlertTriangle aria-hidden className="size-4 text-rose-600" />
           </div>
-          <div className="text-sm text-slate-600">{body}</div>
+          <div className="text-sm leading-5 text-slate-600">{body}</div>
         </div>
         {error && <Alert tone="danger">{error}</Alert>}
       </div>

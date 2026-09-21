@@ -127,7 +127,25 @@ const envSchema = z.object({
   JWT_ISSUER: z.string().default("accountmanagement"),
   JWT_AUDIENCE: z.string().default("accountmanagement"),
   ACCESS_TOKEN_TTL: z.string().default("15m"),
-  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
+  /**
+   * How long a session survives WITHOUT USE, in minutes — and so how long after
+   * the last sign of life it can be picked up again.
+   *
+   * It slides: every refresh rotates the token and issues a new one with a fresh
+   * window, so someone working keeps their session indefinitely. The business
+   * rule (18 Sep 2026) is a sign-out after 30 minutes idle and a fresh sign-in
+   * whenever the browser is reopened. The browser enforces the 30 minutes while
+   * it is open; this is what enforces it once the tab or the browser is gone.
+   *
+   * 45, not 30, because the browser renews the session at most every 10 minutes
+   * while someone is active (`AuthContext`), so the server's window must outlast
+   * the browser's 30 idle minutes plus one renewal interval — otherwise the
+   * server would end a session the browser still considered alive, and the
+   * "Continue" on the idle warning would fail.
+   *
+   * Was REFRESH_TOKEN_TTL_DAYS = 30: a month, from any browser that had signed in once.
+   */
+  REFRESH_TOKEN_IDLE_MINUTES: z.coerce.number().int().positive().default(45),
 });
 
 export type Env = z.infer<typeof envSchema>;

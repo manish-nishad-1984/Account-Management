@@ -16,7 +16,6 @@ export const itemRowSchema = z.object({
   unitId: z.number().int(),
   unitName: z.string(),
   pricePerUnit: z.string(),
-  isWithGst: z.boolean(),
   gstPercent: z.string().nullable(),
   gstAmount: z.string().nullable(),
   hsnCode: z.string().nullable(),
@@ -51,40 +50,43 @@ export const normalizeItemName = (name: string): string => name.trim().replace(/
  * of, and does not arbitrate the arithmetic. Deriving `gstAmount` here would be
  * picking a winner among the three by implication, silently, in a master screen
  * — the wrong place and the wrong moment to decide it.
+ *
+ * THERE IS NO "GST-INCLUSIVE" FLAG. The business removed it on 17 Sep 2026.
+ *
+ * An item carries a GST percentage and a GST amount, or it does not. The
+ * separate boolean saying whether it "is GST-inclusive" is gone, and with it the
+ * two rules that only existed to keep the flag and the figures agreeing:
+ * a flagged item needing a percentage, and an unflagged item having to have its
+ * figures cleared.
+ *
+ * The flag was never carrying its weight. Production data contradicts it
+ * directly — the row captured in `legacy-screens/05-item-master.md` has
+ * `IsWithGST` off while holding 18% and ₹4.86 — and `item-sheet.service.ts` had
+ * to derive the flag from the percentage on import precisely because the legacy
+ * value could not be trusted. Two fields that must agree, where one is already
+ * known to be wrong, is a worse record of the truth than the one field that was
+ * always doing the work.
+ *
+ * The presence of `gstPercent` is now the whole answer.
  */
-export const createItemSchema = z
-  .object({
-    name: requiredText("Item name", 200).transform(normalizeItemName),
-    unitId: z.coerce.number().int().positive("Choose a unit"),
-    pricePerUnit: money("Price per unit"),
-    isWithGst: z.boolean().default(false),
-    gstPercent: optionalPercent("GST percentage"),
-    gstAmount: optionalMoney("GST amount"),
-    hsnCode,
-    isApproved: z.boolean().default(false),
-  })
-  .superRefine((value, ctx) => {
-    if (value.isWithGst && value.gstPercent === null) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["gstPercent"],
-        message: "A GST-inclusive item needs a GST percentage",
-      });
-    }
-    // The reverse is the more dangerous case: GST figures left behind on an item
-    // that was switched to non-GST would still be picked up by anything reading
-    // the columns rather than the flag.
-    if (!value.isWithGst && (value.gstPercent !== null || value.gstAmount !== null)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["gstPercent"],
-        message: "Clear the GST figures, or mark the item as GST-inclusive",
-      });
-    }
-  });
+export const createItemSchema = z.object({
+  name: requiredText("Item name", 200).transform(normalizeItemName),
+  unitId: z.coerce.number().int().positive("Choose a unit"),
+  pricePerUnit: money("Price per unit"),
+  gstPercent: optionalPercent("GST percentage"),
+  gstAmount: optionalMoney("GST amount"),
+  hsnCode,
+  /*
+    NO `isApproved` HERE, and that is now the rule everywhere.
+
+    Approval is decided by the writer's own approve right, on the server, from
+    the access token — see `common/approval.ts`. A caller cannot state it, so
+    a clerk with no approve right cannot self-approve by sending the field.
+  */
+});
 export type CreateItem = z.infer<typeof createItemSchema>;
 
-export const updateItemSchema = createItemSchema.innerType().partial();
+export const updateItemSchema = createItemSchema.partial();
 export type UpdateItem = z.infer<typeof updateItemSchema>;
 
 export const ITEM_SORT_FIELDS = ["name", "createdAt"] as const;

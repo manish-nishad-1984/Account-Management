@@ -83,7 +83,7 @@ describe("PrintDocumentPage", () => {
     await user.selectOptions(layoutSelect(), "Minimal");
     await waitFor(() => expect(layoutSelect().value).toBe(MINIMAL));
 
-    await user.click(screen.getByRole("button", { name: "Print / Save PDF" }));
+    await user.click(screen.getByRole("button", { name: "Print" }));
     expect(print).toHaveBeenCalledTimes(1);
     // Looking and printing only: one read, nothing written.
     expect(vi.mocked(globalThis.fetch).mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true);

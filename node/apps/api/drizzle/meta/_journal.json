@@ -141,6 +141,13 @@
       "when": 1789473423142,
       "tag": "0019_site_contacts_and_locations",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1789630912110,
+      "tag": "0020_site_location_address_pairs",
+      "breakpoints": true
     }
   ]
 }

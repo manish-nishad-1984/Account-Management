@@ -163,7 +163,7 @@ export function TemplateFormDialog({
                   className="rounded-sm bg-white ring-1 ring-slate-200"
                 />
                 <span className="mt-2 block text-sm font-medium text-slate-900">{TEMPLATE_PRESET_LABELS[key]}</span>
-                <span className="block text-[11px] leading-4 text-slate-500">{PRESET_NOTES[key]}</span>
+                <span className="block text-xs leading-4 text-slate-500">{PRESET_NOTES[key]}</span>
               </label>
             ))}
           </div>

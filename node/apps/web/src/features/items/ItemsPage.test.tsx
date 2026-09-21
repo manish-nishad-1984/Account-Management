@@ -14,7 +14,6 @@ const row = (name: string, overrides: Record<string, unknown> = {}) => ({
   unitId: 1,
   unitName: "Bag",
   pricePerUnit: "395.00",
-  isWithGst: true,
   gstPercent: "18.00",
   gstAmount: "71.10",
   hsnCode: "25232910",
@@ -96,15 +95,15 @@ describe("ItemsPage", () => {
     expect(await screen.findByText("12,34,567.89")).toBeInTheDocument();
   });
 
-  it("says so plainly when an item is not GST-inclusive", async () => {
+  it("says so plainly when an item carries no GST", async () => {
     routeFetch({
-      rows: [row("Plain Item", { isWithGst: false, gstPercent: null, gstAmount: null })],
+      rows: [row("Plain Item", { gstPercent: null, gstAmount: null })],
       nextCursor: null,
       total: 1,
     });
     renderWith(<ItemsPage />);
 
-    expect(await screen.findByText("Not GST")).toBeInTheDocument();
+    expect(await screen.findByText("No GST")).toBeInTheDocument();
   });
 });
 
@@ -142,8 +141,7 @@ describe("ItemFormDialog", () => {
     await userEvent.type(screen.getByLabelText(/item name/i), "Test Item");
     await userEvent.selectOptions(screen.getByLabelText(/^unit/i), "1");
     await userEvent.type(screen.getByLabelText(/price per unit/i), "100.00");
-    await userEvent.click(screen.getByLabelText(/gst-inclusive/i));
-    await userEvent.type(await screen.findByLabelText(/gst percentage/i), "18");
+    await userEvent.type(screen.getByLabelText(/gst percentage/i), "18");
     // Deliberately NOT 18.00 — if anything derived it, this would be 18.00.
     await userEvent.type(screen.getByLabelText(/gst amount/i), "17.50");
     await userEvent.click(screen.getByRole("button", { name: /create item/i }));
@@ -153,7 +151,13 @@ describe("ItemFormDialog", () => {
     expect(bodyOfMethod("POST").pricePerUnit).toBe("100.00");
   });
 
-  it("refuses a GST-inclusive item with no percentage", async () => {
+  /**
+   * THE GST FIELDS ARE OPTIONAL, and there is no flag they have to agree with.
+   * This replaces "refuses a GST-inclusive item with no percentage": an item
+   * saved with both GST boxes empty was the shape the old rule rejected, and it
+   * is now an ordinary non-GST item.
+   */
+  it("saves an item with both GST boxes left empty", async () => {
     routeFetch({ rows: [], nextCursor: null, total: 0 });
     renderWith(<ItemFormDialog open itemId={null} onClose={vi.fn()} />);
 
@@ -162,11 +166,11 @@ describe("ItemFormDialog", () => {
     await userEvent.type(screen.getByLabelText(/item name/i), "Test Item");
     await userEvent.selectOptions(screen.getByLabelText(/^unit/i), "1");
     await userEvent.type(screen.getByLabelText(/price per unit/i), "100.00");
-    await userEvent.click(screen.getByLabelText(/gst-inclusive/i));
     await userEvent.click(screen.getByRole("button", { name: /create item/i }));
 
-    expect(await screen.findByText(/needs a gst percentage/i)).toBeInTheDocument();
-    expect(bodyOfMethod("POST")).toBeUndefined();
+    await waitFor(() => expect(bodyOfMethod("POST")).toBeDefined());
+    expect(bodyOfMethod("POST").gstPercent).toBeNull();
+    expect(bodyOfMethod("POST").gstAmount).toBeNull();
   });
 
   it("refuses a price with more than two decimal places", async () => {
@@ -184,14 +188,18 @@ describe("ItemFormDialog", () => {
     expect(bodyOfMethod("POST")).toBeUndefined();
   });
 
-  it("hides the GST fields entirely when the item is not GST-inclusive", async () => {
+  /**
+   * The GST boxes are always on the form, and there is no checkbox in front of
+   * them. This is the test that fails if the removed control is ever put back.
+   */
+  it("shows the GST fields with no checkbox gating them", async () => {
     routeFetch({ rows: [], nextCursor: null, total: 0 });
     renderWith(<ItemFormDialog open itemId={null} onClose={vi.fn()} />);
 
     await waitFor(() => expect(screen.getByRole("option", { name: "Bag" })).toBeInTheDocument());
-    expect(screen.queryByLabelText(/gst percentage/i)).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByLabelText(/gst-inclusive/i));
-    expect(await screen.findByLabelText(/gst percentage/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/gst percentage/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/gst amount/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/gst-inclusive/i)).not.toBeInTheDocument();
   });
 });

@@ -177,9 +177,11 @@ Report what is listening on 3000, 5180 and 5173 (with process names), and whethe
 Mention these only when relevant — if the user is about to click around, or is
 reporting one of them as broken.
 
-- **Refreshing the page signs you out.** The access token is held in memory only,
-  never in `localStorage`. This is a deliberate decision, not a session bug.
-  Navigate with the sidebar rather than reloading.
+- **Refreshing the page does NOT sign you out** (checked in a browser, 18 Sep
+  2026). The access token is in memory only, but the refresh cookie survives a
+  reload and is traded for a new one. What DOES sign you out, by design: 30
+  minutes idle (warning at 29), closing the browser (session cookie), or the API
+  restarting — the embedded database forgets every session with its data.
 - **The data resets on every API restart.** With no `DATABASE_URL` the API boots
   an embedded in-memory PGlite, applies the real migrations and reseeds: 30
   companies, 45 sites, 12 site groups, 30 suppliers, 50 items, 12 units, 41 users.

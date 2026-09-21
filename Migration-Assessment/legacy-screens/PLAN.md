@@ -39,10 +39,11 @@ not asked about yet.
 
 **Do NOT put a site dropdown on a screen.** The header owns that choice.
 
-### 1.2 Master-detail split vs modal dialog  ·  **BOTH BUILT — awaiting the business**
+### 1.2 Master-detail split vs modal dialog vs full page  ·  **ALL THREE BUILT — awaiting the business**
 
-_Both layouts shipped 8 Sep 2026. The question is now doc 19 Question 12, and it
-can be answered on the real screens in two minutes._
+_The first two shipped 8 Sep 2026; the full page was added 16 Sep 2026. The
+question is now doc 19 Question 12, and it can be answered on the real screens in
+two minutes._
 
 Legacy: click a row, the right pane fills. No modal. The list stays usable and a
 user can walk down it reading records.
@@ -52,15 +53,38 @@ Ours: full-width grid plus a modal `FormDialog` that blocks the list.
 **This is a real change to how the screen is worked**, not a cosmetic one. It is
 arguably better for editing and clearly worse for browsing.
 
-A written description is a poor way to ask, so both are in the header switch
-(`RecordLayoutPicker`) and every screen has both. **It is three shared files and
-no page changes:**
+The third option answers what neither of the other two does: **room**. A modal
+caps at 48rem and the pane at 28rem, and the purchase order's eight-column line
+grid already scrolls sideways inside the widest modal there is — which puts the
+rate and GST boxes off screen while you are typing the line they belong to. The
+full page hands the record the whole content area and sends the list behind a
+back arrow. What it pays is exactly what the split layout protects: the list is
+not on screen, so records cannot be walked one after another.
+
+**THE PAGE HAS TO EARN ITS WIDTH, AND AT FIRST IT DID NOT.** `RecordPage` shipped
+capped at `max-w-2xl`, reasoning that a form is read left to right like prose. On
+a 1920px screen that put every field in the left third with the rest of the window
+empty, which is the first thing the client said about it (16 Sep 2026). The fix is
+not a wider cap — a 1600px single column of fields is worse, not better. It is
+`FormSection` measuring the box it is in and laying out **two, three or four
+columns** to fill it, so width is spent on fields rather than on stretching them.
+Measured at 1920px: 2 columns in a dialog and a side panel, 4 on a page. The
+purchase order's line grid now fits without scrolling sideways at all, which was
+the complaint that justified the layout in the first place.
+
+A written description is a poor way to ask, so all three are in the header switch
+(`RecordLayoutPicker`) and every screen has all three. **It is seven shared files
+and no page changes:**
 
 | File | Does |
 |---|---|
 | `contexts/RecordLayoutContext.tsx` | the preference, per user, in localStorage |
-| `components/ui/FormDialog.tsx` | renders `Modal` or `SidePanel` |
-| `lib/use-master-screen.ts` | adds row-click and selection to `gridProps` in split mode |
+| `components/ui/FormDialog.tsx` | renders `Modal`, `SidePanel` or `RecordPage` |
+| `components/ui/RecordPage.tsx` | the full-page surface, with the back arrow |
+| `components/ui/record-surface.ts` | "this form has a page, not a box" |
+| `components/ui/fields.tsx` | `FormSection`: columns and cards, from the container |
+| `lib/use-master-screen.ts` | adds row-click and selection to `gridProps` |
+| `components/AppShell.tsx` | reserves width beside a pane; hosts and hides under a page |
 
 Every page already spreads `screen.gridProps(query)`, which is why row-click and
 the selected-row highlight arrived on twelve screens without touching one of
@@ -71,18 +95,241 @@ be re-checked against the other.
 Outside a provider the context answers `modal` — what every screen shipped with —
 so nothing changed for any existing test.
 
-**Two things worth knowing when the answer comes back:**
+**Five things worth knowing when the answer comes back:**
 
 - The pane is a labelled `region`, not `complementary`: the nav sidebar is an
   `<aside>` and already owns that role. Found by driving a real browser, where
-  the query for one landmark matched both.
+  the query for one landmark matched both. `RecordPage` is a labelled `region`
+  for the same reason, and is likewise not a `dialog` — nothing is inert behind
+  it, the nav rail included.
 - The reserved width was silently not applied at first — a conditional
   `sm:pr-[29rem]` lost to a base `lg:px-8`, because Tailwind emits `sm:` before
   `lg:`. The pane sat on top of 415px of the list and **looked correct in a
   screenshot**. Only measuring the boxes in the browser caught it.
+- The full page renders through a PORTAL into a host `AppShell` keeps inside
+  `<main>`, because the form is written by the screen that is about to be
+  hidden — without it the record would be hidden by the very flag it sets. The
+  list is hidden with the `hidden` ATTRIBUTE, not unmounted, so the back arrow
+  returns to the search, sort and page position the user left.
+- A sticky offset resolves against the scroll container's **content** box, not
+  its padding box. `main` has `py-6`, so `top-0` parked the record page's header
+  24px below the shell header and a strip of the form scrolled through the gap;
+  it needs `-top-6` with `-mt-6 pt-6`, and `-bottom-6` at the other edge. Same
+  lesson as the pane width: measured in the browser, invisible in a screenshot
+  until you look for it.
+- `FormSection`'s wide columns are **container** queries (`@sm`/`@3xl`/`@5xl`),
+  not viewport ones, because the same form is 28rem wide in a panel and 1600px
+  on a page at one unchanged window size. **Two columns is the floor, and it is
+  load bearing:** 25 fields across 12 forms say `sm:col-span-2` to mean "take the
+  whole row", which is a VIEWPORT rule the container cannot see — at one column
+  on a window ≥640px they would span into an implicit second column and overflow.
+  The narrowest container in the application is the side panel at 416px of
+  content, above the 384px floor, and anything narrower only happens below the
+  `sm` viewport where the span does not apply. Verified with an overflow probe
+  across eight screens in all three layouts.
 
-**When the business answers, delete the loser and the switch.** A permanent
-toggle is two layouts to test and support, and a question that never closes.
+**When the business answers, delete the losers and the switch.** A permanent
+toggle is three layouts to test and support, and a question that never closes.
+
+### 1.2b The item picker  ·  **DONE 16 Sep 2026**
+
+_Client request: "items dropdown में user type करके search भी कर सके", and the
+line rows on one line with + and delete inline._
+
+**This was a DATA bug wearing a usability complaint.** Every item dropdown in the
+application was a native `<select>` fed by `useItemOptions`, capped at 200 rows.
+Production has **758 items**. The 558 that did not fit were not reachable from any
+screen, so two document forms grew a SECOND control beside the dropdown to type a
+name into, plus an Alert admitting the list was incomplete. A user who could not
+find "Ready Mix Concrete M25" typed it, and the line then stored a string in
+`item_name` instead of a reference to the catalogue item that existed all along —
+and every report that groups by item quietly missed those lines.
+
+`features/items/ItemCombobox.tsx` sends the term to the server, so the whole
+catalogue is reachable through one box. **Seven places now share it:** the
+purchase order grid, the shared invoice grid (purchase and sales), the inward
+challan form, the inward challan list filter, inventory and purchase requests.
+
+| What it replaced | Why it is gone |
+|---|---|
+| The 200-row `<select>` | Could not offer 558 of 758 items |
+| A second "…or type a name" box | Was the workaround for that, not a feature |
+| "Not in the list — type a name" option + swap-to-textbox + swap-back button | One box is both states now |
+| A `typing` map keyed by field-array id | State ABOUT the form that had to be kept in step with it |
+| Two "showing the first 200 of N" Alerts | The limitation no longer exists |
+
+**Free text SURVIVES**, because an order may legitimately name something not in
+the catalogue. It is now the last option in the list, offered after the user has
+seen that nothing matches, instead of a box beside the dropdown inviting a guess.
+`allowFreeText` is OFF for inventory, challans and the filter, where the item is
+a required reference and a typed name would have nowhere to go.
+
+**Three things the browser caught that the tests could not:**
+
+- **Clicking a focused box did not reopen it.** Picking an option closes the list
+  and leaves the cursor in the box; with `onFocus` alone there was no second
+  focus event, so the only way back to the list was to tab away and return.
+- **The list was CLIPPED.** The line grids sit inside `overflow-x-auto`, and an
+  element that scrolls one axis clips the other — the dropdown was cut off at the
+  bottom of the Products card, hiding nearly all of it on the last row. It is
+  portalled to `document.body` and positioned `fixed` against the input's rect,
+  re-measured on scroll with a CAPTURE listener, because the thing that scrolls is
+  an inner container and a bubbling listener never hears it.
+- **The listbox repeated the input's `aria-label`**, so the field and its
+  suggestions had the same accessible name and `getByLabelText` matched both.
+
+`useItemOptions` moved from `purchase-requests/api.ts` to `items/api.ts` on the
+way: it fetches `/items`, five other modules imported it from purchase-requests,
+and leaving it there would have made `features/items` import from
+purchase-requests while purchase-requests imported the control back.
+
+**The PO grid also got the invoice grid's row controls** — `+` and delete inline,
+`+` inserting after THAT line and putting the cursor in it. The Add-product button
+under the table is gone from both.
+### 1.2c The design system  ·  **DONE 16 Sep 2026**
+
+The client asked for a full UI/UX redesign: a clean light ChatGPT-like interface,
+professional ERP density, sky blue as the single interactive accent, small
+thin-line icons, and — explicitly — *no* purple, no oversized controls, no
+wasted desktop space, and **no change to business logic**.
+
+It was done as ONE design system rather than as nineteen screen redesigns, and
+the leverage came from something the port had already got right: every accent in
+the application went through `brand-*` and every neutral through `slate-*`, 737
+class usages across 30 files, with not one raw `indigo-` anywhere. So the whole
+palette moved by **re-pointing two ramps in `index.css`**, and no page was
+edited to change colour at all.
+
+| Token re-pointed | Effect, with no page edits |
+|---|---|
+| `--color-brand-50…900` | indigo → sky, everywhere at once |
+| `--color-slate-50…950` | Tailwind's blue-greys → the approved neutrals |
+| `--color-rose/emerald/amber-*` | saturated → restrained status colours |
+| `--radius-xl` 12px → 10px | every card corner |
+| `--text-sm` 14px → 13px | all 91 body-text usages |
+
+**The four things worth knowing**
+
+1. **`slate-*` kept its name and changed its values.** Renaming the ramp would
+   have been 737 diffs to land in the same place. Two steps carry more than a
+   shade: `slate-500` (secondary text) went from 4.8:1 to **6.0:1** on white, so
+   the lightening pass made hint text *more* legible, not less.
+2. **`brand-600` is #0277b5, not sky-600.** Sky-600 is 4.1:1 against white —
+   under AA for the 13px text sitting on every primary button. #0277b5 is the
+   same hue two steps deeper and 4.9:1. `brand-500` stays at the approved
+   #0ea5e9 for the jobs that are not text: focus rings, the active marker.
+3. **Icon stroke is 1.5, set once**, through lucide's `LucideProvider` in
+   `App.tsx` with a CSS backstop in `index.css`. A prop on ~200 icons is a thing
+   to remember, and the one somebody forgets is the one that looks wrong.
+   Verified in the browser: **36 of 36 icons at 1.5**, none above 16px.
+4. **The layout picker was gated to `import.meta.env.DEV`, and is not any
+   more.** The brief asked for presentation controls off the client-facing
+   screen, so it was dropped from the `vite build` output while §1.2 waited on
+   the business. The client asked for it back on 16 Sep 2026, a few hours after
+   it shipped, which settles what the gate was hedging: taking the switch away
+   to answer §1.2 removed the only thing that could answer it. It ships to
+   production, the choice is stored per user, and **Full page** is what a new
+   user gets.
+
+**Two bugs found by measuring rather than looking**
+
+- **A hidden label scrolled the whole page sideways.** `sr-only` is
+  `position: absolute`, so it lays out against its nearest *positioned* ancestor,
+  not its nearest *scrolling* one. The `labelHidden` labels inside the purchase
+  order's 52rem line grid had no positioned ancestor, resolved against the page,
+  landed at x=486 and were not clipped by the grid's own `overflow-x-auto` at
+  all — 487px of document in a 390px window, with nothing visible out of place.
+  Every horizontal scroller is now `relative`.
+- **A grid cell cannot shrink below its content.** `min-width: auto` on a grid
+  item meant the same line grid grew its track to 832px and pushed the card, and
+  the page, with it. Fixed once on `FormSection`'s grid (`[&>*]:min-w-0`) rather
+  than on each of the five scrollers, so the next wide thing someone drops into a
+  section does not bring it back.
+
+**What was NOT done, and why**
+
+- **Company and Site location on the Add Site form.** The approved mockup shows
+  both; `createSiteSchema` has neither, and a site has no company or location
+  relation. That is a contracts + database + API change, so it was reported
+  rather than built (§31 of the brief).
+- **Global search and notifications in the top bar.** Neither exists in the
+  system. A search box that searches nothing and a bell that never rings are
+  worse than an honest gap.
+- **Per-field widths.** The brief asks for width by expected content; the grid
+  gives uniform columns with `col-span-2` for the long fields. Genuinely
+  per-field widths would need a span on ~240 fields across 12 forms.
+
+### 1.2d Five things the client asked for after seeing it live · **DONE 16 Sep 2026**
+
+The redesign went to https://avfast.in and the client came back the same day with
+five changes. All five are UI; nothing here touches a contract, an endpoint, a
+permission or a calculation.
+
+1. **The layout switch is back on the released build.** See §1.2 and the note in
+   `RecordLayoutPicker`. Removing it was the brief's instruction and the wrong
+   call in this particular case.
+
+2. **"Your access" is off the dashboard.** It listed all 79 of a production
+   user's permissions as badges under the six approval queues — a developer's
+   view of the permission system on the screen people open first. Users and
+   Permissions already answer the question properly. Its "Manage users" link went
+   with it; Users is one click away in the rail.
+
+3. **Every grid chooses its page size: 5 to 100 in steps of 5, opening at 20.**
+   One control, added to `DataGrid` and fed by `useMasterScreen.gridProps`, so
+   all thirteen screens got it with **no page edited**. The preference is kept
+   per user in local storage — one setting for every grid, because it describes
+   the display in front of the person rather than the screen.
+
+   Two things worth knowing:
+
+   - **Contracts' `DEFAULT_PAGE_SIZE` stays 25.** That constant is what the API
+     applies when a caller sends no `limit`, so moving it would change the
+     answer for every client of the HTTP API to satisfy a UI request. The web app
+     always sends an explicit `limit`, so the two never meet. The new
+     `DEFAULT_GRID_PAGE_SIZE = 20` lives in `apps/web/src/lib/page-size.ts`.
+   - **Changing the size resets to page 1**, and there is a test for it. A cursor
+     encodes a position in a sequence cut into pages of a particular size; carried
+     across a change of size it seeks into a sequence that no longer exists, and
+     keyset paging reports no error for that — it just returns rows from nowhere
+     in particular.
+
+   The two ledger reports are not `DataGrid` and still page at their own fixed
+   size. Extending this to them is a separate, small job.
+
+4. **The breadcrumb moved to the top bar; the collapse control moved into the
+   rail's brand block.** The redesign had put the trail inside `PageHeader`, on
+   the reasoning that it reads best above the title it qualifies. The client
+   wants it in the bar, which is where the .NET app carries it — the better
+   argument, because it is the one from use. It is still derived from `NAV`, so
+   it costs no page any edit. Collapsed, the 64px rail shows the toggle in place
+   of the "AB" mark: a rail that cannot be reopened from its own header would be
+   worse than one with no logo in it.
+
+   A useful side effect: `PageHeader` no longer touches the router at all, so the
+   `useInRouterContext` guard added for the seven test files that render a page
+   bare is gone.
+
+5. **Every filter bar is one row: the controls, Search and Reset.** Asked for on
+   the inward-challan screen, and applied everywhere the pattern appears — which
+   is two places, and they had already drifted apart. Inward Challans put the two
+   buttons on a second row spanning the whole grid; the three report screens put
+   them in a sixth equal column. Both now use `FILTER_ROW` and `FILTER_ACTIONS`
+   from `components/ui/fields.tsx`, so there is one answer rather than two.
+
+   `repeat(5,minmax(0,1fr))_auto`, not `grid-cols-6`: a sixth equal column is the
+   width of a date field, and Search beside Reset needs ~175px — at 1024px that
+   is 175px of buttons in a 131px cell, over the edge of the row. `auto` measures
+   the buttons and the five filters divide the rest. Measured at 1600 / 1280 /
+   1024: five equal columns plus a 174px button cell, every control sharing one
+   baseline, nothing spilling. Below `lg` it falls back to two columns — five
+   filters on one line needs width a phone does not have.
+
+**Verified**: typecheck clean, 508 web tests passing (54 files, 8 new), and in a
+real browser at 1600 / 1280 / 390px — breadcrumb in the banner and not the page,
+toggle inside `#app-sidebar`, picker showing three options, no "Your access" text,
+rows control defaulting to 20 and re-querying at 50, zero horizontal overflow and
+zero console errors at every width.
 
 ### 1.3 Item Master Excel · **ITEM DONE** · price history and Supplier still open
 
@@ -261,6 +508,11 @@ DONE     PO delivery addresses + T&C editor              (9 Sep 2026, §5s)
          item price change log (item_price_changes)      (14 Sep 2026, §5v)
          Document Layouts: templates, defaults, print    (15 Sep 2026, §5v)
          Site Location, site contacts, billing/shipping  (15 Sep 2026, §5w)
+         challan number label, receiver picker            (15 Sep 2026, uncommitted-work note)
+         Reports redesign: tabs, fit-height, hover, toolbars (18 Sep 2026, §5x)
+         Grid defaults (5 rows), dashboard count tiles    (18 Sep 2026, §5x)
+         Page titles removed for the breadcrumb; inline toolbars (18 Sep 2026, §5x)
+         Form redesign from a client mockup + PO supplier summary (21 Sep 2026, §5x)
 NOW      master-detail ANSWER                            <- with the business now, doc 19 Q12
 NEXT     Document Layouts block editor                   <- step 3 of the layout master, §5v
 NEXT     the OTHER 4 exports                             <- see below; purchase invoice list, item history
@@ -526,3 +778,4 @@ From `00-shell-and-navigation.md`, applied to every screen built from here:
 - Where the port deviates from the legacy behaviour, record it in that screen's
   file here, with the reason. Two such deviations already exist on purchase
   requests and both are written down.
+

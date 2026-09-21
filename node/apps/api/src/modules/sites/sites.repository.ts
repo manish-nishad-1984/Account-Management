@@ -17,7 +17,6 @@ import { DATABASE, type Database } from "../../db/database";
 import {
   siteAddresses,
   siteContacts,
-  siteLocationAddresses,
   siteLocations,
   sites,
   userSites,
@@ -461,24 +460,29 @@ export class SitesRepository extends BaseRepository {
    * `billingAddressOf` below, so the rule holds whatever a client sends.
    *
    * SHIPPING is one list: the site's own address, its shipping address if that
-   * differs, the Site master's delivery addresses, then the Site Location
-   * screen's addresses. Blank entries are dropped rather than offered as empty
-   * options, and an address that repeats one already in the list is dropped with
-   * them: a site whose shipping address was filled in by copying its billing
+   * differs, the Site master's delivery addresses, then the addresses on the Site
+   * Location screen's pairs. Blank entries are dropped rather than offered as
+   * empty options, and an address that repeats one already in the list is dropped
+   * with them: a site whose shipping address was filled in by copying its billing
    * address — which several have — would otherwise offer the same words twice
    * with no way to tell which is which.
+   *
+   * THE LAST GROUP COMES OFF `site_locations.address` since 17 Sep 2026, when a
+   * location and its address became one pair. It used to come off
+   * `site_location_addresses`, which migration 0020 copied across and nothing
+   * reads any more. One query now answers both what the locations are called and
+   * where they are.
    */
   async documentOptions(siteId: string): Promise<SiteDocumentOptions> {
     const site = await this.requireSite(siteId);
-    const [extras, locationAddresses, locations, contacts] = await Promise.all([
+    const [extras, pairs, contacts] = await Promise.all([
       this.listAddresses(siteId),
       this.db
-        .select({ id: siteLocationAddresses.id, address: siteLocationAddresses.address })
-        .from(siteLocationAddresses)
-        .where(eq(siteLocationAddresses.siteId, siteId))
-        .orderBy(siteLocationAddresses.lineNumber),
-      this.db
-        .select({ id: siteLocations.id, name: siteLocations.name })
+        .select({
+          id: siteLocations.id,
+          name: siteLocations.name,
+          address: siteLocations.address,
+        })
         .from(siteLocations)
         .where(and(eq(siteLocations.siteId, siteId), eq(siteLocations.isDeleted, false)))
         .orderBy(siteLocations.name),
@@ -504,15 +508,23 @@ export class SitesRepository extends BaseRepository {
     for (const extra of extras) {
       offer(`extra-${extra.id}`, "extra", extra.address);
     }
-    for (const row of locationAddresses) {
-      offer(`location-${row.id}`, "location", row.address);
+    for (const pair of pairs) {
+      offer(`location-${pair.id}`, "location", pair.address);
     }
 
     return {
       billingAddress: blankToNull(site.address),
       // `billingAddressOf` in site-document-rules.ts applies the same rule on save.
       shippingAddresses: choices,
-      locations,
+      /*
+       * The NAMED pairs only. An unnamed one has nothing to show in a "Location"
+       * dropdown — it would be a blank option the reader cannot tell from the
+       * "none" one — while its ADDRESS is still offered for shipping above, which
+       * is the half that matters to a delivery.
+       */
+      locations: pairs
+        .filter((pair) => pair.name !== "")
+        .map((pair) => ({ id: pair.id, name: pair.name })),
       contacts,
     };
   }

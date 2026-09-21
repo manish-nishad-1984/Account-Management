@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import clsx from "clsx";
 import {
   RIGHT_COLUMNS,
   RIGHT_LABELS,
@@ -7,9 +8,19 @@ import {
   type UserRow,
 } from "@accountmanagement/contracts";
 import { Save, ShieldCheck } from "lucide-react";
-import { Alert, Badge, Button, Card, CardHeader, EmptyState, PageHeader } from "../../components/ui";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  PageHeader,
+} from "../../components/ui";
+import { CONTROL_BASE, ringFor } from "../../components/ui/fields";
 import { ApiError } from "../../lib/api-client";
 import { usePermission } from "../../lib/permissions";
+import { useFitHeight } from "../../lib/use-fit-height";
 import { useSaveUserPermissions, useUserList, useUserPermissions } from "./api";
 
 /**
@@ -33,8 +44,21 @@ export function PermissionsPage() {
   const [draft, setDraft] = useState<Record<number, FormPermission>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  /*
+    The users list and the matrix each scroll inside the height left on the page,
+    so the page never scrolls beside them (18 Sep 2026). The list had a fixed
+    32rem, which on a laptop was taller than the room left and scrolled the page
+    as well — two scrollbars side by side.
+  */
+  const usersBox = useFitHeight<HTMLUListElement>();
+  const matrixBox = useFitHeight();
 
-  const users = useUserList({ limit: 200, sortBy: "userName", sortDir: "asc", search: search.trim() || undefined });
+  const users = useUserList({
+    limit: 200,
+    sortBy: "userName",
+    sortDir: "asc",
+    search: search.trim() || undefined,
+  });
   const matrix = useUserPermissions(selectedUser?.id ?? null);
   const save = useSaveUserPermissions();
 
@@ -64,7 +88,10 @@ export function PermissionsPage() {
     if (!matrix.data) return false;
     return matrix.data.rows.some((row) => {
       const current = draft[row.formId];
-      return current && RIGHT_COLUMNS.some((column) => current[column] !== row[column]);
+      return (
+        current &&
+        RIGHT_COLUMNS.some((column) => current[column] !== row[column])
+      );
     });
   }, [draft, matrix.data]);
 
@@ -102,45 +129,48 @@ export function PermissionsPage() {
     if (!selectedUser) return;
     setSaveError(null);
     try {
-      await save.mutateAsync({ id: selectedUser.id, body: { rows: Object.values(draft) } });
+      await save.mutateAsync({
+        id: selectedUser.id,
+        body: { rows: Object.values(draft) },
+      });
       setSaved(true);
     } catch (error) {
       setSaveError(
-        error instanceof ApiError ? error.message : "Could not save these permissions",
+        error instanceof ApiError
+          ? error.message
+          : "Could not save these permissions",
       );
     }
   };
 
   return (
     <>
-      <PageHeader
-        title="Permissions"
-        description="What each user may see and do, per screen"
-        actions={
-          selectedUser && canEdit ? (
-            <Button icon={Save} onClick={onSave} loading={save.isPending} disabled={!dirty}>
-              {dirty ? "Save permissions" : "Saved"}
-            </Button>
-          ) : undefined
-        }
-      />
+      <PageHeader title="Permissions" description="What each user may see and do, per screen" />
 
       <div className="grid gap-4 lg:grid-cols-[18rem_1fr]">
         <Card padded={false}>
-          <div className="border-b border-slate-200/80 p-3">
+          <div className="border-b border-slate-200 p-3">
             <input
               aria-label="Search users"
               placeholder="Search users…"
               value={search}
               onChange={(event) => setSearch(event.currentTarget.value)}
-              className="w-full rounded-lg border-0 px-3 py-2 text-sm text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 transition-shadow placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-brand-500"
+              className={clsx(CONTROL_BASE, ringFor(undefined), "px-2.5")}
             />
           </div>
-          <ul className="max-h-[32rem] divide-y divide-slate-100 overflow-y-auto">
+          <ul
+            ref={usersBox.ref}
+            className="divide-y divide-slate-100 overflow-y-auto"
+            style={{ maxHeight: usersBox.height }}
+          >
             {users.isLoading ? (
-              <li className="px-3 py-6 text-center text-sm text-slate-500">Loading users…</li>
+              <li className="px-3 py-5 text-center text-sm text-slate-500">
+                Loading users…
+              </li>
             ) : (users.data?.rows ?? []).length === 0 ? (
-              <li className="px-3 py-6 text-center text-sm text-slate-500">No users match</li>
+              <li className="px-3 py-5 text-center text-sm text-slate-500">
+                No users match
+              </li>
             ) : (
               (users.data?.rows ?? []).map((user) => (
                 <li key={user.id}>
@@ -174,37 +204,56 @@ export function PermissionsPage() {
               description="Pick someone on the left to see and change what they may do."
             />
           ) : matrix.isLoading ? (
-            <p className="px-4 py-10 text-center text-sm text-slate-500">Loading permissions…</p>
+            <p className="px-4 py-8 text-center text-sm text-slate-500">
+              Loading permissions…
+            </p>
           ) : (
             <>
-              <div className="border-b border-slate-200/80 px-4 py-3">
+              <div className="border-b border-slate-200 px-4 py-3">
                 <CardHeader
                   title={`Permissions for ${selectedUser.userName}`}
                   description="Ticking any right grants View with it — a right without View cannot be reached."
+                  // On the card it saves, not on a row of its own above the page (18 Sep 2026).
+                  action={
+                    selectedUser && canEdit ? (
+                      <Button
+                        icon={Save}
+                        onClick={onSave}
+                        loading={save.isPending}
+                        disabled={!dirty}
+                      >
+                        {dirty ? "Save permissions" : "Saved"}
+                      </Button>
+                    ) : undefined
+                  }
                 />
                 {saveError && <Alert tone="danger">{saveError}</Alert>}
                 {saved && !dirty && !saveError && (
                   <Alert tone="success">
-                    Saved. The user picks these up the next time they sign in — an
-                    access token already issued keeps the rights it was minted with
-                    until it expires.
+                    Saved. The user picks these up the next time they sign in —
+                    an access token already issued keeps the rights it was
+                    minted with until it expires.
                   </Alert>
                 )}
                 {!canEdit && (
                   <Alert tone="info">
-                    You have view-only access to permissions. Changing them needs
-                    the Edit right on the User screen.
+                    You have view-only access to permissions. Changing them
+                    needs the Edit right on the User screen.
                   </Alert>
                 )}
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200/80 text-sm">
-                  <thead className="bg-slate-50/80">
+              <div
+                ref={matrixBox.ref}
+                className="relative overflow-auto"
+                style={{ maxHeight: matrixBox.height }}
+              >
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="sticky top-0 z-10 bg-slate-50 shadow-[inset_0_-1px_0_var(--color-slate-200)]">
                     <tr>
                       <th
                         scope="col"
-                        className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-500"
+                        className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-[0.05em] text-slate-500"
                       >
                         Screen
                       </th>
@@ -212,7 +261,7 @@ export function PermissionsPage() {
                         <th
                           key={column}
                           scope="col"
-                          className="px-3 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-500"
+                          className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-[0.05em] text-slate-500"
                         >
                           {RIGHT_LABELS[column]}
                         </th>
@@ -224,8 +273,13 @@ export function PermissionsPage() {
                       const current = draft[row.formId];
                       return (
                         <tr key={row.formId} className="hover:bg-slate-50/70">
-                          <th scope="row" className="px-4 py-2.5 text-left font-normal">
-                            <div className="font-medium text-slate-800">{row.formName}</div>
+                          <th
+                            scope="row"
+                            className="px-4 py-2.5 text-left font-normal"
+                          >
+                            <div className="font-medium text-slate-800">
+                              {row.formName}
+                            </div>
                             {/*
                               Show the permission string the ticks produce. It is
                               what appears in the token and in every guard, and
@@ -236,12 +290,17 @@ export function PermissionsPage() {
                             <div className="text-xs text-slate-400">
                               <code>{row.subject}.*</code>
                               {row.formGroup && (
-                                <span className="ml-2 text-slate-400">{row.formGroup}</span>
+                                <span className="ml-2 text-slate-400">
+                                  {row.formGroup}
+                                </span>
                               )}
                             </div>
                           </th>
                           {RIGHT_COLUMNS.map((column) => (
-                            <td key={column} className="px-3 py-2.5 text-center">
+                            <td
+                              key={column}
+                              className="px-3 py-2.5 text-center"
+                            >
                               <input
                                 type="checkbox"
                                 disabled={!canEdit}
@@ -259,13 +318,14 @@ export function PermissionsPage() {
                 </table>
               </div>
 
-              <div className="border-t border-slate-200/80 bg-slate-50/40 px-4 py-3 text-xs text-slate-500">
-                <Badge tone="neutral">Note</Badge>{" "}
-                Roles are not shown. The source schema has <code>UserRole</code> and{" "}
-                <code>RolewiseFormPermission</code>, but <code>User.RoleId</code> is a
-                GUID while both role tables key on an integer, so they cannot join —
-                and nothing in the repository layer reads them. Role permissions have
-                never worked; only these per-user grants do.
+              <div className="border-t border-slate-200 bg-surface-muted px-4 py-3 text-xs text-slate-500">
+                <Badge tone="neutral">Note</Badge> Roles are not shown. The
+                source schema has <code>UserRole</code> and{" "}
+                <code>RolewiseFormPermission</code>, but{" "}
+                <code>User.RoleId</code> is a GUID while both role tables key on
+                an integer, so they cannot join — and nothing in the repository
+                layer reads them. Role permissions have never worked; only these
+                per-user grants do.
               </div>
             </>
           )}

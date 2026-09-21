@@ -3,8 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Printer, Search } from "lucide-react";
 import {
+  DOCUMENT_TYPE_SUBJECTS,
   listResponseSchema,
   purchaseInvoiceRowSchema,
+  purchaseOrderRowSchema,
   salesInvoiceRowSchema,
   type DocumentType,
   type TemplateLayout,
@@ -21,6 +23,7 @@ import { sampleDocument } from "./render/sample-document";
 
 const salesList = listResponseSchema(salesInvoiceRowSchema);
 const purchaseList = listResponseSchema(purchaseInvoiceRowSchema);
+const orderList = listResponseSchema(purchaseOrderRowSchema);
 
 interface InvoiceChoice {
   id: string;
@@ -43,6 +46,13 @@ function useInvoiceChoices(documentType: DocumentType, search: string, enabled: 
         return page.rows.map((row) => ({
           id: row.id,
           label: `${row.salesInvoiceNo} · ${formatDate(row.documentDate)} · ${row.customerName}`,
+        }));
+      }
+      if (documentType === "purchase-order") {
+        const page = await apiRequest(`/purchase-orders?${query}`, { schema: orderList, signal });
+        return page.rows.map((row) => ({
+          id: row.id,
+          label: `${row.poNo} · ${formatDate(row.documentDate)} · ${row.supplierName}`,
         }));
       }
       const page = await apiRequest(`/purchase-invoices?${query}`, { schema: purchaseList, signal });
@@ -76,7 +86,7 @@ export function TemplatePreviewDialog({
   templateId: string | null;
   layout: TemplateLayout;
 }) {
-  const canOpenInvoices = usePermission(documentType, "view");
+  const canOpenInvoices = usePermission(DOCUMENT_TYPE_SUBJECTS[documentType], "view");
   const [search, setSearch] = useState("");
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
   const debounced = useDebouncedValue(search.trim(), 300);
@@ -86,6 +96,7 @@ export function TemplatePreviewDialog({
   const sample = useMemo(() => sampleDocument(documentType), [documentType]);
 
   const document = invoiceId && bundle.data ? bundle.data.document : sample;
+  const noun = documentType === "purchase-order" ? "order" : "invoice";
   const printHref = invoiceId
     ? `/print/${documentType}/${invoiceId}${templateId ? `?template=${templateId}` : "?template=built-in"}`
     : null;
@@ -97,7 +108,7 @@ export function TemplatePreviewDialog({
         {canOpenInvoices ? (
           <>
             <TextField
-              label="Find an invoice to preview with"
+              label={`Find an ${noun} to preview with`}
               icon={Search}
               value={search}
               placeholder="Invoice No or party"
@@ -112,7 +123,7 @@ export function TemplatePreviewDialog({
                 id="preview-invoice"
                 value={invoiceId ?? ""}
                 onChange={(event) => setInvoiceId(event.target.value || null)}
-                className="mt-1 block h-8 w-full rounded-md border-0 bg-white px-2.5 text-sm text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-brand-600"
+                className="mt-1 block h-8 w-full rounded-md border-0 bg-white px-2.5 text-sm text-slate-900 ring-1 ring-inset ring-slate-300 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
               >
                 <option value="">Sample data</option>
                 {(choices.data ?? []).map((choice) => (
@@ -138,15 +149,15 @@ export function TemplatePreviewDialog({
       </div>
 
       {invoiceId && bundle.isError && (
-        <Alert className="mb-3">{describeLoadError(bundle.error, "that invoice")}</Alert>
+        <Alert className="mb-3">{describeLoadError(bundle.error, `that ${noun}`)}</Alert>
       )}
       {invoiceId && bundle.isPending && (
         <p role="status" className="mb-2 text-xs text-slate-500">
-          Loading the invoice…
+          Loading the {noun}…
         </p>
       )}
 
-      <div className="overflow-x-auto rounded-lg bg-slate-100 p-4">
+      <div className="relative overflow-x-auto rounded-lg bg-slate-100 p-4">
         <div className="mx-auto w-fit shadow-lg" aria-label="Document preview" role="region">
           <DocumentRenderer layout={layout} document={document} />
         </div>

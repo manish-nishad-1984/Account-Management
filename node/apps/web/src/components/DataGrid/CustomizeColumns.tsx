@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, GripVertical, Lock, Search, X } from "lucide-re
 import clsx from "clsx";
 import { moveGridColumn, type GridColumnDefault } from "@accountmanagement/contracts";
 import { Button } from "../ui";
+import { CONTROL_BASE, ringFor } from "../ui/fields";
 
 interface Props {
   open: boolean;
@@ -96,7 +97,7 @@ export function CustomizeColumns({
       onClick={onCancel}
     >
       <div
-        className="flex h-full w-full max-w-sm flex-col bg-white shadow-xl"
+        className="flex h-full w-full max-w-sm flex-col border-l border-slate-200 bg-white shadow-pop"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between border-b border-slate-200 px-4 py-3">
@@ -123,7 +124,7 @@ export function CustomizeColumns({
               onChange={(event) => setSearch(event.currentTarget.value)}
               placeholder="Search columns…"
               aria-label="Search columns"
-              className="w-full rounded-lg border-0 py-2 pl-9 pr-3 text-sm shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-brand-500"
+              className={clsx(CONTROL_BASE, ringFor(undefined), "pl-8 pr-2.5")}
             />
             <Search
               aria-hidden
@@ -131,7 +132,7 @@ export function CustomizeColumns({
             />
           </div>
           {term !== "" && (
-            <p className="mt-2 text-[11px] text-slate-500">
+            <p className="mt-2 text-xs text-slate-500">
               Clear the search to change the order.
             </p>
           )}
@@ -158,7 +159,7 @@ export function CustomizeColumns({
                   "mb-1.5 flex items-center gap-2 rounded-lg border px-2.5 py-2 text-sm",
                   column.visible
                     ? "border-slate-200 bg-white"
-                    : "border-slate-200/70 bg-slate-50 text-slate-500",
+                    : "border-slate-200 bg-slate-50 text-slate-500",
                 )}
               >
                 {column.locked ? (
@@ -184,7 +185,7 @@ export function CustomizeColumns({
                   />
                   <span className="truncate">{label}</span>
                   {column.locked && (
-                    <span className="shrink-0 text-[10px] uppercase tracking-wide text-slate-400">
+                    <span className="shrink-0 text-[11px] uppercase tracking-wide text-slate-400">
                       always shown
                     </span>
                   )}

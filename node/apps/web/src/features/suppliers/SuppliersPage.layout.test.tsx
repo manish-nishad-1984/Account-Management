@@ -205,4 +205,126 @@ describe("how a record opens", () => {
       expect(await screen.findByRole("region", { name: /supplier/i })).toBeInTheDocument();
     });
   });
+
+  /**
+   * FULL-PAGE LAYOUT — the record INSTEAD of the list.
+   *
+   * The third answer to doc 19's question, and the only one that gives a form
+   * the whole content area. What it must not do is quietly become a modal with
+   * the backdrop painted out: the list is gone, so there is exactly one way back
+   * and these tests are what say it is there.
+   *
+   * Rendered here without `AppShell`, so nothing is hiding the list in these
+   * tests — hiding is the shell's half of the mechanism and lives in
+   * `AppShell.recordPage.test.tsx`. What this file pins is the screen's half.
+   */
+  describe("full-page layout — the record takes the page", () => {
+    it("opens the record in the page when a row is clicked", async () => {
+      routes();
+      renderWithAuth(<SuppliersPage />, { permissions: RIGHTS, layout: "page" });
+
+      await userEvent.click(await rowFor("RAJU M PATEL-CARTING"));
+
+      const page = await screen.findByRole("region", { name: /supplier/i });
+      expect(within(page).getByRole("button", { name: /save changes/i })).toBeInTheDocument();
+    });
+
+    /**
+     * The same promise `SidePanel` makes, for a stronger reason: there is no
+     * list behind this to be inert. Claiming `aria-modal` would tell a screen
+     * reader the navigation rail is unavailable while it is sitting there.
+     */
+    it("is not a modal dialog, and says so", async () => {
+      routes();
+      renderWithAuth(<SuppliersPage />, { permissions: RIGHTS, layout: "page" });
+      await userEvent.click(await rowFor("RAJU M PATEL-CARTING"));
+
+      await screen.findByRole("region", { name: /supplier/i });
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(document.querySelector("[aria-modal]")).toBeNull();
+    });
+
+    /**
+     * THE WHOLE POINT, and what a user is stranded without. The list is not on
+     * screen, so there is no backdrop to click past and — deliberately — no
+     * Escape. A back arrow that did not close the record would be a dead end.
+     */
+    it("goes back to the list from the back arrow", async () => {
+      routes();
+      renderWithAuth(<SuppliersPage />, { permissions: RIGHTS, layout: "page" });
+
+      await userEvent.click(await rowFor("RAJU M PATEL-CARTING"));
+      const page = await screen.findByRole("region", { name: /supplier/i });
+
+      await userEvent.click(within(page).getByRole("button", { name: /back to list/i }));
+
+      await waitFor(() => {
+        expect(screen.queryByRole("region", { name: /supplier/i })).not.toBeInTheDocument();
+      });
+      expect(screen.getByText("RAJU M PATEL-CARTING")).toBeInTheDocument();
+    });
+
+    /**
+     * Escape closes the dialog and the panel because each is covering the list.
+     * This is not, and on a full page the key people hit to dismiss a dropdown
+     * would instead discard a half-typed record and navigate away from it. The
+     * back arrow and Cancel are both plainly visible here — which is the whole
+     * argument for the layout — so neither needs a shortcut that can lose work.
+     */
+    it("does not close on Escape, because there is nothing to dismiss", async () => {
+      routes();
+      renderWithAuth(<SuppliersPage />, { permissions: RIGHTS, layout: "page" });
+
+      await userEvent.click(await rowFor("RAJU M PATEL-CARTING"));
+      const page = await screen.findByRole("region", { name: /supplier/i });
+
+      within(page).getByRole("button", { name: /back to list/i }).focus();
+      await userEvent.keyboard("{Escape}");
+
+      expect(screen.getByRole("region", { name: /supplier/i })).toBeInTheDocument();
+    });
+
+    /**
+     * The same guard the split layout needs: rows carry Edit and Delete, and
+     * without it Delete would open the record AND its confirmation at once.
+     */
+    it("does not also open the record when a control in the row is clicked", async () => {
+      routes();
+      renderWithAuth(<SuppliersPage />, { permissions: RIGHTS, layout: "page" });
+
+      await screen.findByText("RAJU M PATEL-CARTING");
+      await userEvent.click((await screen.findAllByRole("button", { name: /delete/i }))[0]!);
+
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: /supplier/i })).not.toBeInTheDocument();
+    });
+
+    /**
+     * No highlight to carry. The list is not visible while the record is open,
+     * and by the time it is back the target has been cleared — so a marked row
+     * could only ever be a leftover pointing at nothing.
+     */
+    it("marks no row as current", async () => {
+      routes();
+      renderWithAuth(<SuppliersPage />, { permissions: RIGHTS, layout: "page" });
+
+      await userEvent.click(await rowFor("RAJU M PATEL-CARTING"));
+      await screen.findByRole("region", { name: /supplier/i });
+
+      expect(document.querySelector("tr[aria-current]")).toBeNull();
+    });
+
+    it("opens from the keyboard, because a clickable row that is not focusable is not usable", async () => {
+      routes();
+      renderWithAuth(<SuppliersPage />, { permissions: RIGHTS, layout: "page" });
+
+      const target = await rowFor("RAJU M PATEL-CARTING");
+      expect(target).toHaveAttribute("tabindex", "0");
+
+      target.focus();
+      await userEvent.keyboard("{Enter}");
+
+      expect(await screen.findByRole("region", { name: /supplier/i })).toBeInTheDocument();
+    });
+  });
 });

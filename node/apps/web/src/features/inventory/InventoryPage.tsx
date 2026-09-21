@@ -6,7 +6,14 @@ import {
 } from "@accountmanagement/contracts";
 import { Check, Info, Plus, Undo2 } from "lucide-react";
 import { DataGrid, RowActions } from "../../components/DataGrid";
-import { Alert, Badge, Button, ConfirmDialog, PageHeader, SelectField } from "../../components/ui";
+import {
+  Alert,
+  Badge,
+  Button,
+  ConfirmDialog,
+  PageHeader,
+  SelectField,
+} from "../../components/ui";
 import {
   useDeleteInventoryInward,
   useInventoryInwardList,
@@ -53,9 +60,13 @@ export function InventoryPage() {
         header: "Item",
         cell: ({ row }) => (
           <div>
-            <div className="font-medium text-slate-900">{row.original.itemName}</div>
+            <div className="font-medium text-slate-900">
+              {row.original.itemName}
+            </div>
             {row.original.details && (
-              <div className="text-xs text-slate-500">{row.original.details}</div>
+              <div className="text-xs text-slate-500">
+                {row.original.details}
+              </div>
             )}
           </div>
         ),
@@ -75,7 +86,9 @@ export function InventoryPage() {
         cell: ({ row }) => (
           <span className="tabular block text-right text-slate-800">
             {formatQuantity(row.original.quantity)}{" "}
-            <span className="text-xs text-slate-500">{row.original.unitName}</span>
+            <span className="text-xs text-slate-500">
+              {row.original.unitName}
+            </span>
           </span>
         ),
       },
@@ -88,7 +101,10 @@ export function InventoryPage() {
           ) : (
             // Not an error and not missing data — the old form had no site field
             // at all, so nothing could have filled this in.
-            <span className="text-xs text-slate-400" title="The old form had no site field">
+            <span
+              className="text-xs text-slate-400"
+              title="The old form had no site field"
+            >
               No site recorded
             </span>
           ),
@@ -108,7 +124,9 @@ export function InventoryPage() {
         meta: { defaultHidden: true },
         cell: ({ row }) =>
           row.original.createdAt ? (
-            <span className="tabular text-slate-600">{formatDate(row.original.createdAt)}</span>
+            <span className="tabular text-slate-600">
+              {formatDate(row.original.createdAt)}
+            </span>
           ) : (
             <span className="text-slate-300">—</span>
           ),
@@ -157,13 +175,6 @@ export function InventoryPage() {
       <PageHeader
         title="Inventory Inward"
         description="Stock arriving at a site"
-        actions={
-          canAdd && (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              New arrival
-            </Button>
-          )
-        }
       />
 
       {/*
@@ -173,23 +184,38 @@ export function InventoryPage() {
       */}
       {unallocated > 0 && scope.siteId !== null && (
         <Alert tone="info" icon={Info} className="mb-4">
-          {unallocated} arrival{unallocated === 1 ? "" : "s"} recorded before this system
-          have no site against them — the old screen had no site field — so they are shown
-          under every site. New arrivals are recorded against{" "}
-          <span className="font-medium">{scope.siteName ?? "the chosen site"}</span>.
+          {unallocated} arrival{unallocated === 1 ? "" : "s"} recorded before
+          this system have no site against them — the old screen had no site
+          field — so they are shown under every site. New arrivals are recorded
+          against{" "}
+          <span className="font-medium">
+            {scope.siteName ?? "the chosen site"}
+          </span>
+          .
         </Alert>
       )}
 
-      <div className="mb-4 max-w-xs">
-        <SelectField
-          label="Status"
-          value={approval}
-          options={APPROVAL_OPTIONS}
-          onChange={(event) => setApproval(event.target.value as ApprovalFilter)}
-        />
-      </div>
-
       <DataGrid<InventoryInwardRow>
+        // One row above the grid (client request, 18 Sep 2026): the screen's
+        // filters beside the search box and its actions at the right-hand end.
+        filters={
+          <SelectField
+            labelHidden
+            label="Status"
+            value={approval}
+            options={APPROVAL_OPTIONS}
+            onChange={(event) =>
+              setApproval(event.target.value as ApprovalFilter)
+            }
+          />
+        }
+        actions={
+          canAdd && (
+            <Button icon={Plus} onClick={screen.openCreate}>
+              New arrival
+            </Button>
+          )
+        }
         gridKey="inventory"
         columns={columns}
         searchPlaceholder="Search item, unit or details"
@@ -222,8 +248,8 @@ export function InventoryPage() {
               ?
             </p>
             <p className="mt-2 text-xs text-slate-500">
-              The row is marked deleted and hidden from every list. The old system
-              removed the row outright; this one keeps it.
+              The row is marked deleted and hidden from every list. The old
+              system removed the row outright; this one keeps it.
             </p>
           </>
         }

@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { UsersPage } from "./UsersPage";
 import { AuthProvider } from "../../contexts/AuthContext";
+import { DEFAULT_GRID_PAGE_SIZE } from "../../lib/page-size";
 
 const row = (userName: string, overrides: Record<string, unknown> = {}) => ({
   id: `id-${userName}`,
@@ -56,7 +57,7 @@ describe("UsersPage", () => {
     renderPage();
 
     await screen.findByText("alice");
-    expect(lastRequestUrl().searchParams.get("limit")).toBe("25");
+    expect(lastRequestUrl().searchParams.get("limit")).toBe(String(DEFAULT_GRID_PAGE_SIZE));
   });
 
   it("renders rows and the total from the server", async () => {

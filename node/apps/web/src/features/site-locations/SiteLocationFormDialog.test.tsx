@@ -4,6 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SiteLocationFormDialog } from "./SiteLocationFormDialog";
 import { renderWithAuth, routeFetch } from "../../test/render";
 
+/**
+ * The Site Location form — ONE LIST OF PAIRS since 17 Sep 2026.
+ *
+ * It was two independent lists until the business reversed that. The case worth
+ * the most here is the last one: a pair carried across by migration 0020, which
+ * has an address and NO NAME. That shape has to load, say what it is, and be
+ * nameable without losing the address — it is the state every pre-existing
+ * address on production is sitting in.
+ */
+
 const list = (rows: unknown[]) => ({ rows, nextCursor: null, total: rows.length });
 
 const siteRow = (id: string, name: string) => ({
@@ -22,15 +32,32 @@ const siteRow = (id: string, name: string) => ({
 
 const RIVERFRONT = "11111111-1111-4111-8111-111111111111";
 const DEPOT = "22222222-2222-4222-8222-222222222222";
-const SITES = list([siteRow(RIVERFRONT, "Surat Riverfront"), siteRow(DEPOT, "Valsad Depot")]);
+const BHAVNAGAR = "55555555-5555-4555-8555-555555555555";
+const SITES = list([
+  siteRow(RIVERFRONT, "Surat Riverfront"),
+  siteRow(DEPOT, "Valsad Depot"),
+  siteRow(BHAVNAGAR, "Bhavnagar Yard"),
+]);
 
-const empty = (siteId: string, siteName: string) => ({ siteId, siteName, locations: [], addresses: [] });
+const empty = (siteId: string, siteName: string) => ({ siteId, siteName, locations: [] });
 
+const STORE_YARD = "33333333-3333-4333-8333-333333333333";
 const EXISTING = {
   siteId: DEPOT,
   siteName: "Valsad Depot",
-  locations: [{ id: "33333333-3333-4333-8333-333333333333", name: "Store Yard" }],
-  addresses: [{ id: "44444444-4444-4444-8444-444444444444", address: "NH 48, Valsad" }],
+  locations: [{ id: STORE_YARD, name: "Store Yard", address: "NH 48, Valsad" }],
+};
+
+/** What migration 0020 leaves behind: an address, no name. */
+const MIGRATED_A = "66666666-6666-4666-8666-666666666666";
+const MIGRATED_B = "77777777-7777-4777-8777-777777777777";
+const MIGRATED = {
+  siteId: BHAVNAGAR,
+  siteName: "Bhavnagar Yard",
+  locations: [
+    { id: MIGRATED_A, name: "", address: "Plot 5, Bardoli Road" },
+    { id: MIGRATED_B, name: "", address: "Survey 122, Kamrej" },
+  ],
 };
 
 const sent = (method: string) => {
@@ -55,6 +82,7 @@ describe("SiteLocationFormDialog", () => {
     routeFetch([
       [new RegExp(`/site-locations/${RIVERFRONT}$`), empty(RIVERFRONT, "Surat Riverfront")],
       [new RegExp(`/site-locations/${DEPOT}$`), EXISTING],
+      [new RegExp(`/site-locations/${BHAVNAGAR}$`), MIGRATED],
       [/\/site-locations$/, EXISTING],
       [/\/sites$/, SITES],
     ]);
@@ -77,7 +105,7 @@ describe("SiteLocationFormDialog", () => {
     expect(box).toHaveValue("Surat Riverfront");
   });
 
-  it("adds a location box with + and saves the site's names and addresses as a new entry", async () => {
+  it("saves each location together with its own address", async () => {
     const user = userEvent.setup();
     open();
 
@@ -88,13 +116,13 @@ describe("SiteLocationFormDialog", () => {
     const first = await screen.findByRole("textbox", { name: "Location name 1" });
     await waitFor(() => expect(first).toBeEnabled());
     await user.type(first, "Block A");
+    await user.type(screen.getByRole("textbox", { name: "Address 1" }), "Gate 1, Ring Road");
+
     await user.click(screen.getByRole("button", { name: "Add a location after 1" }));
     // The new box takes the cursor, so the next name can simply be typed.
     await user.keyboard("Store Yard");
     expect(screen.getByRole("textbox", { name: "Location name 2" })).toHaveValue("Store Yard");
-
-    await user.click(screen.getByRole("button", { name: /add address/i }));
-    await user.type(screen.getByRole("textbox", { name: "Address 1" }), "Gate 1, Ring Road");
+    await user.type(screen.getByRole("textbox", { name: "Address 2" }), "Gate 2, Ring Road");
 
     await user.click(screen.getByRole("button", { name: "Save" }));
 
@@ -102,14 +130,13 @@ describe("SiteLocationFormDialog", () => {
     expect(sent("POST")!.body).toEqual({
       siteId: RIVERFRONT,
       locations: [
-        { id: null, name: "Block A" },
-        { id: null, name: "Store Yard" },
+        { id: null, name: "Block A", address: "Gate 1, Ring Road" },
+        { id: null, name: "Store Yard", address: "Gate 2, Ring Road" },
       ],
-      addresses: ["Gate 1, Ring Road"],
     });
   });
 
-  it("opens a site's existing locations when that site is picked, and saves them as an edit", async () => {
+  it("opens a site's existing pairs when that site is picked, and saves them as an edit", async () => {
     const user = userEvent.setup();
     open();
 
@@ -128,11 +155,11 @@ describe("SiteLocationFormDialog", () => {
     expect(sent("PATCH")!.url).toMatch(new RegExp(`/site-locations/${DEPOT}$`));
     // The stored location keeps its id, so documents that name it keep it.
     expect(sent("PATCH")!.body.locations).toEqual([
-      { id: "33333333-3333-4333-8333-333333333333", name: "Store Yard" },
+      { id: STORE_YARD, name: "Store Yard", address: "NH 48, Valsad" },
     ]);
   });
 
-  it("drops a blank location box rather than refusing the save", async () => {
+  it("drops a pair with both halves blank rather than refusing the save", async () => {
     const user = userEvent.setup();
     open(DEPOT);
 
@@ -144,5 +171,32 @@ describe("SiteLocationFormDialog", () => {
 
     await waitFor(() => expect(sent("PATCH")).not.toBeNull());
     expect(sent("PATCH")!.body.locations).toHaveLength(1);
+  });
+
+  describe("a pair carried over by the migration", () => {
+    it("loads the address, says why it has no name, and keeps the address when named", async () => {
+      const user = userEvent.setup();
+      open(BHAVNAGAR);
+
+      await waitFor(() =>
+        expect(screen.getByRole("textbox", { name: "Address 1" })).toHaveValue(
+          "Plot 5, Bardoli Road",
+        ),
+      );
+      expect(screen.getByRole("textbox", { name: "Location name 1" })).toHaveValue("");
+
+      // The screen explains the blank rather than leaving it looking like a bug.
+      expect(screen.getByText(/2 addresses here have no location name yet/i)).toBeInTheDocument();
+
+      await user.type(screen.getByRole("textbox", { name: "Location name 1" }), "Block A");
+      await user.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(sent("PATCH")).not.toBeNull());
+      expect(sent("PATCH")!.body.locations).toEqual([
+        { id: MIGRATED_A, name: "Block A", address: "Plot 5, Bardoli Road" },
+        // Still unnamed, and still kept — nothing is dropped for being half done.
+        { id: MIGRATED_B, name: "", address: "Survey 122, Kamrej" },
+      ]);
+    });
   });
 });
