@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
-import { Download, Loader2, Paperclip, Trash2, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import clsx from "clsx";
+import { Camera, Download, Loader2, Paperclip, RotateCcw, Trash2, Upload } from "lucide-react";
 import {
   ATTACHMENT_ACCEPT,
   ATTACHMENT_MAX_FILES,
@@ -11,6 +12,7 @@ import {
   Alert,
   Button,
   IconButton,
+  Modal,
 } from "../../components/ui";
 import { ApiError } from "../../lib/api-client";
 import {
@@ -45,11 +47,9 @@ export function ChallanAttachments({
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const onPick = async (files: FileList | null) => {
+  const onFiles = async (chosen: File[]) => {
     setError(null);
-    if (!files || files.length === 0) return;
-
-    const chosen = Array.from(files);
+    if (chosen.length === 0) return;
 
     // Checked here with the SAME rules the server uses, from the contracts
     // package. A client-side check that disagrees with the server either blocks
@@ -170,7 +170,7 @@ export function ChallanAttachments({
             accept={ATTACHMENT_ACCEPT}
             className="sr-only"
             aria-label="Choose files to attach"
-            onChange={(event) => void onPick(event.target.files)}
+            onChange={(event) => void onFiles(Array.from(event.target.files ?? []))}
           />
           <Button
             type="button"
@@ -181,6 +181,7 @@ export function ChallanAttachments({
           >
             {attach.isPending ? "Uploading…" : "Attach files"}
           </Button>
+          <CameraCaptureButton onCapture={(file) => void onFiles([file])} disabled={attach.isPending} />
           <span className="text-xs text-slate-500">
             PDF, images, Office or CSV. Up to 10 MB each.
           </span>
@@ -209,11 +210,11 @@ export function QueuedAttachments({
   const input = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const onPick = (picked: FileList | null) => {
+  const onFiles = (picked: File[]) => {
     setError(null);
-    if (!picked) return;
+    if (picked.length === 0) return;
 
-    const chosen = [...files, ...Array.from(picked)];
+    const chosen = [...files, ...picked];
     const rejection = chosen.map((f) => attachmentRejection(f)).find(Boolean);
     if (rejection) {
       setError(rejection);
@@ -256,11 +257,12 @@ export function QueuedAttachments({
           accept={ATTACHMENT_ACCEPT}
           className="sr-only"
           aria-label="Choose files to attach"
-          onChange={(event) => onPick(event.target.files)}
+          onChange={(event) => onFiles(Array.from(event.target.files ?? []))}
         />
         <Button type="button" variant="outline" icon={Upload} onClick={() => input.current?.click()}>
           Choose files
         </Button>
+        <CameraCaptureButton onCapture={(file) => onFiles([file])} />
         <span className="text-xs text-slate-500">
           Uploaded when the challan is saved. PDF, images, Office or CSV, up to 10 MB each.
         </span>
@@ -268,6 +270,212 @@ export function QueuedAttachments({
 
       {error && <Alert tone="danger">{error}</Alert>}
     </div>
+  );
+}
+
+/**
+ * "Take photo", next to the file picker wherever a challan takes attachments
+ * (client request, 29 Sep 2026).
+ *
+ * A challan is very often keyed standing at the gate with the paper right
+ * there, and leaving the app for the phone's own camera, taking the shot, and
+ * coming back to find it in a file picker is three screens for one
+ * photograph. This opens a camera in place instead.
+ *
+ * The captured frame becomes a real `File` — `image/jpeg`, from `canvas.toBlob`
+ * — and is handed to the SAME `onFiles`/`onChange` path a picked file goes
+ * through. A capture is not a second, trusted way in: it gets the same
+ * extension, size and signature checks as anything chosen from disk.
+ */
+function CameraCaptureButton({
+  onCapture,
+  disabled,
+}: {
+  onCapture: (file: File) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button type="button" variant="outline" icon={Camera} disabled={disabled} onClick={() => setOpen(true)}>
+        Take photo
+      </Button>
+      {open && (
+        <CameraCaptureDialog
+          onCapture={(file) => {
+            onCapture(file);
+            setOpen(false);
+          }}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * The live feed, a Capture button, and a preview to retake or keep.
+ *
+ * Mounted only while `open` — the camera is never asked for, and its light
+ * never comes on, until someone actually clicks "Take photo".
+ */
+function CameraCaptureDialog({
+  onCapture,
+  onClose,
+}: {
+  onCapture: (file: File) => void;
+  onClose: () => void;
+}) {
+  const video = useRef<HTMLVideoElement>(null);
+  const stream = useRef<MediaStream | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+  const [shot, setShot] = useState<{ blob: Blob; url: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("This browser cannot open the camera. Choose a file instead.");
+      return;
+    }
+
+    navigator.mediaDevices
+      // The REAR camera on a phone, where there is one — the gate pass being
+      // photographed faces away from the screen. Desktop webcams have no
+      // "environment" facing side, so `ideal` rather than `exact` falls back
+      // to whatever camera exists instead of refusing to open at all.
+      .getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
+      .then((media) => {
+        if (cancelled) {
+          // The dialog closed while the permission prompt was still up — do
+          // not leave a camera running behind a component that is gone.
+          media.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        stream.current = media;
+        if (video.current) {
+          video.current.srcObject = media;
+          // Caught, not thrown: a blocked autoplay here would otherwise be an
+          // unhandled rejection rather than the dialog's own error state, and
+          // `onLoadedMetadata` is what actually gates the Capture button.
+          video.current.play().catch(() => undefined);
+        }
+      })
+      .catch((cause: unknown) => {
+        if (cancelled) return;
+        setError(
+          cause instanceof DOMException && cause.name === "NotAllowedError"
+            ? "Camera access was refused. Allow it for this site, or choose a file instead."
+            : cause instanceof DOMException && cause.name === "NotFoundError"
+              ? "No camera was found on this device."
+              : "The camera could not be opened. Choose a file instead.",
+        );
+      });
+
+    return () => {
+      cancelled = true;
+      // Stopping every track is what turns the camera light off. Closing the
+      // dialog without this leaves it recording with nothing on screen for it.
+      stream.current?.getTracks().forEach((track) => track.stop());
+      stream.current = null;
+    };
+  }, []);
+
+  // The object URL for a captured frame is revoked when it is replaced or the
+  // dialog closes, or each Retake leaks the previous frame.
+  useEffect(() => () => { if (shot) URL.revokeObjectURL(shot.url); }, [shot]);
+
+  const capture = () => {
+    const el = video.current;
+    if (!el || el.videoWidth === 0) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = el.videoWidth;
+    canvas.height = el.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(el, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(
+      (blob) => {
+        if (blob) setShot({ blob, url: URL.createObjectURL(blob) });
+      },
+      "image/jpeg",
+      0.92,
+    );
+  };
+
+  const retake = () => {
+    if (shot) URL.revokeObjectURL(shot.url);
+    setShot(null);
+  };
+
+  const use = () => {
+    if (!shot) return;
+    onCapture(new File([shot.blob], `photo-${Date.now()}.jpg`, { type: "image/jpeg" }));
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Take a photo"
+      size="lg"
+      footer={
+        error ? (
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+        ) : shot ? (
+          <>
+            <Button type="button" variant="secondary" icon={RotateCcw} onClick={retake}>
+              Retake
+            </Button>
+            <Button type="button" icon={Camera} onClick={use}>
+              Use this photo
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button type="button" variant="secondary" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="button" icon={Camera} disabled={!ready} onClick={capture}>
+              Capture
+            </Button>
+          </>
+        )
+      }
+    >
+      {error ? (
+        <Alert tone="danger">{error}</Alert>
+      ) : (
+        <div className="relative overflow-hidden rounded-lg bg-slate-900">
+          {/* Both stay mounted once a frame is captured: hiding the video
+              would stop the stream Retake captures from, and it costs
+              nothing to keep playing behind the still. */}
+          <video
+            ref={video}
+            className={clsx("aspect-[4/3] w-full object-cover", shot && "hidden")}
+            autoPlay
+            playsInline
+            muted
+            onLoadedMetadata={() => setReady(true)}
+          />
+          {shot && (
+            <img
+              src={shot.url}
+              alt="Captured photo, not yet attached"
+              className="aspect-[4/3] w-full object-cover"
+            />
+          )}
+          {!ready && !shot && (
+            <p className="absolute inset-0 flex items-center justify-center text-sm text-slate-300">
+              Starting camera…
+            </p>
+          )}
+        </div>
+      )}
+    </Modal>
   );
 }
 
