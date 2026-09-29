@@ -75,7 +75,16 @@ const SITE_OPTIONS = {
   shippingAddresses: [
     { key: "site", source: "site", address: "Plot 12, Akwada Lake Front" },
     { key: "extra-4", source: "extra", address: "Gate 3, Plot 9, Mora" },
-    { key: "location-9", source: "location", address: "Block A gate, Hazira" },
+    // Matches `locations[0].id` below — production keys a location's shipping
+    // choice as `location-<the same id>` (`sites.repository.ts`), and this
+    // fixture only worked by accident before anything read the two together:
+    // choosing "Block A" below used to leave whatever shipping address was
+    // already picked untouched, so a mismatched key here never showed up.
+    {
+      key: "location-55555555-5555-4555-8555-555555555555",
+      source: "location",
+      address: "Block A gate, Hazira",
+    },
   ],
   locations: [
     { id: "55555555-5555-4555-8555-555555555555", name: "Block A" },

@@ -65,6 +65,28 @@ export function SiteAddressFields({
     ...(options.data?.locations ?? []).map((row) => ({ value: row.id, label: row.name })),
   ];
 
+  /**
+   * A location IS an address now — since 17 Sep 2026 the Site Location screen
+   * pairs one name with one address, not a name with a list to pick from
+   * separately. Asking someone to choose the location and then, in a second
+   * dropdown below it, re-find the address that already belongs to it is asking
+   * them to say the same thing twice. So choosing a location fills the shipping
+   * choice with its address directly (client request, 28 Sep 2026); the existing
+   * "chosen address" preview under the shipping select is what then shows it —
+   * no second display to keep in step with this one.
+   *
+   * Picked, never watched: this runs from the select's own `onChange`, the same
+   * rule the module comment above states for the site itself, and for the same
+   * reason — a watcher would refill the address every time the side-panel layout
+   * swaps a different saved document into this mounted form.
+   */
+  const addressOfLocation = (locationId: string): string =>
+    choices.find((choice) => choice.key === `location-${locationId}`)?.address ?? "";
+
+  const selectedLocationId = location && typeof location.value === "string" ? location.value : "";
+  const selectedLocationHasNoAddress =
+    selectedLocationId !== "" && addressOfLocation(selectedLocationId) === "";
+
   return (
     <div className="space-y-3">
       {/*
@@ -87,11 +109,19 @@ export function SiteAddressFields({
                   ? "Loading locations…"
                   : locationOptions.length === 1
                     ? "This site has no locations. Add them on Site Location."
-                    : undefined
+                    : selectedLocationHasNoAddress
+                      ? "This location has no address yet. Add one on the Site Location screen, or choose a shipping address below."
+                      : undefined
             }
             error={location.error}
-            value={typeof location.value === "string" ? location.value : ""}
-            onChange={(event) => location.onChange(event.target.value)}
+            value={selectedLocationId}
+            onChange={(event) => {
+              const locationId = event.target.value;
+              location.onChange(locationId);
+              // "No location" leaves whatever shipping address was already chosen
+              // alone — it may have nothing to do with a location at all.
+              if (locationId !== "") onShippingChange(addressOfLocation(locationId));
+            }}
           />
         </div>
       )}
