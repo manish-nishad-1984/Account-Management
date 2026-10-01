@@ -1,9 +1,9 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
 **Written:** 2 September 2026, after the unblocking session. **Last extended
-21 September 2026** (§5x). Supersedes all earlier handoffs of the same name.
+1 October 2026** (§5y). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `9a11f463`.** If `git log` shows commits after
+> **This file is current as of `27488e54`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
@@ -29,30 +29,31 @@ every page; on 15 Sep 2026 it served its login page with a 200 and no
 exception text, so that fault appears to have been cleared by someone. Who and
 when is not recorded anywhere in this repository.
 
-**Live release is `20260921-185238`, which is commit `9a11f463`** — the newest
+**Live release is `20260929-151344`, which is commit `27488e54`** — the newest
 code commit, so **nothing committed is waiting to deploy**. Verified on the
-server on 21 Sep 2026: `current` points at that release, its
-`applied_migrations` holds 21 rows (0000 to 0020), and a browser check against
-`https://avfast.in/` showed the new PO supplier summary rendering. Five
-releases are kept, spanning 18–21 Sep.
+server on 1 Oct 2026: `current` points at that release, health and a real
+login (`ckalathiya`) both answer, and a browser check against
+`https://avfast.in/` confirmed the served bundle's hash matches the local
+build and walked through the new camera-capture dialog on a live Inward
+Challan. Rollback target is `20260929-143923`, one release back (the session's
+first deploy, which carried the session-end cache fix and the
+location-address fill but not yet the camera).
 
-**Read this before trusting the "nothing committed is waiting to deploy"
-line next time: it was false for six days, silently.** Every one of the four
-releases this session shipped (`20260918-194212`, `-204419`, `-211858`,
-`20260921-185238`) was built and deployed straight from an **uncommitted**
-working tree — `npm run build` reads the working tree, not `HEAD`, and the
-deploy skill never checks `git status`. By the time this was committed as
-`9a11f463`, 179 files and six days of client-requested changes (18–21 Sep)
-had been live in production without a single line of it in git — recoverable
-only because the working tree itself was never wiped. **Commit before
-deploying, or at the very latest before the session ends**, or the gap does
-this again.
+**The lesson of the six-day gap (18–21 Sep, closed by `9a11f463`) held this
+time.** Every change in this session was committed, gated (tests, typecheck,
+build) and pushed to `origin/main` *before* it was staged for deploy — twice,
+once per feature. The trap was real: `npm run build` reads the working tree,
+not `HEAD`, and the deploy skill still has no step that checks `git status`,
+so nothing in the tooling enforces the discipline — only doing it. **Commit
+before deploying, or at the very latest before the session ends.**
 
 **The live database holds the history, not just masters.** Read-only counts
 on 15 Sep 2026: 194 suppliers, 2,371 purchase invoices, 583 payments, 180
 inward challans, 24 purchase orders, 24 site addresses, 603 cities. Not
-re-measured on 21 Sep — this session's work was UI-only and touched no data.
-The transactional loaders of §5v put them there.
+re-measured since — every session after that one has shipped UI/behaviour
+changes with no migration of its own, 0020 being the last schema change
+(§5x), so the counts are stale but the schema they were measured against is
+not.
 
 > **This file was 25 commits behind for six days** (9 to 15 Sep 2026), and then
 > **six commits and 179 uncommitted files behind for another six** (15 to 21
@@ -126,15 +127,16 @@ AC/
     ├── tools/deploy/
     └── apps/
         ├── api/                   NestJS + Fastify + Drizzle (883 tests)
-        └── web/                   React 19 + Vite + Tailwind (577 tests)
+        └── web/                   React 19 + Vite + Tailwind (589 tests)
 ```
 
-**1726 tests pass** — 1707 Node (157 contracts + 90 domain + 883 API + 577 web)
-plus 19 .NET. **Both figures were RUN on 21 Sep 2026**, against `9a11f463`:
+**1738 tests pass** — 1719 Node (157 contracts + 90 domain + 883 API + 589 web)
+plus 19 .NET. **Both figures were RUN on 1 Oct 2026**, against `27488e54`:
 Node exit 0 (`npm test` piped to a file and grepped per workspace, not just the
 last screenful — see the note in `/handoff`'s own instructions about why that
 matters), zero failures; the .NET figure is proved by the diff since
-`154d5405`, which touches no `.cs` file, rather than re-run. `npm run
+`154d5405`, which touches no `.cs` file, rather than re-run — still true eight
+commits later; this session's two features were both web-only. `npm run
 typecheck` and `npm run build` were both run the same day, against the same
 commit: exit 0, zero `error TS`, clean build in all four workspaces.
 
@@ -195,14 +197,13 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 
 ## 4. Repository state
 
-Branch **`main`**, working tree clean (as of this write — it held 179
-uncommitted files, six days of shipped work, until this handoff; see the
-header box), pushed to `origin/main`. Typechecks, and all **1726 tests pass**
-— 1707 Node (157 contracts + 90 domain + 883 API + 577 web) + 19 .NET.
+Branch **`main`**, working tree clean, pushed to `origin/main`. Typechecks, and
+all **1738 tests pass** — 1719 Node (157 contracts + 90 domain + 883 API + 589
+web) + 19 .NET.
 
-The Node suite was measured on the `9a11f463` code commit (21 Sep 2026) and
+The Node suite was measured on the `27488e54` code commit (1 Oct 2026) and
 RUN; the .NET figure is proved by the diff since `154d5405`, which touches no
-.NET file. Anything after `9a11f463` on `main`
+.NET file. Anything after `27488e54` on `main`
 is documentation — a handoff always commits after its own measurement, so the
 newest hash is never the one the numbers were taken at, and naming it here would
 be a lie that looks precise.
@@ -255,6 +256,14 @@ be a lie that looks precise.
   `0020_site_location_address_pairs.sql`, which had already been applied to
   production for days before this commit added the file to git — see §5x for
   the full account of the gap.
+- `6ffb3c65` empties the TanStack Query cache on sign-out, idle logout and
+  cross-tab logout, and stops a fresh sign-in returning to the page the last
+  session ended on (§5y). **No migration.**
+- `a30e41f2` fills the shipping address from the chosen Site Location's own
+  paired address (§5y). **No migration** — `site_locations.address` has
+  existed since `9a11f463`'s 0020; this reads it, it does not add it.
+- `27488e54` adds a camera-capture "Take photo" button to the inward challan
+  attachments panels (§5y). **No migration.**
 - **`main` is pushed to `origin/main`** and the working tree is clean.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
   credential is in the HISTORY, not the working tree. Rotation is the fix.
@@ -1704,6 +1713,23 @@ the screens whose UI is gated on `usePermission`.
 - Node v24.15.0 locally; CI pins 22 LTS.
 - `git clone` of this repo needs `-c core.longpaths=true` — some
   `AccountManegments.Web/wwwroot` paths exceed MAX_PATH.
+- **This machine's global git config had a stale, unrelated TLS setting**
+  (found 29 Sep 2026): `http.sslCAInfo` pointed at
+  `D:/MD/Serenity Cert/swaminarayan-ca.crt` — a custom CA certificate for a
+  **different** project's git server (`git.swaminarayanbhagwan.org`), set
+  **globally** instead of scoped to that host, and the filename no longer even
+  matched what is on disk there. With `http.sslVerify=false` (also global,
+  presumably set as a workaround when the bad CA path first broke something)
+  it was silent; turning verification back on surfaced
+  `error setting certificate file` against GitHub. Removed the global
+  `sslCAInfo`; `sslVerify` is now `true`. If that other project needs its own
+  CA again, it belongs in a per-host config (`includeIf` or that project's own
+  `.git/config`), not here. **A wrong GitHub account was also cached once in
+  Git Credential Manager** (`git config credential.helper` → `manager`) and
+  had to be erased (`git credential reject`) before a push with the right
+  account would prompt correctly — if `git push origin main` ever 403s for an
+  account that should have access, suspect a stale GCM credential before
+  anything else.
 
 ---
 
@@ -1712,12 +1738,12 @@ the screens whose UI is gated on `usePermission`.
 Every legacy screen is ported (§5u), **everything committed is deployed**
 (header), and the live database carries the transactional history (§5v). The
 work has changed shape: since 10 Sep 2026 it is driven by **requests from the
-client using the live site**, not by the port plan. §5x (18–21 Sep) is six
-more days of exactly that — reports, dashboard, page chrome, a mockup-driven
-form redesign, and the PO supplier summary — none of which touched the NOW/NEXT
-items below; they are unchanged from 15 Sep.
+client using the live site**, not by the port plan. §5x (18–21 Sep) was six
+days of that, and §5y (28–29 Sep) is two more ad hoc client requests — neither
+touched the NOW/NEXT items below, which are unchanged from 15 Sep.
 `Migration-Assessment/legacy-screens/PLAN.md` holds the authoritative sequencing;
-its rows currently read:
+its rows currently read (PLAN.md's own copy runs through §5x in more detail
+and is the one to read; this is the condensed version):
 
 ```
 DONE     … per-site address list, site group CRUD, Pending Ledger,
@@ -1725,6 +1751,7 @@ DONE     … per-site address list, site group CRUD, Pending Ledger,
          Site Location, challan receiver picker              (15 Sep, §5w)
          Reports/dashboard/chrome redesign, form redesign,
          PO supplier summary                                 (18-21 Sep, §5x)
+         Location-paired shipping address, camera capture     (28-29 Sep, §5y)
 NOW      master-detail ANSWER                <- with the business, doc 19 Q12
 NEXT     Document Layouts block editor       <- step 3 of the layout master
 NEXT     the OTHER 4 exports                 <- purchase invoice list, item history
@@ -1734,9 +1761,9 @@ WAITING  Print button on the invoice screens <- needs the client's yes
 
 **Commit before you deploy, or before the session ends — see the header box.**
 §5x found 179 files and six days of live production code that had never
-reached git. Nothing broke because of it this time, but the next session that
-needs to `git diff` against what is actually running would have found nothing
-there to diff against.
+reached git; §5y's own two deploys each committed and pushed first, and both
+landed in git before they were staged, which is the discipline this line
+exists to keep.
 
 **What is left, in rough order:**
 
@@ -1798,8 +1825,8 @@ was the point of §5c.**
     and no exception text, where §5e recorded a 302 loop on every page. Not
     investigated further; nothing in this repository records who fixed it.
 
-    **0a is still open as of 15 Sep 2026:** `ss -ltn` shows `0.0.0.0:1433`
-    listening and `ufw status` is `inactive`.
+    **0a is still open, re-checked 1 Oct 2026:** `ss -ltn` shows `0.0.0.0:1433`
+    listening and `ufw status` is `inactive` — unchanged since 15 Sep.
 
 1. **Rotate the SQL Server password.** Still the top item, and now the one that
    gates step 2 as well. It is live, it is in git history, and the repository has
@@ -4068,3 +4095,213 @@ just a status code). Rollback target recorded before the switch:
 `/opt/accountbook-next/releases/20260918-211858`. `www.avfast.in`,
 `api.avfast.in` (404 at its root, as always), and the live `8080`/`7251`/
 `1433` services were confirmed on their pre-deploy PIDs.
+
+---
+
+## 5y. A session-end cache leak closed, a location's own address, a camera on the attachments panel (21 Sep – 1 Oct 2026)
+
+Three commits — `6ffb3c65`, `a30e41f2`, `27488e54` — across what reads in the
+chat transcript as one continuous session but spans ten calendar days with a
+roughly week-long gap in the middle. Each was committed, gated and pushed
+before anything was staged for deploy, and each was deployed and verified
+separately. **What did NOT happen this time, unlike §5x, is any uncommitted
+work reaching production** — but a smaller version of the same documentation
+gap happened anyway, see the honest cost below.
+
+### `6ffb3c65` — the session-end cache leak, found by the user asking a plain question
+
+The user asked, in effect: *if someone leaves their session idle and walks
+away, and someone else sits down, what happens?* Reading the existing 18 Sep
+idle-session code (`AuthContext.tsx`) answered the session-timeout half
+correctly — 30 minutes idle signs out, with a warning — but reading it
+surfaced two things nobody had asked about that the question actually implied:
+
+1. **TanStack Query's cache is keyed by resource, not by user**
+   (`["purchase-orders", "list", …]`), and nothing ever cleared it on sign-out.
+   The default `staleTime`/garbage-collection meant a query's result could sit
+   in memory for minutes after the session that fetched it was gone. The next
+   person to sign in on the SAME TAB — which is exactly the scenario the user
+   asked about — could be shown the previous person's lists, from memory,
+   before the server had been asked anything.
+2. **Signing back in returned to the page the last session was reading.**
+   `RequireAuth` remembered `location.pathname` across the sign-out and handed
+   it back to `LoginPage` as `state.from`, with no distinction between a
+   first-time visitor's bookmark (which SHOULD return them to where they were
+   headed) and a session that had just ended under someone else (which should
+   not quietly open onto what they were last looking at).
+
+Fixed together: `AuthProvider` grew an `onSessionEnd` callback, fired on every
+way a session can end — Sign out, idle timeout, expiry, another tab signing
+out — and again on the way IN, belt-and-braces, since a session can also be
+gone without ever passing through the sign-out path (a token already dead
+when the page loads). `App.tsx` wires it to `queryClient.clear()`. `RequireAuth`
+now only remembers "where they were headed" for someone who was **never
+signed in on this page load** — tracked with a ref set the moment
+`isAuthenticated` is ever true — so a bookmark still works and a reused tab
+does not reopen the last person's screen.
+
+Five new tests in `RequireAuth.sessionEnd.test.tsx`, each confirmed to fail
+with the fix reverted: the cache survives a sign-out, survives a cross-tab
+sign-out, survives into a fresh sign-in, and a fresh sign-in after a session
+ended lands on the front page rather than the last page — while a first-time
+visitor's bookmarked URL still round-trips through login correctly.
+
+**Not fixed, and said so to the user:** the 30-minute idle window itself is
+unchanged (the client's own 18 Sep decision), so there is still a window where
+someone who walks away and is replaced within 30 minutes has a technically
+live session — the fix means the REPLACEMENT sees no stale data and no stale
+page, not that the window is shorter. Lowering it is a business decision, not
+a bug, and was left for the user to ask for.
+
+### `a30e41f2` — a location IS an address now, and the form asked twice
+
+The client's ask, paraphrased from Hindi: when a Location is picked on a
+purchase order or purchase invoice, the address already paired with it should
+show — not be display unless the paired address is found by a second, manual
+pick from the Shipping dropdown underneath.
+
+Reading `sites.repository.ts` found the real shape had already changed
+UNDERNEATH this: since 17 Sep 2026 (part of `9a11f463`'s 179-file commit, and
+not written up anywhere until now) `site_locations` pairs one name with one
+address directly — not the 15 Sep (`d49a1dc5`) design of a location owning a
+separate list of several addresses. So "the address already paired with the
+location" is now a literal, single lookup, and asking the person to pick the
+location and then separately re-find the same address was asking them to say
+the same fact twice.
+
+Fixed at the Location select's own `onChange`: choosing a location looks up
+its paired shipping choice (`key === `location-${locationId}``) and fills the
+shipping field directly, using the existing "chosen address" preview to show
+it rather than adding a second display. A location with no address paired
+clears the shipping choice instead of carrying over something unrelated, and
+says why in the Location field's own hint — **"This location has no address
+yet. Add one on the Site Location screen, or choose a shipping address
+below."** Choosing "No location" leaves an already-made shipping choice
+alone, since it may have nothing to do with any location. Wired from the
+select's own `onChange`, not a `useEffect` watching its value, for the same
+reason the module's own docstring already states for the site field itself:
+the side-panel layout reuses one mounted form across different saved
+documents, and a watcher cannot tell that from a person's own choice.
+
+**The trap, found by the test suite and not by reading:** `PurchaseOrderFormDialog.test.tsx`'s
+own fixture had carried `key: "location-9"` against a location whose real id
+was `55555555-5555-4555-8555-555555555555` — a mismatch that had always been
+there and had never mattered, because nothing before this change read the key
+and the id together. The new behaviour read them together for the first time
+and the existing "offers every address of the site as ONE shipping choice"
+test failed — correctly, because selecting "Block A" now cleared the shipping
+address the test had manually set two lines above, exactly as the new rule
+says it should for a location with no (findable) address. Fixed by correcting
+the fixture's key to the real id, which happens to be the SAME address the
+test had already picked manually, so the assertion needed no change at all
+once the data agreed with itself.
+
+**Verified against live production data, not just the fixture**, with a
+scripted browser walk through every site and location `ckalathiya` can see:
+locations with a real paired address (Surat-Auro University's CC, COLONY-OFFICE,
+GOLF CLUB, PUMP HOUSE) filled the shipping field correctly; locations with
+none (all seven at Bhavnagar-Rajubhai, nine more at Surat-Auro) cleared it and
+showed the hint. **That is a real, pre-existing gap in the live data** — most
+Site Location rows converted from the old Site Groups on 15/17 Sep have never
+had an address typed in — not something this change caused, but something it
+now makes visible rather than silently absorbing.
+
+### `27488e54` — "Take photo" on the inward challan attachments
+
+The client's ask: a challan is keyed standing at the gate with the paper
+right there, and leaving the app for the phone's own camera and back to find
+the photo in a file picker is three screens for one document. Added a "Take
+photo" button beside "Attach files"/"Choose files" on both attachment
+components (the saved-challan panel and the new-challan queue) — camera opens
+in a modal (rear-facing preferred on a phone, via `facingMode: {ideal:
+"environment"}`), captures a frame to a canvas, offers Retake or Use this
+photo, and the result becomes a real `image/jpeg` `File` handed to the SAME
+pick-and-validate path a chosen file goes through — not a second, trusted way
+in. Camera tracks are stopped on every path out of the dialog (captured,
+retaken-then-closed, or cancelled), so the camera light does not stay on
+behind a closed dialog; pinned by a test that removes the `track.stop()` call
+and confirms two tests then fail.
+
+Both attachment components' pick handlers were refactored from `FileList` to
+`File[]` so a single captured file and a multi-file picker share one code
+path rather than the camera needing a `DataTransfer` polyfill to fake a
+`FileList`.
+
+**Could not be verified in the one true happy path** — a real camera on a
+real device — from this environment: headless Chromium here has no camera, so
+`getUserMedia` genuinely rejects with `NotAllowedError`, which is itself
+useful: it proved the error-handling path renders correctly ("Camera access
+was refused…", with a Close button, 0 console errors) on both localhost and
+`https://avfast.in/` directly. The capture-retake-use path itself is covered
+by mocking `getUserMedia` and `HTMLCanvasElement`'s `getContext`/`toBlob` in
+`CameraCapture.test.tsx`, with the same revert-and-confirm discipline as
+above.
+
+### A GitHub push failure, and what it actually was
+
+Between committing `6ffb3c65`+`a30e41f2`+`27488e54` and deploying them, `git
+push origin main` 403'd: *"Permission to manish-nishad-1984/Account-Management.git
+denied to dhadukmanish."* The user's own account, which had pushed
+successfully on 21 Sep, had had a GitHub login mixed up during an
+authentication prompt (the user's words: "galat github click ho gaya tha").
+Clearing the cached credential (`git credential reject` for `github.com`) and
+retrying let Git Credential Manager prompt correctly, and the push succeeded
+with no further action. Deploys do not depend on this at all — the deploy
+skill ships straight from the local build, never through GitHub — so nothing
+was blocked, but `main` sat ahead of `origin/main` locally for a few minutes
+and is worth knowing can happen from a stale GCM credential alone, with
+nothing wrong in the repository or the remote.
+
+**A second, unrelated problem came out of fixing the first.** Turning
+`http.sslVerify` back to `true` (at the user's request, since it is a real
+security control and disabling it globally was found along the way) broke
+`git fetch`/`push` outright: a global `http.sslCAInfo` was pointing at a
+custom CA certificate belonging to a **different** project's git server
+(`git.swaminarayanbhagwan.org`), scoped globally instead of per-host, and by
+now not even pointing at the right filename for that project either. Removed
+the stale global setting; §10 has the full account, because the next session
+on this machine is the one that will hit it again if it comes back.
+
+### The honest cost
+
+**The handoff documentation gap repeated itself, in miniature, in a form §5x
+already named.** `6ffb3c65` was committed and pushed on 21 Sep — it was never
+sitting uncommitted the way §5x's 179 files were — but it was never written up
+in this file until now, 1 Oct, ten days later. The difference from §5x is
+real and matters (the work was never at risk of being lost; `git log` always
+showed it) but the practical effect on a `/handoff start` in between would
+have been the same: a session reading the header's "current as of `9a11f463`"
+line would have correctly been told the file was behind, and would have had
+to read three commits' worth of `git log` messages to reconstruct what
+`6ffb3c65` did, rather than reading it here. **The fix is the same one §5n
+already prescribed and §5x restated: run `/handoff write` at the end of a
+session that did real work, not only when a deploy makes it feel urgent.**
+
+**The Location-address fill surfaces, rather than causes, a real data gap**
+on the live database — most converted Site Location rows have no address.
+Nothing in this session's work is positioned to fix that; it is data entry,
+and now at least visible as a named hint rather than a silently empty field.
+
+**The camera feature's real-world path is unverified by this session**,
+because no camera exists in any environment this session had access to. The
+mocked test coverage and the verified error-handling path are real evidence,
+but they are not the same claim as "a photo was actually taken and attached,"
+and whoever first uses it on a phone is the first real test of that half.
+
+Tests: **1738** — 1719 Node (157 contracts + 90 domain + 883 API + 589 web) +
+19 .NET. Both Node runs (once after each deploy) were RUN, piped to a file and
+grepped per workspace; the final, reported figure is the 1 Oct 2026 run
+against `27488e54`. No `.NET` file has changed since `154d5405`, so its 19
+are proved by the diff, not re-run. `npm run build` and `npm run typecheck`
+both clean, all four workspaces, same commit.
+
+Deployed twice: `20260929-143923` (just `6ffb3c65`), then `20260929-151344`
+(adding `a30e41f2` and `27488e54`), which is `current` as of this writing.
+Both verified with a real login and a bundle-hash comparison against the
+local build; the second was also walked through in a live browser —
+Location→shipping fill confirmed against real production data across two
+sites, and the camera dialog's error path confirmed on a live Inward
+Challan. Rollback target for the live release is `20260929-143923`.
+`www.avfast.in`, port 8090, and the live `8080`/`7251`/`1433` services were
+confirmed on their pre-deploy PIDs after each deploy. Port 1433 is still open
+to the internet with `ufw` inactive — unchanged, see §11 0a.

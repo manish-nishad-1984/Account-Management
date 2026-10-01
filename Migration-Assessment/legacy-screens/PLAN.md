@@ -513,6 +513,9 @@ DONE     PO delivery addresses + T&C editor              (9 Sep 2026, §5s)
          Grid defaults (5 rows), dashboard count tiles    (18 Sep 2026, §5x)
          Page titles removed for the breadcrumb; inline toolbars (18 Sep 2026, §5x)
          Form redesign from a client mockup + PO supplier summary (21 Sep 2026, §5x)
+         Session-end cache/page leak closed               (21 Sep 2026, §5y)
+         Location's own address fills shipping; camera capture
+         on inward challan attachments                     (29 Sep 2026, §5y)
 NOW      master-detail ANSWER                            <- with the business now, doc 19 Q12
 NEXT     Document Layouts block editor                   <- step 3 of the layout master, §5v
 NEXT     the OTHER 4 exports                             <- see below; purchase invoice list, item history
