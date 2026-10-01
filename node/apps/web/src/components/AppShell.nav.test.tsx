@@ -57,8 +57,8 @@ describe("the sidebar", () => {
     renderShell(["supplier.view"]);
 
     const names = navLinkNames().join("|");
-    expect(names).not.toContain("Ledger & Balances");
-    expect(names).not.toContain("Pending Ledger");
+    expect(names).not.toContain("Ledger");
+    expect(names).not.toContain("Pending Outstanding");
     expect(names).not.toContain("Companies");
   });
 
@@ -80,18 +80,18 @@ describe("the sidebar", () => {
 
     const names = navLinkNames().join("|");
     expect(names).toContain("Payments");
-    expect(names).toContain("Ledger & Balances");
+    expect(names).toContain("Ledger");
     expect(names).toContain("Sales Report");
   });
 
-  /** The client asked for the trial copy to sit directly under the ledger. */
-  it("puts the Pending Ledger straight after Ledger & Balances, on the same right", () => {
+  /** The client asked for the trial copy to sit directly under the ledger; it is Pending Outstanding since 1 Oct 2026. */
+  it("puts Pending Outstanding straight after the Ledger, on the same right", () => {
     renderShell(["reports-payments.view"]);
 
     const names = navLinkNames();
-    const ledger = names.findIndex((name) => name.includes("Ledger & Balances"));
+    const ledger = names.findIndex((name) => name === "Ledger");
     expect(ledger).toBeGreaterThanOrEqual(0);
-    expect(names[ledger + 1]).toContain("Pending Ledger");
+    expect(names[ledger + 1]).toBe("Pending Outstanding");
   });
 
   it("shows none of them without that right", () => {
@@ -100,8 +100,8 @@ describe("the sidebar", () => {
     const names = navLinkNames().join("|");
     expect(names).toContain("Purchase Invoices");
     expect(names).not.toContain("Payments");
-    expect(names).not.toContain("Ledger & Balances");
-    expect(names).not.toContain("Pending Ledger");
+    expect(names).not.toContain("Ledger");
+    expect(names).not.toContain("Pending Outstanding");
     expect(names).not.toContain("Sales Report");
   });
 

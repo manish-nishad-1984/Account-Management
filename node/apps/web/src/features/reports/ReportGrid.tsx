@@ -239,6 +239,10 @@ export type ReportTab = "ledger" | "balances";
 /**
  * Ledger | Balance summary, one showing at a time (client request, 18 Sep 2026).
  *
+ * `tabs` narrows it to the ones a page keeps. Since 1 Oct 2026 the Ledger page
+ * keeps only its ledger and Pending Outstanding only its summary (client
+ * request); a lone tab still heads the page, standing in for the title.
+ *
  * A real tab list: arrow keys move between the two, and each tab names the panel
  * it controls, so a screen reader announces where the reader has landed.
  */
@@ -246,18 +250,21 @@ export function ReportTabs({
   value,
   onChange,
   labels,
+  tabs = ["ledger", "balances"],
   panel,
   actions,
 }: {
   value: ReportTab;
   onChange: (tab: ReportTab) => void;
-  labels: Record<ReportTab, string>;
+  labels: Partial<Record<ReportTab, string>>;
+  /** Which tabs to show, in order. Both unless a page says otherwise. */
+  tabs?: ReportTab[];
   /** Controls at the right end of the tab row, for a page whose tabs stand in for its title. */
   actions?: ReactNode;
   panel: (tab: ReportTab, ids: { panelId: string; tabId: string }) => ReactNode;
 }) {
   const base = useId();
-  const order: ReportTab[] = ["ledger", "balances"];
+  const order = tabs;
   const buttons = useRef<Record<ReportTab, HTMLButtonElement | null>>({ ledger: null, balances: null });
   const ids = (tab: ReportTab) => ({ tabId: `${base}-tab-${tab}`, panelId: `${base}-panel-${tab}` });
 

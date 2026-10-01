@@ -1,22 +1,13 @@
 import { useState } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
-import type { BalanceRow, LedgerRow } from "@accountmanagement/contracts";
+import type { LedgerRow } from "@accountmanagement/contracts";
 import { Alert, EmptyState } from "../../components/ui";
 import { formatDate, formatMoney } from "../../lib/format";
 import { EMPTY_FILTERS, ReportFilters, toQuery, type FilterState } from "./ReportFilters";
 import { ExportButtons } from "./ExportButtons";
 import { describeLoadError } from "../../lib/load-error";
-import { useBalances, useLedger } from "./api";
-import {
-  DocumentNo,
-  REPORT_PAGE,
-  ReportGrid,
-  ReportPager,
-  ReportTabs,
-  TypeLabel,
-  type ReportColumn,
-  type ReportTab,
-} from "./ReportGrid";
+import { useLedger } from "./api";
+import { DocumentNo, REPORT_PAGE, ReportGrid, ReportPager, ReportTabs, TypeLabel, type ReportColumn } from "./ReportGrid";
 
 /**
  * `/Report/ReportDetails` panels 1 and 2.
@@ -27,24 +18,20 @@ import {
  * purchase returns while its own Debit column subtracts them, so the two panels
  * disagree by twice the value of any return. Both read one SQL expression here.
  *
- * TWO TABS, NOT TWO PANELS (client request, 18 Sep 2026): the ledger in one and
- * the balance summary in the other, each in a ruled grid (`ReportGrid`). One
- * Search still loads both, so switching tab shows the same filters' answer.
+ * THE LEDGER ONLY (client request, 1 Oct 2026). From 18 Sep 2026 this page was
+ * "Ledger & Balances", with the ledger in one tab and the balance summary in
+ * another. The client asked for the summary tab to go and the page to be called
+ * just "Ledger". The summary's figures are still on Pending Outstanding (the old
+ * Pending Ledger), which keeps only its own summary, so between the two pages the
+ * ledger and the outstanding balances are each shown once.
  *
- * NO TITLE BLOCK, NO PAGE SCROLL (client request, 18 Sep 2026), as on the
- * pending ledger: the tabs head the page with the Purchases / Sales switch at
- * the end of their row, and each grid fills the height left so only the grid
- * scrolls. The filters sit under the tabs and are the same filters in both —
- * one state, drawn in whichever tab is open.
+ * NO TITLE BLOCK, NO PAGE SCROLL (client request, 18 Sep 2026): the lone
+ * "Ledger" tab heads the page with the Purchases / Sales switch at the end of
+ * its row, and the grid fills the height left so only the grid scrolls.
  *
- * NO PROMPTS, NO FOOTNOTES, EXPORTS ON TOP (client request, 18 Sep 2026): an
- * unsearched tab shows only the filters, and the download buttons sit in the
- * tab row beside Purchases / Sales, for whichever tab is open. What Net means is
- * kept as the Net heading's tooltip rather than a paragraph under the grid.
- *
- * The balance summary now pages. It asked for the first 50 rows and had no way
- * to see the 51st — with more than 50 site-and-party pairs, the rest were
- * simply not on the screen, under a total that did include them.
+ * NO PROMPTS, NO FOOTNOTES, EXPORTS ON TOP (client request, 18 Sep 2026): before
+ * a search the page shows only the filters, and the download buttons sit in the
+ * tab row beside Purchases / Sales.
  */
 
 const SOURCE_TONE: Record<LedgerRow["source"], "neutral" | "warning" | "info"> = {
@@ -61,31 +48,24 @@ const noSite = <span className="text-xs text-slate-400">No site</span>;
 
 export function LedgerPage() {
   const [direction, setDirection] = useState<"out" | "in">("out");
-  const [tab, setTab] = useState<ReportTab>("ledger");
   const [draft, setDraft] = useState<FilterState>(EMPTY_FILTERS);
   const [applied, setApplied] = useState<FilterState>(EMPTY_FILTERS);
   const [offset, setOffset] = useState(0);
-  const [balancesOffset, setBalancesOffset] = useState(0);
   /**
-   * NOTHING LOADS UNTIL SEARCH IS PRESSED (client request, 14 Sep 2026) — not
-   * the ledger and not the summary. Unfiltered, both scan every document and
-   * payment in the system, which is slow and is not what anyone opens the
-   * screen to read. Reset goes back to that empty state.
+   * NOTHING LOADS UNTIL SEARCH IS PRESSED (client request, 14 Sep 2026).
+   * Unfiltered, the ledger scans every document and payment in the system,
+   * which is slow and is not what anyone opens the screen to read. Reset goes
+   * back to that empty state.
    */
   const [searched, setSearched] = useState(false);
 
   const ledger = useLedger({ ...toQuery(applied), direction, limit: REPORT_PAGE, offset }, searched);
-  const balances = useBalances(
-    { ...toQuery(applied), direction, show: "all", limit: REPORT_PAGE, offset: balancesOffset },
-    searched,
-  );
 
   const apply = () => {
     setApplied(draft);
     // A cursor carried across a filter change seeks into a set that no longer
     // exists — §5j found the same thing on inward challans.
     setOffset(0);
-    setBalancesOffset(0);
     setSearched(true);
   };
 
@@ -93,7 +73,6 @@ export function LedgerPage() {
     setDraft(EMPTY_FILTERS);
     setApplied(EMPTY_FILTERS);
     setOffset(0);
-    setBalancesOffset(0);
     setSearched(false);
   };
 
@@ -160,64 +139,19 @@ export function LedgerPage() {
     },
   ];
 
-  const balanceColumns: Array<ReportColumn<BalanceRow>> = [
-    { key: "site", header: "Site", cell: (row) => row.siteName ?? noSite },
-    {
-      key: "party",
-      header: partyLabel,
-      cell: (row) => <span className="font-medium text-slate-900">{row.partyName}</span>,
-    },
-    {
-      key: "credit",
-      header: "Credit",
-      numeric: true,
-      className: () => "text-emerald-700",
-      cell: (row) => formatMoney(row.credit),
-      footer: <span className="text-emerald-700">{formatMoney(balances.data?.totalCredit ?? "0")}</span>,
-    },
-    {
-      key: "debit",
-      header: "Debit",
-      numeric: true,
-      className: () => "text-rose-700",
-      cell: (row) => formatMoney(row.debit),
-      footer: <span className="text-rose-700">{formatMoney(balances.data?.totalDebit ?? "0")}</span>,
-    },
-    {
-      key: "net",
-      header: (
-        <span title="Credit less debit. Purchase returns and credit notes reduce it, as the Debit column shows.">
-          Net
-        </span>
-      ),
-      numeric: true,
-      className: (row) => `font-medium ${balanceTone(row.netAmount)}`,
-      cell: (row) => formatMoney(row.netAmount),
-      footer: formatMoney(balances.data?.closingBalance ?? "0"),
-    },
-  ];
-
-  const filters = (
-    <ReportFilters value={draft} onChange={setDraft} onApply={apply} onReset={reset} partyLabel={partyLabel} />
-  );
-
   return (
     <>
-      <h1 className="sr-only">Ledger and balances</h1>
+      <h1 className="sr-only">Ledger</h1>
 
       <ReportTabs
-        value={tab}
-        onChange={setTab}
-        labels={{ ledger: "Ledger", balances: "Balance summary" }}
+        value="ledger"
+        onChange={() => {}}
+        tabs={["ledger"]}
+        labels={{ ledger: "Ledger" }}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
             {/* Hidden until a search, so a download is never of a set nobody asked for. */}
-            {searched &&
-              (tab === "ledger" ? (
-                <ExportButtons kind="ledger" withByParty query={{ ...toQuery(applied), direction }} />
-              ) : (
-                <ExportButtons kind="balances" query={{ ...toQuery(applied), direction, show: "all" }} />
-              ))}
+            {searched && <ExportButtons kind="ledger" withByParty query={{ ...toQuery(applied), direction }} />}
           <div className="flex rounded-md ring-1 ring-inset ring-slate-300">
             {(["out", "in"] as const).map((value) => (
               <button
@@ -227,7 +161,6 @@ export function LedgerPage() {
                 onClick={() => {
                   setDirection(value);
                   setOffset(0);
-                  setBalancesOffset(0);
                 }}
                 className={`px-3 py-1.5 text-sm font-medium first:rounded-l-md last:rounded-r-md ${
                   direction === value ? "bg-brand-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
@@ -239,10 +172,9 @@ export function LedgerPage() {
           </div>
           </div>
         }
-        panel={(current) =>
-          current === "ledger" ? (
+        panel={() => (
             <>
-              {filters}
+              <ReportFilters value={draft} onChange={setDraft} onApply={apply} onReset={reset} partyLabel={partyLabel} />
               {searched && ledger.isError && (
                 <Alert icon={AlertTriangle}>{describeLoadError(ledger.error, "the ledger")}</Alert>
               )}
@@ -275,42 +207,7 @@ export function LedgerPage() {
                 </>
               )}
             </>
-          ) : (
-            <>
-              {filters}
-              {searched && balances.isError && (
-                <Alert icon={AlertTriangle}>{describeLoadError(balances.error, "the balance summary")}</Alert>
-              )}
-              {searched && balances.isPending && (
-                <div className="flex items-center gap-2 py-6 text-sm text-slate-500">
-                  <Loader2 aria-hidden className="size-4 animate-spin" /> Loading balances
-                </div>
-              )}
-              {searched && balances.data && balances.data.rows.length === 0 && (
-                <EmptyState title="Nothing to show" description="No documents match these filters." />
-              )}
-              {searched && balances.data && balances.data.rows.length > 0 && (
-                <>
-                  <ReportGrid
-                    label="Balance summary"
-                    columns={balanceColumns}
-                    rows={balances.data.rows}
-                    rowKey={(row) => row.id}
-                    footerLabel="Total"
-                    minWidth="44rem"
-                    fit
-                  />
-                  <ReportPager
-                    offset={balancesOffset}
-                    total={balances.data.total}
-                    hasNext={balances.data.nextCursor !== null}
-                    onPage={setBalancesOffset}
-                  />
-                </>
-              )}
-            </>
-          )
-        }
+        )}
       />
     </>
   );
