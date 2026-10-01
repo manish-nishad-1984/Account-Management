@@ -3,7 +3,7 @@
 **Written:** 2 September 2026, after the unblocking session. **Last extended
 1 October 2026** (§5y). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `27488e54`.** If `git log` shows commits after
+> **This file is current as of `bc2ffd0b`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
