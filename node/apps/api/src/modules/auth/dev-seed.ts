@@ -7,8 +7,15 @@ import { InMemoryUserRepository, UserRepository } from "./user.repository";
 import { ENV, type Env } from "../../config/env";
 import { DATABASE, type Database } from "../../db/database";
 import {
+  agencies,
+  agencyContacts,
+  agencyWorkTypes,
+  cities,
   companies,
+  countries,
   documentCounters,
+  states,
+  workTypes,
   forms,
   items,
   payments,
@@ -39,6 +46,21 @@ import {
 } from "../../db/schema";
 
 const DEV_PASSWORD = "DevPassword1";
+
+/** Ids 1-5, the city ids every seeded address already carries. */
+const SEED_CITIES = ["Ahmedabad", "Surat", "Vadodara", "Rajkot", "Gandhinagar"];
+
+/** The client's own mockup rows, so the local screen reads like the picture. */
+const SEED_AGENCIES = [
+  { name: "ABC Construction", trades: ["Plaster", "Masonry", "Painting"], cityId: 1, contact: "Ramesh Patel", mobile: "+91 98765 43210", isActive: true },
+  { name: "XYZ Flooring", trades: ["Flooring", "Tiles", "Marble"], cityId: 4, contact: "Ketan Shah", mobile: "+91 98250 12345", isActive: true },
+  { name: "Shree Shuttering", trades: ["Shuttering", "Steel Work"], cityId: 3, contact: "Mahesh Parmar", mobile: "+91 99099 88776", isActive: true },
+  { name: "Sunrise Waterproofing", trades: ["Waterproofing", "Chemical"], cityId: 2, contact: "Jignesh Mehta", mobile: "+91 97234 56789", isActive: true },
+  { name: "Modern Electricals", trades: ["Electrical", "HVAC"], cityId: 1, contact: "Alpesh Patel", mobile: "+91 90165 43210", isActive: true },
+  { name: "Om Plumbing Services", trades: ["Plumbing", "Sanitary"], cityId: 4, contact: "Suresh Bhai", mobile: "+91 98241 11111", isActive: true },
+  { name: "Color World", trades: ["Colour", "Texture", "Painting"], cityId: 2, contact: "Nilesh Modi", mobile: "+91 98790 65432", isActive: true },
+  { name: "BuildRight Solutions", trades: ["Civil Work", "RCC", "Finishing"], cityId: 1, contact: "Dipak Trivedi", mobile: "+91 97277 88990", isActive: false },
+] as const;
 
 /**
  * Seeds data so the app can be exercised locally.
@@ -111,6 +133,8 @@ export class DevSeed implements OnModuleInit {
      * afternoon.
      */
     const companyPrefixes = uniquePrefixes(COMPANY_NAMES);
+
+    await this.seedGeographyAndAgencies(db);
 
     const insertedCompanies = await db
       .insert(companies)
@@ -553,6 +577,8 @@ export class DevSeed implements OnModuleInit {
        * here, because production needs the row too and gets it the same way.
        */
       { userId: admin.id, formId: 100, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
+      // Agency — form 101, inserted by migration 0021, same reason as 100.
+      { userId: admin.id, formId: 101, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
     ]);
 
     /**
@@ -1314,6 +1340,54 @@ export class DevSeed implements OnModuleInit {
    * property names, so the mapping is derived from the table definitions rather
    * than hand-written thirteen times — one place to be wrong instead of many.
    */
+  /**
+   * The ONE state and FIVE cities every seeded address already points at.
+   *
+   * Sites, companies and suppliers have always been seeded with `stateId: 24`
+   * and `cityId: 1..5` and nothing behind them, which is why no geography
+   * foreign key could be declared (geography.ts). Agencies DO declare one, and
+   * their form picks a state and a city from these tables — so local dev needs
+   * real rows under the ids the rest of the seed already uses. 24 is Gujarat's
+   * GST state code, which every seeded GST number begins with.
+   *
+   * Then eight agencies, one inactive, so the screen's three count tiles and
+   * its filters have something to show.
+   */
+  private async seedGeographyAndAgencies(db: Database): Promise<void> {
+    await db.insert(countries).values({ id: 1, code: "IN", name: "India" }).onConflictDoNothing();
+    await db.insert(states).values({ id: 24, name: "Gujarat", stateCode: 24, countryId: 1 }).onConflictDoNothing();
+    await db
+      .insert(cities)
+      .values(SEED_CITIES.map((name, i) => ({ id: i + 1, name, stateId: 24 })))
+      .onConflictDoNothing();
+
+    const trades = await db.select({ id: workTypes.id, name: workTypes.name }).from(workTypes);
+    const tradeId = new Map(trades.map((trade) => [trade.name, trade.id]));
+
+    for (const [index, seed] of SEED_AGENCIES.entries()) {
+      const [agency] = await db
+        .insert(agencies)
+        .values({
+          name: seed.name,
+          address: `${10 + index}, ${AREAS[index % AREAS.length]} Road`,
+          stateId: 24,
+          cityId: seed.cityId,
+          isActive: seed.isActive,
+        })
+        .returning({ id: agencies.id });
+      const ids = seed.trades.map((name) => tradeId.get(name)).filter((id): id is number => id !== undefined);
+      if (ids.length > 0) {
+        await db.insert(agencyWorkTypes).values(ids.map((workTypeId) => ({ agencyId: agency!.id, workTypeId })));
+      }
+      await db.insert(agencyContacts).values({
+        agencyId: agency!.id,
+        name: seed.contact,
+        mobile: seed.mobile,
+        lineNumber: 1,
+      });
+    }
+  }
+
   private async seedFromSnapshot(db: Database, path: string): Promise<void> {
     const { readFileSync, existsSync } = await import("node:fs");
 

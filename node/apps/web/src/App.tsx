@@ -15,6 +15,7 @@ import { CompaniesPage } from "./features/companies/CompaniesPage";
 import { SitesPage } from "./features/sites/SitesPage";
 import { SiteLocationsPage } from "./features/site-locations/SiteLocationsPage";
 import { SuppliersPage } from "./features/suppliers/SuppliersPage";
+import { AgenciesPage } from "./features/agencies/AgenciesPage";
 import { ItemsPage } from "./features/items/ItemsPage";
 import { PurchaseRequestsPage } from "./features/purchase-requests/PurchaseRequestsPage";
 import { PurchaseOrdersPage } from "./features/purchase-orders/PurchaseOrdersPage";
@@ -50,6 +51,7 @@ const IMPLEMENTED: Record<string, React.ComponentType> = {
   "/sites": SitesPage,
   "/site-locations": SiteLocationsPage,
   "/suppliers": SuppliersPage,
+  "/agencies": AgenciesPage,
   "/items": ItemsPage,
   "/purchase-requests": PurchaseRequestsPage,
   "/purchase-orders": PurchaseOrdersPage,

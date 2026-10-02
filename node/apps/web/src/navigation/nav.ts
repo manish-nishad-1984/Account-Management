@@ -15,6 +15,7 @@ import {
   ClipboardList,
   FileInput,
   FileText,
+  HardHat,
   LayoutDashboard,
   LayoutTemplate,
   MapPin,
@@ -60,6 +61,8 @@ export const NAV: NavSection[] = [
       { label: "Sites", to: "/sites", icon: MapPin, permission: "site", status: "ready", legacy: "/SiteMaster/SiteListView" },
       { label: "Site Location", to: "/site-locations", icon: Layers, permission: "group", status: "ready", legacy: "/SiteMaster/CreateGroup" },
       { label: "Suppliers", to: "/suppliers", icon: Truck, permission: "supplier", status: "ready", legacy: "/Supplier/SupplierList" },
+      // New, no legacy screen: the contractors who work on a site (1 Oct 2026).
+      { label: "Agency Master", to: "/agencies", icon: HardHat, permission: "agency", status: "ready" },
       { label: "Items", to: "/items", icon: Package, permission: "item", status: "ready", legacy: "/ItemMaster/ItemListView" },
       { label: "Users", to: "/users", icon: Users, permission: "user", status: "ready", legacy: "/User/UserListView" },
       { label: "Permissions", to: "/permissions", icon: ShieldCheck, permission: "user", status: "ready", legacy: "/User/UserwisePermission" },

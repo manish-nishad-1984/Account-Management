@@ -52,6 +52,14 @@ const CONFLICT_MESSAGES: Record<string, { field: string; message: string }> = {
     field: "name",
     message: "A unit with this name already exists",
   },
+  agencies_name_lower_key: {
+    field: "name",
+    message: "An agency with this name already exists",
+  },
+  work_types_name_lower_key: {
+    field: "name",
+    message: "That work type already exists",
+  },
 };
 
 const UNIQUE_VIOLATION = "23505";
