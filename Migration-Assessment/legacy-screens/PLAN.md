@@ -516,7 +516,11 @@ DONE     PO delivery addresses + T&C editor              (9 Sep 2026, §5s)
          Session-end cache/page leak closed               (21 Sep 2026, §5y)
          Location's own address fills shipping; camera capture
          on inward challan attachments                     (29 Sep 2026, §5y)
+         Reports: "Ledger" (ledger only), "Pending Outstanding"
+         (summary only)                                   (1 Oct 2026, §5z)
+         Agency Master: agencies, work types, contacts    (2 Oct 2026, §5z)
 NOW      master-detail ANSWER                            <- with the business now, doc 19 Q12
+BLOCKED  Stock: in, issue to agency, return              <- doc 19 Q16 parts 1-3 first (§5z has the plan)
 NEXT     Document Layouts block editor                   <- step 3 of the layout master, §5v
 NEXT     the OTHER 4 exports                             <- see below; purchase invoice list, item history
 NEXT     Supplier Excel import                           <- UNBLOCKED: States/Cities are ported (§5v)

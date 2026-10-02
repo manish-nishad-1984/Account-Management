@@ -1,15 +1,15 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
 **Written:** 2 September 2026, after the unblocking session. **Last extended
-1 October 2026** (§5y). Supersedes all earlier handoffs of the same name.
+2 October 2026** (§5z). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `bc2ffd0b`.** If `git log` shows commits after
+> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
 
 **Sections §3, §4, §8, §10 and §11 describe _now_ and are re-measured on every
-handoff. Sections §5, §5b … §5x are a log of days that already happened and are
+handoff. Sections §5, §5b … §5z are a log of days that already happened and are
 never edited.** If the two disagree, the numbered sections win — run
 `/handoff check` and it will say which have drifted.
 
@@ -29,20 +29,20 @@ every page; on 15 Sep 2026 it served its login page with a 200 and no
 exception text, so that fault appears to have been cleared by someone. Who and
 when is not recorded anywhere in this repository.
 
-**Live release is `20260929-151344`, which is commit `27488e54`** — the newest
-code commit, so **nothing committed is waiting to deploy**. Verified on the
-server on 1 Oct 2026: `current` points at that release, health and a real
-login (`ckalathiya`) both answer, and a browser check against
-`https://avfast.in/` confirmed the served bundle's hash matches the local
-build and walked through the new camera-capture dialog on a live Inward
-Challan. Rollback target is `20260929-143923`, one release back (the session's
-first deploy, which carried the session-end cache fix and the
-location-address fill but not yet the camera).
+**Live release is `20261002-142735`, which is commit `6d3a9e98`** — the newest
+code commit, so **nothing committed is waiting to deploy**. It carries the
+Agency Master and **migration `0021_agencies`**, which applied on the live
+database (`1 applied, 0 adopted, 21 skipped`, 38 → 42 tables). Verified on 2 Oct
+2026: health, a real login (`ckalathiya`), the agency endpoints over the
+loopback, the bundle hash at `https://avfast.in/`, and a browser walk of the
+Agency Master's form against live geography — read-only; nothing was saved, so
+the live master is empty. Rollback target is `20261001-154458` (the §5z report
+rename, `fe5897a8`); rolling back leaves 0021's four tables in place, unused.
 
-**The lesson of the six-day gap (18–21 Sep, closed by `9a11f463`) held this
-time.** Every change in this session was committed, gated (tests, typecheck,
-build) and pushed to `origin/main` *before* it was staged for deploy — twice,
-once per feature. The trap was real: `npm run build` reads the working tree,
+**The lesson of the six-day gap (18–21 Sep, closed by `9a11f463`) held again
+on 1–2 Oct.** Both features were committed, gated (tests, typecheck, build)
+and pushed to `origin/main` *before* they were staged for deploy. The trap is
+real: `npm run build` reads the working tree,
 not `HEAD`, and the deploy skill still has no step that checks `git status`,
 so nothing in the tooling enforces the discipline — only doing it. **Commit
 before deploying, or at the very latest before the session ends.**
@@ -50,10 +50,11 @@ before deploying, or at the very latest before the session ends.**
 **The live database holds the history, not just masters.** Read-only counts
 on 15 Sep 2026: 194 suppliers, 2,371 purchase invoices, 583 payments, 180
 inward challans, 24 purchase orders, 24 site addresses, 603 cities. Not
-re-measured since — every session after that one has shipped UI/behaviour
-changes with no migration of its own, 0020 being the last schema change
-(§5x), so the counts are stale but the schema they were measured against is
-not.
+re-measured since. **The schema has moved once since**: `0021_agencies` (§5z)
+added `agencies`, `agency_contacts`, `agency_work_types` and `work_types` —
+new tables only, nothing existing altered. On 2 Oct the live API reported 35
+states, and Gujarat is spelled **`GUJRAT`** there (the source's own spelling,
+carried as-is).
 
 > **This file was 25 commits behind for six days** (9 to 15 Sep 2026), and then
 > **six commits and 179 uncommitted files behind for another six** (15 to 21
@@ -126,19 +127,20 @@ AC/
     ├── tools/import-masters/      the ETL: masters, geography, transactions, apply-snapshot
     ├── tools/deploy/
     └── apps/
-        ├── api/                   NestJS + Fastify + Drizzle (883 tests)
-        └── web/                   React 19 + Vite + Tailwind (589 tests)
+        ├── api/                   NestJS + Fastify + Drizzle (906 tests)
+        └── web/                   React 19 + Vite + Tailwind (592 tests)
 ```
 
-**1738 tests pass** — 1719 Node (157 contracts + 90 domain + 883 API + 589 web)
-plus 19 .NET. **Both figures were RUN on 1 Oct 2026**, against `27488e54`:
-Node exit 0 (`npm test` piped to a file and grepped per workspace, not just the
-last screenful — see the note in `/handoff`'s own instructions about why that
-matters), zero failures; the .NET figure is proved by the diff since
-`154d5405`, which touches no `.cs` file, rather than re-run — still true eight
-commits later; this session's two features were both web-only. `npm run
-typecheck` and `npm run build` were both run the same day, against the same
-commit: exit 0, zero `error TS`, clean build in all four workspaces.
+**1764 tests pass** — 1745 Node (157 contracts + 90 domain + 906 API + 592 web)
+plus 19 .NET, measured against `6d3a9e98` on 2 Oct 2026. **The API was RUN in
+two halves** (`npx vitest run --shard=1/2` then `2/2`: 26 + 26 files, 470 + 436
+tests, zero failures), because one full run hit the 10-minute background-task
+limit at 27 of 52 files with nothing failing — this machine runs it slower than
+it used to. Contracts, domain and web were RUN one workspace at a time on the
+same tree; the only file that changed after those runs is an API test. The
+.NET figure is proved by the diff since `154d5405`, which touches no `.cs`
+file. `npm run typecheck` and `npm run build` were run the same day on the
+same tree: exit 0, zero `error TS`, all four workspaces.
 
 **EVERY LEGACY SCREEN IS NOW PORTED.** `nav.ts` carries no `"planned"` item —
 Payments, the Ledger and the Sales Report were the last three (§5u). What remains
@@ -148,9 +150,12 @@ is not screens: the six report EXPORTS, the ETL, and the items in §8.
 tree before 9 Sep 2026 (§5t), and the previous handoff said it was — see the
 correction note in §5s below. Two test files failed it, one in `web` and one in
 `domain`, both on `noUncheckedIndexedAccess`. **`npm run build` does not catch
-this**, because the build configs exclude test files and `typecheck` does not;
-so a green build is not evidence of a green typecheck, and a broken typecheck
-hides the next real error in it.
+this in `api`, `contracts` or `domain`**, whose builds use a
+`tsconfig.build.json` that excludes test files while `typecheck` does not; so
+there a green build is not evidence of a green typecheck, and a broken
+typecheck hides the next real error in it. **`web` is the exception** (checked
+2 Oct 2026, §5z): it has one `tsconfig.json`, used by both `tsc -b` in its
+build and by `typecheck`, so a type error in a web TEST file fails the build.
 
 > These two figures — here and in §4 — said **310** for five consecutive sessions
 > while the true count more than doubled. Nobody was careless: each session
@@ -198,12 +203,12 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 ## 4. Repository state
 
 Branch **`main`**, working tree clean, pushed to `origin/main`. Typechecks, and
-all **1738 tests pass** — 1719 Node (157 contracts + 90 domain + 883 API + 589
+all **1764 tests pass** — 1745 Node (157 contracts + 90 domain + 906 API + 592
 web) + 19 .NET.
 
-The Node suite was measured on the `27488e54` code commit (1 Oct 2026) and
-RUN; the .NET figure is proved by the diff since `154d5405`, which touches no
-.NET file. Anything after `27488e54` on `main`
+The Node suite was measured on the `6d3a9e98` code commit (2 Oct 2026) and
+RUN (the API in two shards — see §3); the .NET figure is proved by the diff
+since `154d5405`, which touches no .NET file. Anything after `6d3a9e98` on `main`
 is documentation — a handoff always commits after its own measurement, so the
 newest hash is never the one the numbers were taken at, and naming it here would
 be a lie that looks precise.
@@ -264,6 +269,11 @@ be a lie that looks precise.
   existed since `9a11f463`'s 0020; this reads it, it does not add it.
 - `27488e54` adds a camera-capture "Take photo" button to the inward challan
   attachments panels (§5y). **No migration.**
+- `fe5897a8` renames the ledger reports to "Ledger" (ledger tab only) and
+  "Pending Outstanding" (outstanding summary only) (§5z). **No migration.**
+- `6d3a9e98` adds the Agency Master (§5z). **Carries migration
+  `0021_agencies`**, applied on live: four new tables, 19 seeded work types,
+  form row 101 "Agency" granted to every Supplier editor.
 - **`main` is pushed to `origin/main`** and the working tree is clean.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
   credential is in the HISTORY, not the working tree. Rotation is the fix.
@@ -1636,6 +1646,7 @@ the screens whose UI is gated on `usePermission`.
 | **Record over the list, or beside it** | Doc 19 **Question 12**. Both layouts are built and switchable (§5m), so this is answerable on the real screens in two minutes — it needs a person, not a session. It gets dearer every week: today the answer is one shared change, and every new screen built against the wrong one is another to re-check. **When it comes back, delete the loser and the `RecordLayoutPicker`.** |
 | **Delivery quantities are now checked ACROSS both address panels** | **New — §5s.** The legacy screen keeps one accumulator per panel and compares each to the ordered quantity on its own, so an order for 100 saves with 100 allocated to site addresses and 100 more to group addresses — 200 units of deliveries against 100 ordered, no warning. The port sums them and refuses. It is the rule the source's own error message states, applied to the number it was always about, but it **refuses saves the old screen accepted** and only ever bites when both panels are used on one order. It cannot change an existing order, because nothing recomputes an order that is not being edited. Needs a decision, not code. |
 | **Supplier edit/delete/APPROVE permission change** | The port guards `supplier.edit` and `supplier.delete`; the source guards neither (§5b decision 1). Whoever edits suppliers today needs those boxes ticked before cutover, or they lose the ability. **§5p adds a third right to the same question: `supplier.approve` exists in the port and NO production user holds it**, because supplier approval only ever happened through the source’s single `Dashboard` permission. Until an administrator grants it, the Suppliers queue is read-only on the live database. All three are doc 19 Question 11. Needs a decision, not code. |
+| **How stock is counted** | **New — doc 19 Question 16** (§5z). The client asked on 1 Oct 2026 for stock in, issue to an agency at a site, and return. Three answers decide the design and must come first: stock per site or a central godown; stock in from the Inward Challan or the Purchase Invoice (never both — that counts goods twice); start from an opening-stock entry or from the 180 old challans. The Agency Master it issues to is built and live. |
 
 ---
 
@@ -1739,11 +1750,11 @@ Every legacy screen is ported (§5u), **everything committed is deployed**
 (header), and the live database carries the transactional history (§5v). The
 work has changed shape: since 10 Sep 2026 it is driven by **requests from the
 client using the live site**, not by the port plan. §5x (18–21 Sep) was six
-days of that, and §5y (28–29 Sep) is two more ad hoc client requests — neither
-touched the NOW/NEXT items below, which are unchanged from 15 Sep.
-`Migration-Assessment/legacy-screens/PLAN.md` holds the authoritative sequencing;
-its rows currently read (PLAN.md's own copy runs through §5x in more detail
-and is the one to read; this is the condensed version):
+days of that, §5y (28–29 Sep) two more, and §5z (1–2 Oct) brought the first
+NEW capability the client has asked for — stock, starting with the Agency
+Master. `Migration-Assessment/legacy-screens/PLAN.md` holds the authoritative
+sequencing; its rows currently read (PLAN.md's own copy is the one to read;
+this is the condensed version):
 
 ```
 DONE     … per-site address list, site group CRUD, Pending Ledger,
@@ -1752,7 +1763,9 @@ DONE     … per-site address list, site group CRUD, Pending Ledger,
          Reports/dashboard/chrome redesign, form redesign,
          PO supplier summary                                 (18-21 Sep, §5x)
          Location-paired shipping address, camera capture     (28-29 Sep, §5y)
+         "Ledger" / "Pending Outstanding" reports; Agency Master (1-2 Oct, §5z)
 NOW      master-detail ANSWER                <- with the business, doc 19 Q12
+BLOCKED  Stock: in, issue to agency, return  <- doc 19 Q16 parts 1-3 (§5z plan)
 NEXT     Document Layouts block editor       <- step 3 of the layout master
 NEXT     the OTHER 4 exports                 <- purchase invoice list, item history
 NEXT     Supplier Excel import               <- UNBLOCKED: States/Cities are ported
@@ -1767,6 +1780,12 @@ exists to keep.
 
 **What is left, in rough order:**
 
+0. **Stock in, issue to an agency, return — once doc 19 Question 16 parts 1-3
+   are answered.** The plan is in §5z: one `stock_movements` ledger, stock in
+   hand as the sum of its rows. The Agency Master it issues to is live. Nothing
+   about stock should be built before the three answers, because they decide
+   how stock is counted.
+
 1. **The Document Layouts block editor.** `154d5405` built the templates, the
    list screen, per-company defaults and a print page, and said in its own
    message that the editor comes next. Today the only template is the built-in
@@ -1778,11 +1797,15 @@ exists to keep.
    on the item price history panel. The machinery from `c8cc38c8` is in place.
 4. **The Supplier Excel import**, now unblocked (§8's census row).
 5. **Declare the geography foreign keys.** The live data would satisfy them
-   (zero orphans), but the DEV SEED invents geography ids no lookup row backs,
-   so the seed has to be fixed first. The schema comments say exactly this.
-6. **Is the Pending Ledger staying?** It was added "for the client to try",
-   beside the ordinary ledger. Like the record-layout switch, a trial copy left
-   in place becomes two screens to maintain; ask once the client has used it.
+   (zero orphans). **The dev seed no longer blocks it** — since §5z it inserts
+   country 1, state 24 and cities 1–5, every id it uses. What still stands in
+   the way is the TESTS: repository tests insert companies, sites and suppliers
+   with city ids into a `freshDatabase` that holds no geography, so their
+   fixtures need lookup rows first. `agencies` already has real geography keys.
+6. ~~**Is the Pending Ledger staying?**~~ **Answered by the client, 1 Oct
+   2026 (§5z):** it stays, cut down to its summary and renamed "Pending
+   Outstanding", while the ordinary page lost its summary and became "Ledger".
+   So it is no longer a trial copy of another screen.
 7. **Everything in §8**, which is the user's.
 
 **The NOW row is not code.** Both layouts are built (§5m); what is missing is a
@@ -4305,3 +4328,160 @@ Challan. Rollback target for the live release is `20260929-143923`.
 `www.avfast.in`, port 8090, and the live `8080`/`7251`/`1433` services were
 confirmed on their pre-deploy PIDs after each deploy. Port 1433 is still open
 to the internet with `ufw` inactive — unchanged, see §11 0a.
+
+---
+
+## 5z. The ledger reports cut to one view each, and the Agency Master — the first step of stock (1–2 Oct 2026)
+
+Commits `fe5897a8` (reports) and `6d3a9e98` (Agency Master), each gated,
+pushed and then deployed: `20261001-154458`, then `20261002-142735`. Handoff
+stamped at `<COMMIT>`. **Migration `0021_agencies` is in the second one.**
+
+### `fe5897a8` — "Ledger" and "Pending Outstanding", one view each
+
+The client, in Hinglish: rename "Ledger & Balances" to just "Ledger" and drop
+its Balance summary tab; on "Pending Ledger" drop the "Ledger — pending
+invoices" tab and rename the Balance summary "Pending Outstanding". Both pages
+were built on `ReportTabs`, which took a fixed pair; it now takes `tabs`, the
+ones a page keeps. **A lone tab is kept on purpose** — since 18 Sep the tabs
+stand in for the page title (§5x), so removing the tab strip would have removed
+the only heading on the page. The menu item for the pending page was renamed
+too, since its only view is now the outstanding summary; routes are unchanged,
+so bookmarks still work.
+
+Removed with the tabs, not just hidden: the balance query on the Ledger page
+(one Search used to load both), and the pending-invoices query on the other.
+A test on each page now asserts the removed endpoint is never requested.
+
+**What this made unreachable, by the client's choice.** The full balance
+summary — Credit, Debit and Net per site and party, settled rows included, with
+its Excel/PDF export (`kind="balances"`, `show=all`) — is no longer on any
+screen. Pending Outstanding shows Net only and hides settled rows. And the
+pending-invoices ledger (oldest invoices settled first, part-paid marked) has
+no screen. Both API endpoints still exist and are still tested
+(`reports.pending-ledger.test.ts`); nothing in the web app calls them. If the
+client asks where either went, it is one `tabs` value away.
+
+### `6d3a9e98` — the Agency Master, from the client's mockup
+
+Asked for on 1 Oct as the first part of a larger request: purchases become
+stock, stock can be added directly, issued to an agency at a site and returned,
+some items non-returnable. A plan was written in chat and the user said "start
+only agency master now". **The plan, so nobody has to re-derive it:**
+
+- One `stock_movements` ledger — purchase in (+), direct in (+), issue (−),
+  return (+), adjustment (±) — and stock in hand is the SUM, per site and item,
+  never a number that gets overwritten. Same idea as the reports' running
+  balance.
+- The existing **Inventory screen (`inventory_inward`) already is "direct
+  add"** — item, quantity, date, no supplier. It needs to post into the ledger,
+  not be rebuilt. Inward Challans are the natural "purchase in".
+- `items.is_returnable`; Issue documents numbered through `document_counters`;
+  Return against an issue, partial allowed, each line Good (back to stock) or
+  Damaged/Lost (not); an Agency Outstanding report.
+- **Blocked on doc 19 Question 16 parts 1-3** (per site or central godown;
+  challan or invoice as the stock-in — never both; opening stock entry or old
+  challans). Q16 is new; it also closes Question 7 ("no stock tracking"), which
+  the client answered by asking.
+
+**What was built.** `agencies`, `agency_contacts` (line 1 = the primary
+contact, so primary and additional can never disagree), `agency_work_types`,
+and `work_types` — a master, not free text, because the list filters by trade
+and "every agency that does Waterproofing" only works if two agencies' trade is
+the same row. 0021 seeds the mockup's 19 trades; the form can add more. Agencies
+are their own table, not rows in `suppliers`, which already holds both sides of
+the trade. Status is Active/Inactive, as the mockup has; there is no approval.
+
+**Geography is a REAL foreign key on `agencies`**, the first table to have one
+(§11 item 5 explains why the older tables do not), and the city must be in the
+chosen state — checked in the repository, because a key only proves the row
+exists, not that Surat is in Gujarat. `GET /geography/states` and
+`/geography/cities?stateId=` are new, with no `@Permissions`, like
+`sites/assignable`: reference data any address form needs.
+
+**Permission:** form row 101 "Agency" (subject `agency`), inserted by 0021 and
+granted to every user who can edit suppliers. On live that reached
+`ckalathiya` at once — verified by calling the agency endpoints with its token.
+
+### Traps
+
+1. **`drizzle-kit generate` re-emitted migration 0020.** 0020 was hand-written
+   (§5x) and has no snapshot, so the diff ran against 0019 and the generated
+   0021 began by dropping and re-creating `site_locations_site_name_key` and
+   adding `site_locations.address` — both already on production, where they
+   would have failed the deploy. The same trap as 0008–0010 (§5s), arriving
+   exactly as `drizzle/README.md` predicts. 0021 is hand-trimmed and says so at
+   its top; **its generated snapshot is kept, which repairs the chain** — the
+   next `generate` diffs correctly.
+2. **An uncontrolled `<select>` loses a value its options have not arrived
+   for.** On edit the stored city is put in the form before that state's cities
+   load; a `register`ed select shows blank and SUBMITS `""`, so every edit would
+   have dropped the city. State and City are `Controller`s, which re-apply the
+   value when the options render. `AgencyFormDialog.test.tsx` loads an agency
+   and asserts the PATCH still carries `cityId: 2`. Any future select fed by a
+   dependent query wants the same.
+3. **The record-layout preference changes what a browser script must look
+   for.** The first local walk timed out finding a `dialog`: the layout was
+   "Full page", where the form is not a dialog. Scoping to `form` with
+   `hasText: "Save agency"` then matched nothing either — **the Save button is
+   outside the `<form>` element**, joined to it by the `form` attribute. Scope
+   to the page in full-page mode, or read the layout radio first.
+4. **The live state is spelled `GUJRAT`**, upper case — the source's own data,
+   carried as-is. A script selecting "Gujarat" timed out on production. Not a
+   defect of the port; worth knowing before telling anyone "pick Gujarat".
+5. **Every migration that adds a form row breaks one test on purpose.**
+   `users.write.test.ts` asserts the exact list of active forms in the
+   Permissions matrix; 0018 added "Document Template" to it, 0021 "Agency".
+   It is the right failure — it proves the row reaches the Permissions screen —
+   but expect it.
+6. **Typechecking a workspace before its tests exist is not a typecheck of the
+   tests.** The web typecheck was run clean and the test files written after;
+   the gate then found `noUncheckedIndexedAccess` in the migration test (§5t's
+   trap again) and an unused import. **In `web`, `npm run build` failed on that
+   unused import in a test file**: web has ONE `tsconfig.json`, used by both
+   `tsc -b` in its build and by `typecheck`, and it does not exclude tests.
+   API, contracts and domain build from `tsconfig.build.json`, which does. §3
+   is corrected to say so.
+7. **The full `npm test` once failed 4 API files with `[vitest-worker]:
+   Timeout calling "fetch"`** while loading them — 792 of 883 run, no assertion
+   failed. The API workspace alone passed 883 of 883 straight after, with no
+   change. Same family as §5b and §5r (PGlite per worker, oversubscribed). From
+   then on the workspaces were run one at a time, and nothing timed out.
+8. **A mock that does not behave like the API makes a correct component
+   fail.** The "add a new work type" test failed because the mocked list did
+   not grow after the POST, so the new id had no name to show. The mock now
+   remembers what was added, as the real refetch does.
+
+### Verified by running it
+
+Locally, in a real browser, as `devuser`: the 8 seeded agencies (the mockup's
+own rows), tiles 8 / 7 / 1, a new agency created end to end with a work type
+added from the picker, tiles going to 9 / 8 / 1, the city and the additional
+contact still there on reopen, no sideways scroll at 1440 or 390, zero console
+errors. On production, read-only: Agency Master listed, Add agency offered to
+`ckalathiya`, 19 work types, 35 states, 25 cities under GUJRAT, zero console
+errors, **nothing saved**.
+
+The dev seed now inserts country 1, state 24 "Gujarat" and cities 1–5 —
+exactly the ids every seeded address already used with nothing behind them.
+
+### The honest cost
+
+- **The required asterisk is missing on text fields, app-wide.** `TextField`
+  takes `required` and never draws the `*` that `SelectField` does, so on the
+  agency form State and City are starred while Agency name, Contact name and
+  Mobile No. — also required — are not. It is the same on every form (Site
+  name, Supplier name). Fixing it touches every form and was left for the user
+  to ask for; they were told.
+- **The live Agency Master is empty** and its trades are the mockup's guesses
+  at the business's trades. Someone has to enter the real agencies.
+- **Two report views now exist only in the API** — see `fe5897a8` above.
+- **The stock work this was the first step of cannot start** until Q16 is
+  answered, so for now the Agency Master is a list with nothing issued to it.
+
+Tests: **1764** — 1745 Node (157 contracts + 90 domain + 906 API + 592 web) +
+19 .NET, against `6d3a9e98`. Web went 589 → 582 with the report tabs (their
+tests went with them) and → 592 with the Agency Master; the API went 883 → 906
+(19 repository tests and 4 migration tests). The API was run in two shards —
+a single full run hit the 10-minute background limit with nothing failing.
+.NET proved by the diff since `154d5405`.

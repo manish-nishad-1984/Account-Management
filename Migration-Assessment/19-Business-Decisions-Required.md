@@ -373,6 +373,12 @@ system, physical registers? And should the new system track it?
 Note: real stock tracking is a **significant** addition to scope, not a small
 feature. If you want it, we should plan it as its own phase.
 
+> **Answered, 1 Oct 2026 — yes, by your own request.** You asked for purchases
+> to become stock, for stock to be added directly, issued to an agency at a site,
+> and returned, with some items non-returnable. That is real stock tracking, and
+> it is planned as its own phase. The Agency Master it needs is built (2 Oct
+> 2026). **How** it should work is Question 16.
+
 ---
 
 ## Question 8 — The same item twice on one Purchase Order is counted once
@@ -689,6 +695,50 @@ from a row in the `Form` table that merely exists.
 
 ---
 
+## Question 16 — How should stock in, issue and return work?
+
+**What you asked for (1 Oct 2026).** Whatever is purchased becomes stock; stock
+can also be added directly; stock is issued to an agency at a site; returnable
+items come back; some items are never returned.
+
+**What is already built.** The **Agency Master** — the contractors stock will be
+issued to — is live (2 Oct 2026). Nothing about stock is built yet, because the
+answers below decide how it is counted, and stock counted the wrong way is worse
+than no stock at all.
+
+**What we need to know.** The first three decide the design; nothing can start
+without them.
+
+1. **Where is stock held?** Per site — each site has its own stock — or in one
+   central godown that sends material to the sites? *We recommend per site*:
+   challans already arrive per site. A central godown also needs "transfer to
+   site" entries.
+2. **When does a purchase become stock?** When the goods arrive (the Inward
+   Challan) or when the bill is entered (the Purchase Invoice)? *We recommend the
+   challan* — it is the physical receipt. Counting both would count the same
+   goods twice.
+3. **How does stock start?** From the 180 challans already in the system, or
+   from an opening stock you enter once? *We recommend an opening stock entry*:
+   issues to sites were never recorded, so counting old challans would show
+   material that has long been used.
+
+And four that shape the details:
+
+4. **Returnable or not — fixed per item, or decided each time it is issued?**
+   *We recommend a setting on the item that can be changed on the issue.*
+5. **A returnable item comes back damaged or does not come back** — should its
+   cost be charged to the agency? If yes, that brings agency billing with it,
+   which is a larger piece of work.
+6. **Who can stock be issued to** — only agencies, or also staff and the site
+   itself?
+7. **Do issues and returns need approval**, like challans, and should they
+   appear on the dashboard?
+
+> **Decision:** 1 ☐ Per site ☐ Central godown — 2 ☐ Challan ☐ Purchase invoice —
+> 3 ☐ Opening stock entry ☐ From old challans — 4–7: ________________
+
+---
+
 # Summary sheet
 
 | # | Question | Blocks work? | Decision |
@@ -700,7 +750,7 @@ from a row in the `Form` table that merely exists.
 | 4 | April stamped with the wrong FY | **Yes** | |
 | 5 | Two reports always blank | **Yes** | |
 | 6 | Should PR link to PO? | No | |
-| 7 | No stock tracking | No | |
+| 7 | ~~No stock tracking~~ — **answered 1 Oct 2026: you asked for it; see 16** | No | Answered |
 | 8 | Duplicate PO line counted once | No | |
 | 9 | Over-invoicing allowed | No | |
 | 10 | Deleted items resurrected on re-create | No | |
@@ -709,6 +759,10 @@ from a row in the `Form` table that merely exists.
 | 13 | Does uploading a spreadsheet approve the items? | No | |
 | 14 | **A purchase order can be sent out twice over** — should the two delivery lists be added together? | Changes what saves | |
 | 15 | ~~Three permission names guard one screen~~ — **answered from the source, 10 Sep 2026; nothing needed** | No | Answered |
+| 16 | **Stock: per site or central godown? From challan or invoice? Opening stock?** | **Yes — blocks stock issue and return** | |
+
+**Question 16 is new on 2 Oct 2026**, from your request for stock issue and
+return. Its first three parts must be answered before any stock work starts.
 
 **Updated 9 Sep 2026.** The invoicing rebuild is no longer waiting on these — the
 purchase invoice and sales invoice screens are both built, and both calculate
@@ -759,3 +813,4 @@ whatever the answer turns out to cover.
 | 13 | `SESSION-HANDOFF.md` §5o; `modules/items/item-sheet.service.ts` `toCreateItem` |
 | 14 | `SESSION-HANDOFF.md` §5s; `packages/domain/src/delivery-allocation.ts`; `PurchaseRequestScript.js:964-1006`; `legacy-screens/08-create-purchase-order.md` |
 | 15 | `SESSION-HANDOFF.md` §5u; finding C-6; `Views/Report/ReportDetails.cshtml` and its partials; `modules/payments/payments.controller.ts` |
+| 16 | `SESSION-HANDOFF.md` §5z; D26 (answers Q7); `inventory_inward`, `inward_challans`; `modules/agencies/` |
