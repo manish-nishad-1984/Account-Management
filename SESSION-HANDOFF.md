@@ -3,7 +3,7 @@
 **Written:** 2 September 2026, after the unblocking session. **Last extended
 2 October 2026** (§5z). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
+> **This file is current as of `6c5fd1c0`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
@@ -4335,7 +4335,7 @@ to the internet with `ufw` inactive — unchanged, see §11 0a.
 
 Commits `fe5897a8` (reports) and `6d3a9e98` (Agency Master), each gated,
 pushed and then deployed: `20261001-154458`, then `20261002-142735`. Handoff
-stamped at `<COMMIT>`. **Migration `0021_agencies` is in the second one.**
+stamped at `6c5fd1c0`. **Migration `0021_agencies` is in the second one.**
 
 ### `fe5897a8` — "Ledger" and "Pending Outstanding", one view each
 
