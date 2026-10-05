@@ -78,7 +78,7 @@ describe("SalesReportPage", () => {
 
   /** It asked for 50 rows and offered no way to the 51st. */
   it("pages", async () => {
-    withSales([salesRow()], { total: 120, nextCursor: "50" });
+    withSales([salesRow()], { total: 120, nextCursor: "100" });
     renderWithAuth(<SalesReportPage />, { permissions: ["sales-report.view"] });
 
     await userEvent.click(await screen.findByRole("button", { name: "Next" }));
@@ -86,7 +86,7 @@ describe("SalesReportPage", () => {
     await waitFor(() =>
       expect(
         vi.mocked(globalThis.fetch).mock.calls.some(
-          ([url]) => String(url).includes("/reports/sales?") && String(url).includes("offset=50"),
+          ([url]) => String(url).includes("/reports/sales?") && String(url).includes("offset=100"),
         ),
       ).toBe(true),
     );

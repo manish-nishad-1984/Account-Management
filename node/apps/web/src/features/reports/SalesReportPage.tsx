@@ -29,7 +29,7 @@ import { REPORT_PAGE, ReportGrid, ReportPager, type ReportColumn } from "./Repor
  * What Outstanding means is kept as that heading's tooltip.
  */
 
-const outstandingTone = (value: string) => (value.startsWith("-") ? "text-emerald-700" : "text-slate-900");
+const outstandingTone = (value: string) => (value.startsWith("-") ? "text-amber-700" : "text-slate-900");
 
 export function SalesReportPage() {
   const [draft, setDraft] = useState<FilterState>(EMPTY_FILTERS);

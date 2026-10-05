@@ -32,7 +32,7 @@ import { DirectionSwitch, REPORT_PAGE, ReportGrid, ReportPager, ReportTabs, type
  * summary, and the client may still change what this one shows.
  */
 
-const balanceTone = (value: string) => (value.startsWith("-") ? "text-emerald-700" : "text-slate-900");
+const balanceTone = (value: string) => (value.startsWith("-") ? "text-amber-700" : "text-slate-900");
 
 const noSite = <span className="text-xs text-slate-400">No site</span>;
 
@@ -97,6 +97,7 @@ export function PendingLedgerPage() {
         panel={() => (
           <>
             <ReportFilters
+              maxWidth="64rem"
               idPrefix="summary"
               label="Pending outstanding filters"
               value={draft}

@@ -65,6 +65,7 @@ export function ReportFilters({
   idPrefix,
   label,
   actions,
+  maxWidth,
 }: {
   value: FilterState;
   onChange: (next: FilterState) => void;
@@ -81,6 +82,8 @@ export function ReportFilters({
   label?: string;
   /** A screen's own buttons (the downloads), at the right-hand end of the date-shortcut line. */
   actions?: ReactNode;
+  /** Keeps the card as wide as a narrow grid under it, rather than the whole row. */
+  maxWidth?: string;
 }) {
   const scope = useSiteScope();
   const suppliers = useSupplierOptions();
@@ -92,6 +95,7 @@ export function ReportFilters({
   return (
     <form
       aria-label={label}
+      style={maxWidth ? { maxWidth } : undefined}
       className="mb-3 rounded-xl border border-slate-200 bg-white p-2.5 shadow-card [&_input]:h-9 [&_select]:h-9"
       onSubmit={(event) => {
         event.preventDefault();

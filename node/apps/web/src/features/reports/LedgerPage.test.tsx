@@ -129,7 +129,7 @@ describe("the ledger screen", () => {
         totalCredit: "500000.00",
         totalDebit: "100000.00",
         closingBalance: "400000.00",
-        nextCursor: "50",
+        nextCursor: "100",
       }),
     );
     renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
@@ -142,7 +142,7 @@ describe("the ledger screen", () => {
   });
 
   it("disables Previous on the first page and offers Next when there is more", async () => {
-    withReports(ledgerResponse([ledgerRow()], { total: 120, nextCursor: "50" }));
+    withReports(ledgerResponse([ledgerRow()], { total: 120, nextCursor: "100" }));
     renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
     await search();
 

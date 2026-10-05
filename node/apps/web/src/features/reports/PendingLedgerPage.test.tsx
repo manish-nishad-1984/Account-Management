@@ -148,14 +148,14 @@ describe("the pending outstanding screen", () => {
   });
 
   it("pages the summary", async () => {
-    withReports(balancesResponse({ total: 120, nextCursor: "50" }));
+    withReports(balancesResponse({ total: 120, nextCursor: "100" }));
     renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
     await search();
 
     await userEvent.click(await screen.findByRole("button", { name: "Next" }));
 
     await waitFor(() =>
-      expect(requested("/reports/balances").some((url) => url.searchParams.get("offset") === "50")).toBe(true),
+      expect(requested("/reports/balances").some((url) => url.searchParams.get("offset") === "100")).toBe(true),
     );
   });
 });

@@ -42,7 +42,7 @@ const SOURCE_TONE: Record<LedgerRow["source"], "neutral" | "warning" | "info"> =
 };
 
 /** Negative balances are the party owing us, which is worth seeing at a glance. */
-const balanceTone = (value: string) => (value.startsWith("-") ? "text-emerald-700" : "text-slate-900");
+const balanceTone = (value: string) => (value.startsWith("-") ? "text-amber-700" : "text-slate-900");
 
 const noSite = <span className="text-xs text-slate-400">No site</span>;
 

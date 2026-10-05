@@ -216,7 +216,7 @@ export function TypeLabel({ tone, children }: { tone: "neutral" | "warning" | "i
   );
 }
 
-export const REPORT_PAGE = 50;
+export const REPORT_PAGE = 100;
 
 /** Previous / Next under a report grid. */
 export function ReportPager({
