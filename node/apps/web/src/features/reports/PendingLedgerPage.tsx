@@ -6,7 +6,7 @@ import { formatMoney } from "../../lib/format";
 import { EMPTY_FILTERS, ReportFilters, toQuery, type FilterState } from "./ReportFilters";
 import { describeLoadError } from "../../lib/load-error";
 import { useBalances } from "./api";
-import { REPORT_PAGE, ReportGrid, ReportPager, ReportTabs, type ReportColumn } from "./ReportGrid";
+import { DirectionSwitch, REPORT_PAGE, ReportGrid, ReportPager, ReportTabs, type ReportColumn } from "./ReportGrid";
 
 /**
  * Pending Outstanding: what is still owed, per site and party.
@@ -86,24 +86,13 @@ export function PendingLedgerPage() {
         tabs={["balances"]}
         labels={{ balances: "Pending Outstanding" }}
         actions={
-          <div className="flex rounded-md ring-1 ring-inset ring-slate-300">
-            {(["out", "in"] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={direction === value}
-                onClick={() => {
-                  setDirection(value);
-                  setOffset(0);
-                }}
-                className={`px-3 py-1.5 text-sm font-medium first:rounded-l-md last:rounded-r-md ${
-                  direction === value ? "bg-brand-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {value === "out" ? "Purchases" : "Sales"}
-              </button>
-            ))}
-          </div>
+          <DirectionSwitch
+            value={direction}
+            onChange={(next) => {
+              setDirection(next);
+              setOffset(0);
+            }}
+          />
         }
         panel={() => (
           <>
@@ -146,6 +135,7 @@ export function PendingLedgerPage() {
                   rowKey={(row) => row.id}
                   footerLabel="Total"
                   minWidth="36rem"
+                  maxWidth="64rem"
                   fit
                 />
                 <ReportPager

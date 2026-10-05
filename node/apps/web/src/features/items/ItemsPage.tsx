@@ -100,6 +100,7 @@ export function ItemsPage() {
       {
         id: "pricePerUnit",
         header: "Price / unit",
+        meta: { align: "right" },
         cell: ({ row }) => (
           <span className="tabular block text-right text-slate-800">
             {formatMoney(row.original.pricePerUnit)}
@@ -109,6 +110,7 @@ export function ItemsPage() {
       {
         id: "gst",
         header: "GST",
+        meta: { align: "right" },
         /*
           The percentage IS the answer to "does this item carry GST" now that the
           GST-inclusive flag is gone, so a row with no percentage says "No GST"

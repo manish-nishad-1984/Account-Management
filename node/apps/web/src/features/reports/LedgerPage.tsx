@@ -7,7 +7,7 @@ import { EMPTY_FILTERS, ReportFilters, toQuery, type FilterState } from "./Repor
 import { ExportButtons } from "./ExportButtons";
 import { describeLoadError } from "../../lib/load-error";
 import { useLedger } from "./api";
-import { DocumentNo, REPORT_PAGE, ReportGrid, ReportPager, ReportTabs, TypeLabel, type ReportColumn } from "./ReportGrid";
+import { DirectionSwitch, DocumentNo, REPORT_PAGE, ReportGrid, ReportPager, ReportTabs, TypeLabel, type ReportColumn } from "./ReportGrid";
 
 /**
  * `/Report/ReportDetails` panels 1 and 2.
@@ -152,24 +152,13 @@ export function LedgerPage() {
           <div className="flex flex-wrap items-center justify-end gap-2">
             {/* Hidden until a search, so a download is never of a set nobody asked for. */}
             {searched && <ExportButtons kind="ledger" withByParty query={{ ...toQuery(applied), direction }} />}
-          <div className="flex rounded-md ring-1 ring-inset ring-slate-300">
-            {(["out", "in"] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={direction === value}
-                onClick={() => {
-                  setDirection(value);
-                  setOffset(0);
-                }}
-                className={`px-3 py-1.5 text-sm font-medium first:rounded-l-md last:rounded-r-md ${
-                  direction === value ? "bg-brand-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {value === "out" ? "Purchases" : "Sales"}
-              </button>
-            ))}
-          </div>
+          <DirectionSwitch
+            value={direction}
+            onChange={(next) => {
+              setDirection(next);
+              setOffset(0);
+            }}
+          />
           </div>
         }
         panel={() => (

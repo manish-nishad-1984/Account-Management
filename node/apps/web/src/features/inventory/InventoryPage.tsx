@@ -83,6 +83,7 @@ export function InventoryPage() {
       {
         id: "quantity",
         header: "Quantity",
+        meta: { align: "right" },
         cell: ({ row }) => (
           <span className="tabular block text-right text-slate-800">
             {formatQuantity(row.original.quantity)}{" "}

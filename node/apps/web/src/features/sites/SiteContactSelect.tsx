@@ -72,7 +72,7 @@ export function SiteContactSelect({
             ? "Loading contacts…"
             : contacts.length === 0
               ? "This site has no contacts. Add them on the Sites screen."
-              : "From the site's contacts on the Sites screen"
+              : undefined
       }
       error={error}
       value={value}

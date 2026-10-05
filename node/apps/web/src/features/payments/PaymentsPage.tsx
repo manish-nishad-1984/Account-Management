@@ -92,6 +92,7 @@ export function PaymentsPage() {
       {
         id: "amount",
         header: "Amount",
+        meta: { align: "right" },
         cell: ({ row }) => (
           <span className="tabular block text-right font-medium text-slate-900">
             {formatMoney(row.original.amount)}

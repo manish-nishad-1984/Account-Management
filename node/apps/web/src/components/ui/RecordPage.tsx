@@ -84,7 +84,7 @@ export function RecordPage({
       // A <section> with an accessible name IS a `region` landmark. Spelling the
       // role out would be redundant; the label is what does the work.
       aria-labelledby={titleId}
-      className="flex min-h-full flex-col"
+      className="flex min-h-full flex-1 flex-col"
     >
       {/*
         Sticky, so the way out stays on screen.
@@ -105,16 +105,22 @@ export function RecordPage({
         the content area's own colour: it hides what is behind it while looking
         like nothing at all.
 
-        `-top-6` WITH `-mt-6 pt-6`, and that trio is not decoration. A sticky
+        COMPACT (client request, 5 Oct 2026: the bar was 74px, then 53, and still too
+        tall for a title and one arrow). A 28px arrow with 6px above and below makes
+        it 41px with its border. The `-mt-6` is what pulls it to the window edge;
+        the title now sits 6px below that edge rather than 24, which is the saving.
+        Anything that sticks BELOW this bar has to know the number: see the payout
+        form.
+
+        `-top-6` WITH `-mt-6`, and that pair is not decoration. A sticky
         offset resolves against the scroll container's CONTENT box, not its
         padding box, so a plain `top-0` stuck the bar 24px BELOW the header and
         left a strip of the form scrolling through the gap. Measured, not
         reasoned about: `main` is at y=64, its padding-top is 24px, and the bar
         was landing at y=88 with a field label painted at y=86. The negative
-        margin and offset put its edge back on the header; the `pt-6` gives the
-        title back the space the margin took.
+        margin and offset put its edge back on the header.
       */}
-      <div className="sticky -top-6 z-10 -mx-4 -mt-6 mb-4 flex items-start gap-2.5 border-b border-slate-200 bg-app px-4 pb-3 pt-6 lg:-mx-8 lg:px-8">
+      <div className="sticky -top-6 z-10 -mx-4 -mt-6 mb-2 flex items-center gap-2.5 border-b border-slate-200 bg-app px-4 pb-1.5 pt-1.5 lg:-mx-8 lg:px-8">
         <Tooltip label="Back to list">
         <button
           type="button"
@@ -126,23 +132,25 @@ export function RecordPage({
            * control rather than as a glyph - which the bare 40px version did not,
            * sitting unringed on the same grey as the bar around it.
            */
-          className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-white text-slate-500 ring-1 ring-inset ring-slate-200 transition-colors hover:bg-brand-50 hover:text-brand-700 hover:ring-brand-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+          className="flex size-7 shrink-0 items-center justify-center rounded-md bg-white text-slate-500 ring-1 ring-inset ring-slate-200 transition-colors hover:bg-brand-50 hover:text-brand-700 hover:ring-brand-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
         >
-          <ArrowLeft aria-hidden className="size-4" />
+          <ArrowLeft aria-hidden className="size-3.5" />
         </button>
         </Tooltip>
 
         <div
           ref={heading}
           tabIndex={-1}
-          className="min-w-0 flex-1 pt-1 outline-none"
+          className="min-w-0 flex-1 outline-none"
         >
-          <h1 id={titleId} className="heading truncate text-[22px] leading-7">
+          <h1 id={titleId} title={description} className="heading truncate text-base leading-6">
             {title}
           </h1>
-          {description && (
-            <p className="mt-0.5 truncate text-sm leading-5 text-slate-500">{description}</p>
-          )}
+          {/*
+            Read out, not drawn: a sentence under every title cost a line on every
+            form (client request, 5 Oct 2026). It is still the heading's tooltip.
+          */}
+          {description && <p className="sr-only">{description}</p>}
         </div>
       </div>
 
@@ -172,30 +180,35 @@ export function RecordPage({
             wall rather than as a document.
           */}
           {children}
-
-          {footer && (
-            /*
-              Sticky to the BOTTOM, the mirror of the reason the header is sticky
-              to the top: Save is at the end of a form taller than the window, so
-              without this it is reachable only by scrolling to a place the user
-              cannot see from where they are typing.
-
-              OPAQUE, for the same reason the header is: the form passes under
-              it. At 95% the account number and IFSC hints were legible THROUGH
-              the Save button. Seen in the browser at the bottom of the supplier
-              form, not reasoned about.
-
-              `-bottom-6` for the same measured reason as the header's `-top-6`,
-              at the other edge: `bottom-0` resolves against the content box and
-              would park this 24px up from the bottom of the window, with the
-              form still scrolling through the strip underneath it.
-            */
-            <div className="sticky -bottom-6 mt-4 flex items-center justify-end gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-raised">
-              {footer}
-            </div>
-          )}
         </div>
       </RecordSurfaceContext.Provider>
+
+      {footer && (
+        /*
+          THE FOOTER IS PINNED TO THE BOTTOM OF THE WINDOW, edge to edge, and it
+          no longer moves with the form.
+
+          It used to be the last child of the content box, sticky, with a margin
+          above it. A short form therefore left it floating just under the last
+          field, and every row ticked, error shown or section opened moved it up
+          or down with the content - the "up down" the client saw on the payout
+          form. It is now a sibling AFTER the content, which is `flex-1` inside a
+          column at least as tall as the window, so a short form pushes it to the
+          bottom and a tall one leaves it sticky there.
+
+          Full width, not a floating card: `-mx-4` / `lg:-mx-8` undo the content
+          area's own side padding, and it sits OUTSIDE the `max-w-[1800px]` box so
+          a very wide window does not leave it narrower than the page. Still
+          opaque, because the form passes under it (see the note on the header).
+
+          `-bottom-6 -mb-6` is the measured pair from before: a sticky offset
+          resolves against the content box, so `bottom-0` would park it 24px up
+          from the window edge with the form scrolling through the strip below.
+        */
+        <div className="sticky -bottom-6 -mx-4 -mb-6 mt-4 flex items-center justify-end gap-2 border-t border-slate-200 bg-white px-4 py-2.5 shadow-raised lg:-mx-8 lg:px-8">
+          {footer}
+        </div>
+      )}
     </section>
   );
 }

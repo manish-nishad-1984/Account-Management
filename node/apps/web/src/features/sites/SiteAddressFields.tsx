@@ -142,9 +142,6 @@ export function SiteAddressFields({
               : (options.data?.billingAddress ??
                 "This site has no address. Add one on the Sites screen.")}
         </div>
-        <p className="mt-1 text-xs leading-4 text-slate-500">
-          Always the site's own address, set when this is saved.
-        </p>
       </div>
 
       <div>

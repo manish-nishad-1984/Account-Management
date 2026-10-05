@@ -92,7 +92,7 @@ export function ReportFilters({
   return (
     <form
       aria-label={label}
-      className="mb-4 rounded-xl border border-slate-200 bg-white p-3 shadow-card"
+      className="mb-3 rounded-xl border border-slate-200 bg-white p-2.5 shadow-card [&_input]:h-9 [&_select]:h-9"
       onSubmit={(event) => {
         event.preventDefault();
         onApply();
@@ -169,7 +169,7 @@ export function ReportFilters({
         shortcut that saves typing two dates on the screen where typing them is
         most tedious.
       */}
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
         <button
           type="button"
           className="rounded-full px-2.5 py-1.5 text-brand-700 ring-1 ring-inset ring-brand-200 hover:bg-brand-50 lg:px-2 lg:py-0.5"

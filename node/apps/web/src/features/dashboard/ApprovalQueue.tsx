@@ -1,3 +1,4 @@
+import clsx from "clsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { UseQueryResult } from "@tanstack/react-query";
@@ -225,7 +226,22 @@ export function ApprovalQueue<T extends QueueRow>({
             </thead>
             <tbody className="divide-y divide-slate-50">
               {rows.map((row) => (
-                <tr key={row.id}>
+                <tr
+                  key={row.id}
+                  className={clsx(
+                    "transition-colors",
+                    canApprove && row.capabilities.canApprove && "cursor-pointer",
+                    selected.has(row.id) ? "bg-brand-50 hover:bg-brand-100/70" : "hover:bg-slate-100",
+                  )}
+                  onClick={
+                    canApprove && row.capabilities.canApprove
+                      ? (event) => {
+                          if ((event.target as HTMLElement).closest("input, button, a, label")) return;
+                          toggleOne(row.id);
+                        }
+                      : undefined
+                  }
+                >
                   {canApprove && (
                     <td className="px-1 py-2">
                       {/* Same reasoning as the select-all above. */}

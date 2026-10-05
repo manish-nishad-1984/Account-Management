@@ -68,6 +68,7 @@ const COMMANDS: readonly Command[] = [
 
 export function RichTextField({
   label,
+  labelHidden = false,
   value,
   onChange,
   error,
@@ -77,6 +78,8 @@ export function RichTextField({
   rows = 8,
 }: {
   label: string;
+  /** The section heading already names it: keep the label for readers, not the eye. */
+  labelHidden?: boolean;
   /** HTML. Empty string for an empty document. */
   value: string;
   onChange: (html: string) => void;
@@ -127,7 +130,7 @@ export function RichTextField({
 
   return (
     <div>
-      <span className={LABEL_BASE} id={`${fieldId}-label`}>
+      <span className={clsx(LABEL_BASE, labelHidden && "sr-only")} id={`${fieldId}-label`}>
         {label}
       </span>
 

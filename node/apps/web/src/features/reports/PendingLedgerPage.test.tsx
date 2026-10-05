@@ -65,14 +65,17 @@ describe("the pending outstanding screen", () => {
     vi.restoreAllMocks();
   });
 
-  /** Client request, 1 Oct 2026: the pending-invoices tab is gone, and the summary renamed. */
-  it("has one tab, Pending Outstanding, and no pending-invoices ledger", async () => {
+  /**
+   * Client request, 1 Oct 2026: the pending-invoices tab is gone, and the summary
+   * renamed. Its own lone tab went on 5 Oct 2026: the section tabs above name the
+   * page, so it said "Pending Outstanding" twice.
+   */
+  it("has no tab of its own, and no pending-invoices ledger", async () => {
     withReports();
     renderWithAuth(<PendingLedgerPage />, { permissions: ["reports-payments.view"] });
 
-    const tabs = await screen.findAllByRole("tab");
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["Pending Outstanding"]);
-    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByRole("button", { name: "Purchases" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
     expect(screen.queryByText(/pending invoices/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Balance summary/)).not.toBeInTheDocument();
 

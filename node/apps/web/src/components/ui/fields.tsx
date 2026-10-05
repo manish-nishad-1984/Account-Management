@@ -400,7 +400,6 @@ export function MultiSelectField({
 export function FormSection({
   title,
   description,
-  icon: Icon,
   action,
   className,
   children,
@@ -448,21 +447,20 @@ export function FormSection({
    * floating over the fields rather than as the card's title. One treatment in
    * both places, because the alternative is a product that looks like two.
    */
+  /**
+   * COMPACT HEADING (client request, 5 Oct 2026, after the payout form): no icon
+   * tile, and the description on the heading's own line instead of under it.
+   *
+   * The 28px tile made the heading row taller than its text and pushed every
+   * field down; a description under the title cost a whole extra line per card.
+   * Across a form of five sections that was a screenful. The `icon` prop is
+   * still accepted so the twelve call sites need no edit, and is not drawn.
+   */
   const heading = (
-    <div className="flex items-start gap-2.5">
-      {Icon && (
-        <span
-          aria-hidden
-          className="mt-px flex size-7 shrink-0 items-center justify-center rounded-md bg-brand-50 text-brand-600 ring-1 ring-inset ring-brand-100"
-        >
-          <Icon className="size-4" />
-        </span>
-      )}
-      <div className="min-w-0 flex-1">
+    <div className="flex items-baseline gap-2">
+      <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
         <h3 className="text-sm font-semibold leading-5 text-slate-900">{title}</h3>
-        {description && (
-          <p className="mt-0.5 text-xs leading-4 text-slate-500">{description}</p>
-        )}
+        {description && <p className="text-xs leading-4 text-slate-500">{description}</p>}
       </div>
       {action && <div className="ml-auto shrink-0 pl-2">{action}</div>}
     </div>
@@ -586,7 +584,7 @@ export function FormSection({
   return (
     <section
       className={clsx(
-        "@container rounded-xl border border-slate-200 bg-white p-4 shadow-card",
+        "@container rounded-xl border border-slate-200 bg-white p-3 shadow-card",
         className,
       )}
     >

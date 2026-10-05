@@ -7,7 +7,7 @@ import {
   createPurchaseRequestSchema,
   type PurchaseRequestDetail,
 } from "@accountmanagement/contracts";
-import { Alert, FormDialog, FormSection, SelectField, TextAreaField, TextField } from "../../components/ui";
+import { FormDialog, FormSection, SelectField, TextAreaField, TextField } from "../../components/ui";
 import { applyServerErrors, unshownValidationMessage } from "../../lib/crud";
 import { text } from "../../lib/form-values";
 import { useAllUnits } from "../items/api";
@@ -228,13 +228,6 @@ export function PurchaseRequestFormDialog({
               {...register("itemDescription")}
             />
           </FormSection>
-
-          {!isEdit && (
-            <Alert tone="info">
-              A new request is created unapproved. Approving it is a separate action
-              and needs the approve right.
-            </Alert>
-          )}
         </>
       )}
     </FormDialog>

@@ -70,6 +70,7 @@ export function SuppliersPage() {
       {
         id: "openingBalance",
         header: "Opening balance",
+        meta: { align: "right" },
         cell: ({ row }) =>
           row.original.openingBalance ? (
             // Right-aligned and tabular, so a column of amounts can be compared

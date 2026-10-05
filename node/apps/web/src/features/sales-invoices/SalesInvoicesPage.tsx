@@ -132,6 +132,7 @@ export function SalesInvoicesPage() {
       {
         id: "totalAmount",
         header: "Total",
+        meta: { align: "right" },
         cell: ({ row }) => (
           <div className="text-right">
             <div className="tabular font-medium text-slate-900">
@@ -167,7 +168,7 @@ export function SalesInvoicesPage() {
       {
         id: "subtotal",
         header: "Subtotal",
-        meta: { defaultHidden: true },
+        meta: { align: "right", defaultHidden: true },
         cell: ({ row }) =>
           row.original.subtotal ? (
             <span className="tabular block text-right text-slate-700">
@@ -180,7 +181,7 @@ export function SalesInvoicesPage() {
       {
         id: "totalDiscount",
         header: "Total discount",
-        meta: { defaultHidden: true },
+        meta: { align: "right", defaultHidden: true },
         cell: ({ row }) =>
           row.original.totalDiscount ? (
             <span className="tabular block text-right text-slate-700">
@@ -193,7 +194,7 @@ export function SalesInvoicesPage() {
       {
         id: "roundOff",
         header: "Round off",
-        meta: { defaultHidden: true },
+        meta: { align: "right", defaultHidden: true },
         cell: ({ row }) =>
           row.original.roundOff ? (
             <span className="tabular block text-right text-slate-700">
@@ -206,7 +207,7 @@ export function SalesInvoicesPage() {
       {
         id: "lineCount",
         header: "Lines",
-        meta: { defaultHidden: true },
+        meta: { align: "right", defaultHidden: true },
         cell: ({ row }) => (
           <span className="tabular block text-right text-slate-600">
             {row.original.lineCount}

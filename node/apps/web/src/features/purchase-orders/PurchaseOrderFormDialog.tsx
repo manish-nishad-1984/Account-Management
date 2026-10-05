@@ -426,7 +426,6 @@ export function PurchaseOrderFormDialog({
             />
             <TextField
               label="Buyer's purchase number"
-              hint="Your own reference, if there is one"
               error={errors.buyersPurchaseNo?.message}
               {...register("buyersPurchaseNo")}
             />
@@ -439,7 +438,6 @@ export function PurchaseOrderFormDialog({
               required
               placeholder={companies.isLoading ? "Loading companies…" : "Choose a company"}
               options={companyOptions}
-              hint="Decides the order number's prefix"
               error={errors.companyId?.message}
               {...register("companyId")}
             />
@@ -493,17 +491,17 @@ export function PurchaseOrderFormDialog({
             into half the dialog and cut off after the Unit column, and the
             button sits in the space where the price and GST boxes should be.
           */}
-          <FormSection icon={Boxes} title="Products" columns={1}>
+          <FormSection icon={Boxes} title="Products" columns={1} className="[&_input]:max-w-none! [&_select]:max-w-none! [&_textarea]:max-w-none!">
             <div className="relative overflow-x-auto">
               <table className="w-full min-w-[52rem] text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                     <th className="w-8 py-2 pr-2">#</th>
                     <th className="py-2 pr-2">Product</th>
-                    <th className="w-24 py-2 pr-2">Qty</th>
+                    <th className="w-24 py-2 pr-2 text-right">Qty</th>
                     <th className="w-28 py-2 pr-2">Unit</th>
-                    <th className="w-28 py-2 pr-2">Price</th>
-                    <th className="w-20 py-2 pr-2">GST %</th>
+                    <th className="w-28 py-2 pr-2 text-right">Price</th>
+                    <th className="w-20 py-2 pr-2 text-right">GST %</th>
                     <th className="w-28 py-2 pr-2 text-right">GST</th>
                     <th className="w-32 py-2 pr-2 text-right">Amount</th>
                     <th className="w-10 py-2" />
@@ -566,6 +564,7 @@ export function PurchaseOrderFormDialog({
                         <TextField
                           label={`Quantity on line ${index + 1}`}
                           labelHidden
+                          className="[&_input]:text-right"
                           inputMode="decimal"
                           error={errors.items?.[index]?.quantity?.message}
                           {...register(`items.${index}.quantity`)}
@@ -590,6 +589,7 @@ export function PurchaseOrderFormDialog({
                           <TextField
                             label={`Price on line ${index + 1}`}
                             labelHidden
+                            className="[&_input]:text-right"
                             inputMode="decimal"
                             error={errors.items?.[index]?.unitPrice?.message}
                             {...register(`items.${index}.unitPrice`)}
@@ -604,6 +604,7 @@ export function PurchaseOrderFormDialog({
                         <TextField
                           label={`GST percent on line ${index + 1}`}
                           labelHidden
+                          className="[&_input]:text-right"
                           inputMode="decimal"
                           error={errors.items?.[index]?.gstPercent?.message}
                           {...register(`items.${index}.gstPercent`)}
@@ -648,24 +649,6 @@ export function PurchaseOrderFormDialog({
                     </tr>
                   ))}
                 </tbody>
-                <tfoot>
-                  <tr className="text-sm">
-                    <td colSpan={2} className="py-3 text-slate-500">
-                      {fields.length} {fields.length === 1 ? "line" : "lines"}
-                    </td>
-                    <td className="tabular py-3 pr-2 text-slate-700">
-                      {formatQuantity(totals.totalQuantity)}
-                    </td>
-                    <td colSpan={3} />
-                    <td className="tabular py-3 pr-2 text-right text-slate-700">
-                      {formatMoney(totals.totalGst)}
-                    </td>
-                    <td className="tabular py-3 pr-2 text-right font-semibold text-slate-900">
-                      {formatMoney(totals.grandTotal)}
-                    </td>
-                    <td />
-                  </tr>
-                </tfoot>
               </table>
             </div>
 
@@ -691,10 +674,6 @@ export function PurchaseOrderFormDialog({
                   gstAmount: totals.lines[index]?.gstAmount ?? "0",
                 }))}
               />
-              <p className="text-xs leading-4 text-slate-500">
-                Calculated on the server when this is saved, using the same function shown here. The
-                old screen computed these in the browser and stored whatever was posted.
-              </p>
             </div>
           </FormSection>
 
@@ -710,7 +689,6 @@ export function PurchaseOrderFormDialog({
           <FormSection icon={Truck} title="Delivery and contacts" columns={3}>
             <CheckboxField
               label="Deliver immediately"
-              hint="The legacy form's Immediate option"
               error={errors.deliveryImmediate?.message}
               {...register("deliveryImmediate")}
             />
@@ -720,7 +698,7 @@ export function PurchaseOrderFormDialog({
               // Not disabled — a date typed and then switched to Immediate is
               // still worth keeping until the user says otherwise. The server
               // stores both and the two are independent by design.
-              hint={immediate ? "Ignored while Immediate is ticked" : "When it is needed"}
+              hint={immediate ? "Ignored while Immediate is ticked" : undefined}
               error={errors.deliveryDate?.message}
               {...register("deliveryDate")}
             />
@@ -807,7 +785,7 @@ export function PurchaseOrderFormDialog({
           </FormSection>
           </div>
 
-          <FormSection icon={ScrollText} title="Terms and conditions" columns={1}>
+          <FormSection icon={ScrollText} title="Terms and conditions" columns={1} className="[&_input]:max-w-none! [&_select]:max-w-none! [&_textarea]:max-w-none!">
             <TermsField
               value={terms}
               template={termsTemplate}
@@ -825,12 +803,6 @@ export function PurchaseOrderFormDialog({
             />
           </FormSection>
 
-          {!isEdit && (
-            <Alert tone="info">
-              A new order is created unapproved and active. Approving it is a separate action and
-              needs the approve right.
-            </Alert>
-          )}
         </>
       )}
     </FormDialog>

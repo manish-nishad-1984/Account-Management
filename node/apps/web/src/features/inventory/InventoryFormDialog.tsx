@@ -7,7 +7,7 @@ import {
   createInventoryInwardSchema,
   type InventoryInwardDetail,
 } from "@accountmanagement/contracts";
-import { Alert, FormDialog, FormSection, SelectField, TextAreaField, TextField } from "../../components/ui";
+import { FormDialog, FormSection, SelectField, TextAreaField, TextField } from "../../components/ui";
 import { applyServerErrors, unshownValidationMessage } from "../../lib/crud";
 import { text } from "../../lib/form-values";
 import { useAllUnits } from "../items/api";
@@ -127,7 +127,7 @@ export function InventoryFormDialog({
         <p className="py-8 text-center text-sm text-slate-500">Loading arrival…</p>
       ) : (
         <>
-          <FormSection icon={PackageCheck} title="What arrived" columns={2}>
+          <FormSection icon={PackageCheck} title="What arrived" columns={3}>
             {/*
               NO `allowFreeText`. An arrival must name a catalogue item — there
               is nowhere on this document for a typed name to go — so the picker
@@ -150,7 +150,6 @@ export function InventoryFormDialog({
               label="Quantity"
               required
               inputMode="decimal"
-              hint="At most 2 decimal places"
               error={errors.quantity?.message}
               {...register("quantity")}
             />
@@ -166,29 +165,18 @@ export function InventoryFormDialog({
             <TextField
               label="Date"
               type="date"
-              hint="The date it arrived"
               error={errors.documentDate?.message}
               {...register("documentDate")}
             />
 
             <TextAreaField
               label="Details"
-              className="sm:col-span-2"
-              rows={3}
-              // "TO RAJAOUL" in the captured row is a destination, not a
-              // description. The hint stays open about what belongs here.
-              hint="Free text — whatever needs noting about this arrival"
+              rows={1}
               error={errors.details?.message}
               {...register("details")}
             />
           </FormSection>
 
-          {!isEdit && (
-            <Alert tone="info">
-              A new arrival is recorded unapproved. Approving it is a separate action and
-              needs the approve right. The old screen approved every arrival on save.
-            </Alert>
-          )}
         </>
       )}
     </FormDialog>

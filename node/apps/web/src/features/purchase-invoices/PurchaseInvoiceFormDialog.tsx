@@ -11,7 +11,6 @@ import {
 } from "@accountmanagement/contracts";
 import { invoiceTotal } from "@accountmanagement/domain";
 import {
-  Alert,
   Button,
   FormDialog,
   FormSection,
@@ -531,7 +530,7 @@ export function PurchaseInvoiceFormDialog({
             without it the grid is squeezed into half the dialog and the
             Add-product button sits beside it instead of below.
           */}
-          <FormSection icon={Boxes} title="Products" columns={1}>
+          <FormSection icon={Boxes} title="Products" columns={1} className="[&_input]:max-w-none! [&_select]:max-w-none! [&_textarea]:max-w-none!">
             <InvoiceLineGrid
               fields={fields}
               lines={lines}
@@ -691,13 +690,6 @@ export function PurchaseInvoiceFormDialog({
             />
           </FormSection>
           </div>
-
-          {!isEdit && (
-            <Alert tone="info">
-              A new invoice is created unapproved. Approving it is a separate action and needs the
-              approve right.
-            </Alert>
-          )}
         </>
       )}
     </FormDialog>

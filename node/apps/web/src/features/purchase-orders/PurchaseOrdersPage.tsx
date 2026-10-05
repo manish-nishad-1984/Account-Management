@@ -118,6 +118,7 @@ export function PurchaseOrdersPage() {
       {
         id: "lineCount",
         header: "Lines",
+        meta: { align: "right" },
         cell: ({ row }) => (
           <span className="tabular block text-right text-slate-600">
             {row.original.lineCount}
@@ -127,6 +128,7 @@ export function PurchaseOrdersPage() {
       {
         id: "totalAmount",
         header: "Total",
+        meta: { align: "right" },
         cell: ({ row }) => (
           <div className="text-right">
             {/*
@@ -159,7 +161,7 @@ export function PurchaseOrdersPage() {
       {
         id: "subtotal",
         header: "Subtotal",
-        meta: { defaultHidden: true },
+        meta: { align: "right", defaultHidden: true },
         cell: ({ row }) =>
           row.original.subtotal ? (
             <span className="tabular block text-right text-slate-700">

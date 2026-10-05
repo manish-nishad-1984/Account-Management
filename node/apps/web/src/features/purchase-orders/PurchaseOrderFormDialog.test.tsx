@@ -181,8 +181,6 @@ const line = (index: number) =>
   // body and the footer are all rowgroups. Address the sections by tag.
   within(grid().querySelector("tbody")!).getAllByRole("row")[index]!;
 
-const footer = () => within(grid().querySelector("tfoot")!);
-
 describe("PurchaseOrderFormDialog", () => {
   beforeEach(() => {
     vi.spyOn(globalThis, "fetch");
@@ -258,10 +256,8 @@ describe("PurchaseOrderFormDialog", () => {
       expect(within(line(0)).getByText("540.00")).toBeInTheDocument();
     });
     expect(within(line(0)).getByText("3,540.00")).toBeInTheDocument();
-
-    // ...and the footer rolls the same line up.
-    expect(footer().getByText("540.00")).toBeInTheDocument();
-    expect(footer().getByText("3,540.00")).toBeInTheDocument();
+    // The roll-up is the strip under the lines, pinned by the next test; the table
+    // footer that repeated it was dropped (client request, 5 Oct 2026).
   });
 
   it("rolls the lines up into the totals panel", async () => {

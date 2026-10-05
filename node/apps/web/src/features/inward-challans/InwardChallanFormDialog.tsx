@@ -255,8 +255,6 @@ export function InwardChallanFormDialog({
               <QueuedAttachments files={queued} onChange={setQueued} />
             )}
           </FormSection>
-
-          {!isEdit && <Alert tone="info">A new challan is recorded unapproved.</Alert>}
         </>
       )}
     </FormDialog>

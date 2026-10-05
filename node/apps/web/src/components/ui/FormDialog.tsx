@@ -37,6 +37,7 @@ export function FormDialog({
   submitLabel = "Save",
   size = "lg",
   footerStart,
+  readOnly = false,
   children,
 }: {
   open: boolean;
@@ -50,6 +51,13 @@ export function FormDialog({
   size?: "sm" | "md" | "lg" | "xl";
   /** Actions on the record itself, at the footer's left, apart from Cancel and Save. */
   footerStart?: ReactNode;
+  /**
+   * A record someone may open but not change (a payout list for a view-only
+   * user). The fields are disabled by a native `<fieldset>`, which reaches every
+   * control inside without each screen threading a flag, and Save goes: a button
+   * that can only be refused by the server is worse than none.
+   */
+  readOnly?: boolean;
   children: ReactNode;
 }) {
   const formId = "form-dialog";
@@ -96,7 +104,13 @@ export function FormDialog({
       className="space-y-4"
     >
       {formError && <Alert tone="danger">{formError}</Alert>}
-      {children}
+      {readOnly ? (
+        <fieldset disabled className="contents">
+          {children}
+        </fieldset>
+      ) : (
+        children
+      )}
     </form>
   );
 
@@ -104,11 +118,13 @@ export function FormDialog({
     <>
       {footerStart && <div className="mr-auto flex items-center gap-2">{footerStart}</div>}
       <Button variant="secondary" type="button" onClick={onClose} disabled={pending}>
-        Cancel
+        {readOnly ? "Close" : "Cancel"}
       </Button>
-      <Button type="submit" form={formId} loading={pending}>
-        {submitLabel}
-      </Button>
+      {!readOnly && (
+        <Button type="submit" form={formId} loading={pending}>
+          {submitLabel}
+        </Button>
+      )}
     </>
   );
 

@@ -74,6 +74,7 @@ export function TermsField({
     <>
       <RichTextField
         label="Terms and conditions"
+        labelHidden
         value={value}
         onChange={(terms) => {
           /**
@@ -90,6 +91,7 @@ export function TermsField({
         }}
         error={error}
         placeholder="Type the terms, or load one of the templates"
+        rows={5}
         toolbarExtra={
           <div className="flex items-center gap-0.5">
             {TERMS_TEMPLATES.map((entry) => (

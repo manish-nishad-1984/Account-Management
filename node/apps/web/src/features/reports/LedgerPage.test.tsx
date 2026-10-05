@@ -255,14 +255,18 @@ describe("the ledger screen", () => {
   });
 
   describe("the ledger alone (client request, 1 Oct 2026)", () => {
-    it("has one tab, Ledger, and no balance summary — nor asks for one", async () => {
+    /**
+     * It had a tab of its own, "Ledger", standing in for the page's title. The
+     * section tabs above now name the page, so a second one said it twice
+     * (client request, 5 Oct 2026); only the Purchases / Sales switch is kept.
+     */
+    it("has no tab of its own, and no balance summary — nor asks for one", async () => {
       withReports(ledgerResponse([ledgerRow()]));
       renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
       await search();
 
-      const tabs = await screen.findAllByRole("tab");
-      expect(tabs.map((tab) => tab.textContent)).toEqual(["Ledger"]);
-      expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+      expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Purchases" })).toHaveAttribute("aria-pressed", "true");
       expect(await screen.findByRole("table", { name: "Ledger" })).toBeInTheDocument();
       expect(screen.queryByText(/Balance summary/)).not.toBeInTheDocument();
       expect(balanceRequests()).toBe(0);

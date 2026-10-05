@@ -1,6 +1,8 @@
-import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import clsx from "clsx";
 import { Button } from "../../components/ui";
+import { SECTION_TAB_ACTIONS_ID } from "../../components/section-tab-slot";
 import { useFitHeight } from "../../lib/use-fit-height";
 
 /**
@@ -57,6 +59,7 @@ export function ReportGrid<T>({
   rowKey,
   footerLabel,
   minWidth = "56rem",
+  maxWidth,
   fit = false,
 }: {
   /** The table's accessible name. */
@@ -67,6 +70,12 @@ export function ReportGrid<T>({
   /** Spans the columns before the first one with a footer. */
   footerLabel?: ReactNode;
   minWidth?: string;
+  /**
+   * Stops a grid of a few columns stretching across a wide window, which put
+   * a supplier's name a thousand pixels from its figure. Left unset, the grid
+   * fills its row, as the wide ones need.
+   */
+  maxWidth?: string;
   /** Fill the height left on the page, so the page itself never scrolls. */
   fit?: boolean;
 }) {
@@ -81,7 +90,7 @@ export function ReportGrid<T>({
         "scroll-subtle overflow-auto rounded-lg border border-slate-300 bg-white",
         !fit && "max-h-[70vh]",
       )}
-      style={fit ? { maxHeight: fitted.height } : undefined}
+      style={{ ...(fit ? { maxHeight: fitted.height } : null), ...(maxWidth ? { maxWidth } : null) }}
     >
       <table aria-label={label} className="w-full border-separate border-spacing-0 text-[13px]" style={{ minWidth }}>
         <colgroup>
@@ -96,7 +105,7 @@ export function ReportGrid<T>({
                 key={column.key}
                 scope="col"
                 className={clsx(
-                  "sticky top-0 z-10 border-b border-slate-300 bg-slate-100 px-2.5 py-2 text-xs font-semibold text-slate-700",
+                  "sticky top-0 z-10 border-b border-slate-300 bg-surface-muted px-2.5 py-2 text-xs font-semibold uppercase tracking-[0.05em] text-slate-500",
                   index < columns.length - 1 && "border-r",
                   column.numeric ? "text-right" : "text-left",
                   (column.numeric || column.nowrap) && "whitespace-nowrap",
@@ -110,21 +119,28 @@ export function ReportGrid<T>({
         <tbody>
           {rows.map((row) => (
             <tr key={rowKey(row)} className="align-top hover:[&>td]:bg-slate-900/[0.06]">
-              {columns.map((column, index) => (
-                <td
-                  key={column.key}
-                  className={clsx(
-                    "border-b border-slate-200 px-2.5 py-1.5",
-                    index < columns.length - 1 && "border-r",
-                    column.numeric
-                      ? "tabular whitespace-nowrap text-right"
-                      : clsx("text-slate-700", column.nowrap ? "whitespace-nowrap" : "break-words"),
-                    column.className?.(row),
-                  )}
-                >
-                  {column.cell(row)}
-                </td>
-              ))}
+              {columns.map((column, index) => {
+                const content = column.cell(row);
+                // A zero is the absence of a figure: dimmed, so the amounts that
+                // are there stand out. Only an exact 0 / 0.00 - never a sign.
+                const zero = column.numeric && typeof content === "string" && /^0(.0+)?$/.test(content.trim());
+                return (
+                  <td
+                    key={column.key}
+                    className={clsx(
+                      "border-b border-slate-200 px-2.5 py-1.5",
+                      index < columns.length - 1 && "border-r",
+                      column.numeric
+                        ? "tabular whitespace-nowrap text-right"
+                        : clsx("text-slate-700", column.nowrap ? "whitespace-nowrap" : "break-words"),
+                      column.className?.(row),
+                      zero && "text-slate-300!",
+                    )}
+                  >
+                    {content}
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>
@@ -276,6 +292,19 @@ export function ReportTabs({
     buttons.current[next]?.focus();
   };
 
+  // A LONE TAB IS NO TAB (client request, 5 Oct 2026). It stood in for the page's
+  // title while the rail listed every screen; now the section tabs above name the
+  // page, so it said "Pending Outstanding" twice, one under the other. Only its
+  // controls are kept, and they move up into the section tabs' row.
+  if (order.length === 1) {
+    return (
+      <>
+        <TabRowActions>{actions}</TabRowActions>
+        {panel(value, ids(value))}
+      </>
+    );
+  }
+
   return (
     <>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-x-3 gap-y-2 border-b border-slate-200">
@@ -313,5 +342,54 @@ export function ReportTabs({
         {panel(value, ids(value))}
       </div>
     </>
+  );
+}
+
+/**
+ * Puts a page's own controls at the right end of the section tabs' row.
+ *
+ * Without that row - a page opened on its own, a test, a section of one screen -
+ * they fall back to a line of their own, right-aligned, so they are never lost.
+ * `undefined` until the shell's slot has been looked for, so nothing flashes in
+ * the wrong place first.
+ */
+function TabRowActions({ children }: { children?: ReactNode }) {
+  const [slot, setSlot] = useState<HTMLElement | null | undefined>(undefined);
+  useLayoutEffect(() => {
+    setSlot(document.getElementById(SECTION_TAB_ACTIONS_ID));
+  }, []);
+  if (!children || slot === undefined) return null;
+  return slot ? (
+    createPortal(children, slot)
+  ) : (
+    <div className="mb-3 flex flex-wrap items-center justify-end gap-2">{children}</div>
+  );
+}
+
+/** Purchases | Sales, the switch every report that has both carries. */
+export function DirectionSwitch({
+  value,
+  onChange,
+}: {
+  value: "out" | "in";
+  onChange: (next: "out" | "in") => void;
+}) {
+  return (
+    <div className="flex rounded-md ring-1 ring-inset ring-slate-300">
+      {(["out", "in"] as const).map((option) => (
+        <button
+          key={option}
+          type="button"
+          aria-pressed={value === option}
+          onClick={() => onChange(option)}
+          className={clsx(
+            "h-8 px-3 text-sm font-medium first:rounded-l-md last:rounded-r-md",
+            value === option ? "bg-brand-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50",
+          )}
+        >
+          {option === "out" ? "Purchases" : "Sales"}
+        </button>
+      ))}
+    </div>
   );
 }

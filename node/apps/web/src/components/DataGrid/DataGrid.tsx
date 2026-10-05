@@ -397,13 +397,17 @@ export function DataGrid<T>({
                   const sortable = sortableFields.includes(field);
                   const active = sortBy === field;
                   const label = flexRender(header.column.columnDef.header, header.getContext());
+                  // A column of figures says so in its `meta`, and its heading then sits
+                  // over the figures instead of at the far edge from them.
+                  const alignRight = (header.column.columnDef.meta as { align?: "right" } | undefined)?.align === "right";
 
                   return (
                     <th
                       key={header.id}
                       scope="col"
                       className={clsx(
-                        "whitespace-nowrap px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-[0.05em] text-slate-500",
+                        "whitespace-nowrap px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.05em] text-slate-500",
+                        alignRight ? "text-right" : "text-left",
                         // Pinned to the top; the actions header is pinned right as well, above both.
                         "sticky top-0 bg-surface-muted shadow-[inset_0_-1px_0_var(--color-slate-200)]",
                         field === stickyColumnId ? stickyCell(true, "bg-surface-muted", "z-30") : "z-20",
@@ -498,7 +502,7 @@ export function DataGrid<T>({
                     className={clsx(
                       "group transition-colors",
                       onRowClick && "cursor-pointer focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-brand-500",
-                      selected ? "bg-brand-50 hover:bg-brand-50" : "hover:bg-slate-50",
+                      selected ? "bg-brand-50 hover:bg-brand-50" : "hover:bg-slate-100",
                     )}
                   >
                     {row.getVisibleCells().map((cell) => (
@@ -510,7 +514,7 @@ export function DataGrid<T>({
                             cell.column.id === stickyColumnId,
                             selected
                               ? "bg-brand-50"
-                              : "bg-white group-hover:bg-slate-50",
+                              : "bg-white group-hover:bg-slate-100",
                           ),
                         )}
                       >
