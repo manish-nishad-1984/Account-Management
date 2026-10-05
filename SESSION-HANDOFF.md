@@ -3,7 +3,7 @@
 **Written:** 2 September 2026, after the unblocking session. **Last extended
 5 October 2026** (§5aa). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
+> **This file is current as of `9765ece9`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
@@ -277,7 +277,7 @@ be a lie that looks precise. **Push state:** at the start of the 5 Oct session
 - `6d3a9e98` adds the Agency Master (§5z). **Carries migration
   `0021_agencies`**, applied on live: four new tables, 19 seeded work types,
   form row 101 "Agency" granted to every Supplier editor.
-- `<COMMIT>`, 5 Oct 2026, moves the legacy .NET solution out of the tree (§5aa).
+- `9765ece9`, 5 Oct 2026, moves the legacy .NET solution out of the tree (§5aa).
   **No migration, no code under `node/`.**
 - The tree is clean after that commit; see the push note above for `origin/main`.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
@@ -4496,7 +4496,7 @@ a single full run hit the 10-minute background limit with nothing failing.
 
 ## 5aa. The legacy .NET solution moved out of the repository (5 Oct 2026)
 
-Commit `<COMMIT>`. **No code under `node/` changed, no migration, nothing to
+Commit `9765ece9`. **No code under `node/` changed, no migration, nothing to
 deploy.** The live release is still `20261002-142735`.
 
 The user asked for the reference project to be moved out so that what is left
