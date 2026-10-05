@@ -97,7 +97,6 @@ export function PendingLedgerPage() {
         panel={() => (
           <>
             <ReportFilters
-              maxWidth="64rem"
               idPrefix="summary"
               label="Pending outstanding filters"
               value={draft}
@@ -136,7 +135,6 @@ export function PendingLedgerPage() {
                   rowKey={(row) => row.id}
                   footerLabel="Total"
                   minWidth="36rem"
-                  maxWidth="64rem"
                   fit
                 />
                 <ReportPager

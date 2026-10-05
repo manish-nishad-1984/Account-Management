@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
 import { Button } from "../../components/ui";
@@ -80,6 +80,36 @@ export function ReportGrid<T>({
   fit?: boolean;
 }) {
   const fitted = useFitHeight(fit);
+  const headers = useRef<Array<HTMLTableCellElement | null>>([]);
+  // Column widths in px, once somebody drags one. Until then the browser lays the grid out.
+  const [sizes, setSizes] = useState<number[] | null>(null);
+
+  /**
+   * DRAG A COLUMN'S RIGHT EDGE TO RESIZE IT (client request, 5 Oct 2026); a double
+   * click on the edge puts the grid back as it was.
+   *
+   * The first drag freezes every column at the width it has on screen and
+   * switches to a fixed layout, so only the dragged column moves. A grid made
+   * wider than its box scrolls sideways rather than squeezing the others.
+   */
+  const startResize = (index: number) => (event: PointerEvent<HTMLElement>) => {
+    event.preventDefault();
+    const frozen = sizes ?? headers.current.map((th) => th?.getBoundingClientRect().width ?? 80);
+    const startX = event.clientX;
+    const startWidth = frozen[index] ?? 80;
+    setSizes(frozen);
+    const move = (e: globalThis.PointerEvent) => {
+      const next = [...frozen];
+      next[index] = Math.max(48, startWidth + e.clientX - startX);
+      setSizes(next);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
   const firstFooter = columns.findIndex((column) => column.footer !== undefined);
   const hasFooter = firstFooter !== -1;
 
@@ -92,10 +122,13 @@ export function ReportGrid<T>({
       )}
       style={{ ...(fit ? { maxHeight: fitted.height } : null), ...(maxWidth ? { maxWidth } : null) }}
     >
-      <table aria-label={label} className="w-full border-separate border-spacing-0 text-[13px]" style={{ minWidth }}>
+      <table aria-label={label} className="w-full border-separate border-spacing-0 text-[13px]" style={sizes ? { tableLayout: "fixed", width: `max(100%, ${sizes.reduce((a, b) => a + b, 0)}px)` } : { minWidth }}>
         <colgroup>
-          {columns.map((column) => (
-            <col key={column.key} style={{ width: column.width ?? (column.numeric ? AMOUNT_WIDTH : undefined) }} />
+          {columns.map((column, index) => (
+            <col
+              key={column.key}
+              style={{ width: sizes ? `${sizes[index]}px` : (column.width ?? (column.numeric ? AMOUNT_WIDTH : undefined)) }}
+            />
           ))}
         </colgroup>
         <thead>
@@ -103,6 +136,9 @@ export function ReportGrid<T>({
             {columns.map((column, index) => (
               <th
                 key={column.key}
+                ref={(element) => {
+                  headers.current[index] = element;
+                }}
                 scope="col"
                 className={clsx(
                   "sticky top-0 z-10 border-b border-slate-300 bg-surface-muted px-2.5 py-2 text-xs font-semibold uppercase tracking-[0.05em] text-slate-500",
@@ -112,6 +148,15 @@ export function ReportGrid<T>({
                 )}
               >
                 {column.header}
+                <span
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label={`Resize ${typeof column.header === "string" ? column.header : column.key}`}
+                  title="Drag to resize, double-click to reset"
+                  onPointerDown={startResize(index)}
+                  onDoubleClick={() => setSizes(null)}
+                  className="absolute -right-1 top-0 z-20 h-full w-2 cursor-col-resize touch-none hover:bg-brand-500/30"
+                />
               </th>
             ))}
           </tr>
