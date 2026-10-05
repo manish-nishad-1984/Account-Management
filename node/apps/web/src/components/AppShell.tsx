@@ -1,27 +1,26 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { useMemo, useState, type ReactNode } from "react";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import clsx from "clsx";
 import {
   CalendarDays,
   ChevronRight,
   LogOut,
   Menu,
-  PanelLeftClose,
-  PanelLeftOpen,
+  Settings,
   X,
 } from "lucide-react";
 import { financialYear } from "@accountmanagement/domain";
 import { hasPermission } from "@accountmanagement/contracts";
 import { useAuth } from "../contexts/AuthContext";
-import { NAV } from "../navigation/nav";
+import { NAV, SETTINGS_SECTION } from "../navigation/nav";
+import { SECTION_TAB_ACTIONS_ID } from "./section-tab-slot";
 import { IconButton, Tooltip } from "./ui/icon-button";
 import { SiteScopePicker } from "./SiteScopePicker";
 import { RecordLayoutPicker } from "./RecordLayoutPicker";
 import { useRecordLayout } from "../contexts/RecordLayoutContext";
 
 /**
- * Account Book shell: a light module rail that collapses to icons, a slim top
- * bar, and the routed page on a soft neutral ground.
+ * Account Book shell: a narrow module rail, a slim top bar, and the routed page on a soft neutral ground.
  *
  * THE RAIL IS LIGHT, and that is the largest single change of the redesign. It
  * was a near-black navy column, which is a fine look and the wrong one here: it
@@ -35,24 +34,97 @@ import { useRecordLayout } from "../contexts/RecordLayoutContext";
  * doubles as a readable record of migration progress rather than hiding work.
  */
 
-const collapseKey = (userId: string | null) =>
-  `accountbook.sidebarCollapsed.${userId ?? "anonymous"}`;
+/**
+ * Sections that hold exactly one screen in `NAV` itself. The rail names such a
+ * row after the screen ("Dashboard"), not the section ("Overview"). Worked out
+ * from `NAV`, not from what a user may see, so a row does not rename itself
+ * just because someone holds one of the rights in it.
+ */
+const SINGLE_SCREEN_SECTIONS = new Set(
+  NAV.filter((section) => section.items.length === 1).map((section) => section.title),
+);
 
-/** Storage can throw - a private window, or a browser set to block site data. */
-function readCollapsed(userId: string | null): boolean {
-  try {
-    return window.localStorage.getItem(collapseKey(userId)) === "true";
-  } catch {
-    return false;
+type Section = (typeof NAV)[number];
+
+const sectionLabel = (section: Section) =>
+  SINGLE_SCREEN_SECTIONS.has(section.title) ? section.items[0]!.label : section.title;
+
+/**
+ * The section a route belongs to: an exact match, or a child of a screen's path
+ * (`/purchase-orders/abc` is Purchase Orders). The Dashboard is `/`, which is a
+ * prefix of everything, so it only ever matches exactly.
+ */
+function findSection<T extends Section>(sections: T[], pathname: string): T | undefined {
+  let best: { section: T; length: number } | undefined;
+  for (const section of sections) {
+    for (const item of section.items) {
+      const hit =
+        item.to === pathname || (item.to !== "/" && pathname.startsWith(`${item.to}/`));
+      if (hit && (!best || item.to.length > best.length)) {
+        best = { section, length: item.to.length };
+      }
+    }
   }
+  return best?.section;
 }
 
-function writeCollapsed(userId: string | null, collapsed: boolean): void {
-  try {
-    window.localStorage.setItem(collapseKey(userId), String(collapsed));
-  } catch {
-    // A preference that cannot be remembered is not a reason to fail a render.
-  }
+/**
+ * THE OTHER SCREENS OF THIS SECTION, as tabs across the top of the page.
+ *
+ * What the rail no longer lists. Shown only when the section has two or more
+ * screens the user may open, since a lone tab would just repeat the breadcrumb.
+ */
+function SectionTabs({ section }: { section: Section | undefined }) {
+  if (!section || section.items.length < 2) return null;
+
+  /*
+    SEGMENTED PILLS WITH THE SCREEN'S OWN ICON (client request, 5 Oct 2026:
+    "make the tabs look better"). The active tab is a raised white pill on a
+    grey track, which reads as selected from across the room where a 2px
+    underline did not; the icon is the one the screen already has in the
+    navigation, so a tab is recognised before it is read.
+
+    `overflow-y-hidden` IS NOT OPTIONAL. `overflow-x-auto` makes the other axis
+    `auto` too, and the old underline tabs hung 1px below the bar (`-mb-px`), so
+    the browser drew a tiny vertical scrollbar at the right-hand end of the row -
+    two scrollbars on a screen that was fitted to have one.
+  */
+  return (
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+    <nav aria-label={`${section.title} screens`} className="max-w-full overflow-x-auto overflow-y-hidden">
+      <ul className="inline-flex min-w-max gap-0.5 rounded-lg bg-slate-200/70 p-0.5">
+        {section.items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <li key={item.to}>
+              <NavLink
+                to={item.to}
+                end
+                className={({ isActive }) =>
+                  clsx(
+                    "flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors duration-150",
+                    "focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-500",
+                    isActive
+                      ? "bg-white text-brand-700 shadow-sm ring-1 ring-slate-300/70"
+                      : "text-slate-600 hover:bg-white/60 hover:text-slate-900",
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon aria-hidden className={clsx("size-4 shrink-0", isActive ? "text-brand-600" : "text-slate-400")} />
+                    {item.label}
+                  </>
+                )}
+              </NavLink>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+    <div id={SECTION_TAB_ACTIONS_ID} className="flex flex-wrap items-center gap-2" />
+    </div>
+  );
 }
 
 /**
@@ -105,30 +177,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { paneOpen, pageOpen, setPageHost } = useRecordLayout();
 
-  /**
-   * COLLAPSING IS A DESKTOP IDEA, and every class that acts on it is an `lg:`
-   * one.
-   *
-   * On a phone the rail is already off-canvas, and full width when open, so a
-   * "collapsed" drawer would be a 64px column of icons laid over the page -
-   * strictly worse than the drawer, and reachable only by someone who collapsed
-   * it at a desk and then picked up their phone. The stored preference is
-   * carried on both; only the wide layout acts on it.
-   *
-   * It is kept per person, in local storage rather than on the server, because
-   * it describes this screen rather than this user: the same person wants the
-   * rail open on a laptop and out of the way on a 13-inch display, and a
-   * server-side preference would follow them between the two.
-   */
-  const [collapsed, setCollapsed] = useState(() => readCollapsed(user?.id ?? null));
-
-  const toggleCollapsed = useCallback(() => {
-    setCollapsed((current) => {
-      writeCollapsed(user?.id ?? null, !current);
-      return !current;
-    });
-  }, [user?.id]);
-
   const initials = (user?.userName ?? "?").slice(0, 2).toUpperCase();
   const fy = financialYear.format(financialYear.currentAsProduced(new Date()));
 
@@ -149,7 +197,7 @@ export function AppShell({ children }: { children: ReactNode }) {
    * A section whose every item is hidden hides its heading too - otherwise the
    * rail grows an empty "REPORTS" label with nothing under it.
    */
-  const nav = useMemo(() => {
+  const allowed = useMemo(() => {
     const granted = user?.permissions ?? [];
     return NAV.map((section) => ({
       ...section,
@@ -158,6 +206,20 @@ export function AppShell({ children }: { children: ReactNode }) {
       ),
     })).filter((section) => section.items.length > 0);
   }, [user?.permissions]);
+
+  // Settings are the gear in the top bar, not a section of the rail.
+  const nav = useMemo(
+    () => allowed.filter((section) => section.title !== SETTINGS_SECTION),
+    [allowed],
+  );
+  const settingsItems = useMemo(
+    () => allowed.find((section) => section.title === SETTINGS_SECTION)?.items ?? [],
+    [allowed],
+  );
+
+  const { pathname } = useLocation();
+  /** The section the route is in, for the lit rail row and the tabs. */
+  const currentSection = findSection(nav, pathname);
 
   return (
     <div className="flex h-full bg-app">
@@ -170,81 +232,35 @@ export function AppShell({ children }: { children: ReactNode }) {
       )}
 
       {/*
-        232px expanded, 64px collapsed. The rail carries five section headings
-        and seventeen destinations; at the 256px this was, the longest label
-        ("Ledger & Balances") still had 70px of air to its right on every screen.
+        A NARROW RAIL, ALWAYS - the Keshav app's layout, at the client's request
+        (5 Oct 2026): 88px wide on a desktop, each section an icon over a short
+        label, and nothing to open or close. It had a collapse control and two
+        widths; with one row per section the long form has nothing left to
+        show, and the control was the part the client did not want to need.
+
+        Below `lg` it is the phone drawer: 232px, off-canvas, rows laid out
+        icon-then-label the way a menu reads on a small screen.
       */}
       <aside
         id="app-sidebar"
         className={clsx(
           "fixed inset-y-0 left-0 z-40 flex w-[232px] shrink-0 flex-col",
           "border-r border-slate-200 bg-white",
-          "transition-[transform,width] duration-200 ease-out",
-          "lg:static lg:translate-x-0",
+          "transition-transform duration-200 ease-out",
+          "lg:static lg:w-[5.5rem] lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
-          collapsed && "lg:w-16",
         )}
       >
-        {/*
-          THE COLLAPSE CONTROL LIVES HERE, in the brand block, at the client's
-          request (16 Sep 2026). It was in the top bar, one breakpoint away from
-          the hamburger, so that the same corner worked the navigation at every
-          width. On the rail it is on the thing it collapses, which is the more
-          obvious place to reach for - and it frees the top-left corner of the
-          bar for the breadcrumb that moved there on the same day.
-
-          COLLAPSED, THE BRAND MARK STANDS DOWN FOR IT. 64px holds one 32px
-          square and no more, and a rail that cannot be reopened from its own
-          header is worse than one with no logo in it. Little is lost: expanded
-          is the default state, and the mark is the first thing in it.
-        */}
-        <div
-          className={clsx(
-            "flex h-14 shrink-0 items-center gap-2.5 border-b border-slate-200 px-3",
-            collapsed && "lg:justify-center lg:gap-0 lg:px-0",
-          )}
-        >
-          <div
-            className={clsx(
-              "flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-xs font-bold text-white",
-              collapsed && "lg:hidden",
-            )}
-          >
+        <div className="flex h-11 shrink-0 items-center gap-2.5 border-b border-slate-200 px-3 lg:justify-center lg:px-0">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-xs font-bold text-white">
             AB
           </div>
-          <div className={clsx("min-w-0 leading-tight", collapsed && "lg:hidden")}>
+          <div className="min-w-0 leading-tight lg:hidden">
             <div className="truncate text-sm font-semibold text-slate-900">Account Book</div>
             <div className="truncate text-xs text-slate-500">D H Infra</div>
           </div>
 
-          {/*
-            Desktop only, and deliberately: on a phone the rail is off-canvas and
-            full width, so a collapsed 64px column laid over the page would be
-            strictly worse than the drawer. The X beside this is the phone's
-            answer, and the two never show at the same time.
-          */}
-          <Tooltip label={collapsed ? "Expand navigation" : "Collapse navigation"}>
-            <button
-              onClick={toggleCollapsed}
-              aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-              aria-expanded={!collapsed}
-              aria-controls="app-sidebar"
-              className={clsx(
-                "hidden size-8 shrink-0 items-center justify-center rounded-lg",
-                "text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900",
-                "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500",
-                "lg:inline-flex",
-                !collapsed && "ml-auto",
-              )}
-            >
-              {collapsed ? (
-                <PanelLeftOpen aria-hidden className="size-4" />
-              ) : (
-                <PanelLeftClose aria-hidden className="size-4" />
-              )}
-            </button>
-          </Tooltip>
-
+          {/* A phone's way out of the drawer. A desktop has no drawer. */}
           <button
             onClick={() => setSidebarOpen(false)}
             aria-label="Close navigation"
@@ -259,134 +275,61 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
 
-        <nav
-          className={clsx(
-            "scroll-subtle flex-1 overflow-y-auto px-2.5 py-3",
-            collapsed && "lg:px-2",
-          )}
-          aria-label="Main"
-        >
-          {nav.map((section, sectionIndex) => (
-            <div key={section.title} className="mb-4 last:mb-1">
-              {/*
-                Collapsed, the heading has nowhere to go: "MASTERS" does not fit
-                in 64px, and truncating it to "MAS..." says less than nothing. A
-                hairline keeps the grouping visible instead. It is skipped above
-                the first section, where the brand block's own border already
-                draws that line.
-              */}
-              {collapsed && sectionIndex > 0 && (
-                <div aria-hidden className="mx-2 mb-2.5 hidden h-px bg-slate-200 lg:block" />
-              )}
-              <div
-                className={clsx(
-                  "mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400",
-                  collapsed && "lg:hidden",
-                )}
-              >
-                {section.title}
-              </div>
-              <ul className="space-y-0.5">
-                {section.items.map((item) => {
-                  const Icon = item.icon;
-                  const planned = item.status === "planned";
-                  return (
-                    <li key={item.to}>
-                      <NavLink
-                        to={item.to}
-                        end={item.to === "/"}
-                        onClick={() => setSidebarOpen(false)}
-                        /*
-                         * The label is hidden with `lg:hidden` rather than dropped
-                         * from the tree, so the drawer on a phone still reads
-                         * normally. Hidden text carries no accessible name, though,
-                         * so the collapsed rail names each link itself - and says
-                         * out loud which screens are not built yet, since those
-                         * lose their "soon" badge to the narrower column.
-                         */
-                        aria-label={collapsed ? item.label : undefined}
-                        title={
-                          collapsed
-                            ? planned
-                              ? `${item.label} - not migrated yet`
-                              : item.label
-                            : undefined
-                        }
-                        className={({ isActive }) =>
-                          clsx(
-                            // 36px rows. Seventeen of them plus five headings is
-                            // 780px, which fits a 13-inch laptop without the rail
-                            // scrolling - the thing that made the old 40px rows
-                            // worth changing.
-                            "group flex h-9 items-center gap-2.5 rounded-lg px-2.5",
-                            "text-sm transition-colors duration-150",
-                            collapsed && "lg:justify-center lg:px-0",
-                            isActive
-                              ? "bg-brand-50 font-medium text-brand-700"
-                              : planned
-                                ? "text-slate-400 hover:bg-slate-50 hover:text-slate-600"
-                                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-                          )
-                        }
-                      >
-                        {({ isActive }) => (
-                          <>
-                            {/*
-                              SKY WHEN SELECTED, neutral dark grey otherwise. The
-                              pale fill alone is a weak signal at a glance down a
-                              17-row list; the fill plus a coloured mark is not,
-                              and neither is a coloured block.
-                            */}
-                            <Icon
-                              aria-hidden
-                              className={clsx(
-                                "size-4 shrink-0 transition-colors",
-                                isActive
-                                  ? "text-brand-600"
-                                  : planned
-                                    ? "text-slate-300"
-                                    : "text-slate-500 group-hover:text-slate-700",
-                              )}
-                            />
-                            <span className={clsx("truncate", collapsed && "lg:hidden")}>
-                              {item.label}
-                            </span>
-                            {planned && (
-                              <span
-                                title="Not migrated yet"
-                                className={clsx(
-                                  "ml-auto rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-400 ring-1 ring-inset ring-slate-200",
-                                  collapsed && "lg:hidden",
-                                )}
-                              >
-                                soon
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </NavLink>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
+        <nav className="scroll-subtle flex-1 overflow-y-auto px-2.5 py-3 lg:px-1" aria-label="Main">
+          {/*
+            ONE ROW PER SECTION, NOT PER SCREEN (client request, 5 Oct 2026: the
+            rail listed twenty entries). A row goes to the first screen of its
+            section, and the section's other screens are the tabs across the top
+            of the page (see `SectionTabs`).
+
+            Two earlier attempts at this - folders that open in the rail, first
+            one at a time and then each on its own - were both turned down, so
+            the rail has no children at all and nothing in it expands.
+          */}
+          <ul className="space-y-1">
+            {nav.map((section) => {
+              const Icon = section.icon;
+              const label = sectionLabel(section);
+              const active = section.title === currentSection?.title;
+              return (
+                <li key={section.title}>
+                  <Link
+                    to={section.items[0]!.to}
+                    onClick={() => setSidebarOpen(false)}
+                    /*
+                     * Active is the SECTION the route belongs to, not whether
+                     * this row's own path matches: on "Sites" the Masters row
+                     * links to "Companies" and is still the one that is lit.
+                     * A plain Link, because NavLink computes its own
+                     * aria-current from the row's path and would drop this one.
+                     */
+                    aria-current={active ? "page" : undefined}
+                    className={clsx(
+                      "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150",
+                      "lg:flex-col lg:gap-1 lg:px-0.5 lg:text-[11px]",
+                      active
+                        ? "bg-brand-50 font-semibold text-brand-700 before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-r-full before:bg-brand-600"
+                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                    )}
+                  >
+                    <Icon aria-hidden className="size-5 shrink-0" strokeWidth={active ? 1.9 : 1.6} />
+                    <span className="truncate lg:w-full lg:text-center lg:leading-tight">{label}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
         </nav>
 
         <div className="shrink-0 border-t border-slate-200 p-2.5">
-          <div
-            className={clsx(
-              "flex items-center gap-2.5 rounded-lg px-1.5 py-1",
-              collapsed && "lg:flex-col lg:gap-1 lg:px-0",
-            )}
-          >
+          <div className="flex items-center gap-2.5 rounded-lg px-1.5 py-1 lg:flex-col lg:gap-1 lg:px-0">
             <div
-              title={collapsed ? user?.userName : undefined}
+              title={user?.userName}
               className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700 ring-1 ring-inset ring-brand-100"
             >
               {initials}
             </div>
-            <div className={clsx("min-w-0 flex-1 leading-tight", collapsed && "lg:hidden")}>
+            <div className="min-w-0 flex-1 leading-tight lg:hidden">
               <div className="truncate text-sm font-medium text-slate-900">
                 {user?.userName}
               </div>
@@ -412,13 +355,14 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/*
-          56px, opaque white, one hairline under it.
+          44px (it was 56 - client request, 5 Oct 2026: too tall), opaque white,
+          one hairline under it. The 36px controls in it keep 4px above and below.
 
           One job on each side: say where you are on the left, say whose data is
           on screen on the right. The left gives way when width runs short and
           the right does not - see the note on the scope picker below.
         */}
-        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 lg:px-8">
+        <header className="sticky top-0 z-20 flex h-11 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 lg:px-8">
           <div className="flex min-w-0 items-center gap-2">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -447,6 +391,32 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="hidden text-xs text-slate-500 lg:inline">Financial year</span>
               <span className="tabular text-xs font-semibold text-slate-800">{fy}</span>
             </div>
+
+            {/*
+              SETTINGS LIVE HERE, not in the rail (client request: too many menu
+              entries). One screen today, so the gear goes straight to it; with
+              more, it is the place to turn into a menu. Absent entirely for
+              someone who may open none of them, rather than a gear that leads to
+              a locked page.
+            */}
+            {settingsItems[0] && (
+              <Tooltip label="Settings">
+                <NavLink
+                  to={settingsItems[0].to}
+                  aria-label="Settings"
+                  className={({ isActive }) =>
+                    clsx(
+                      "inline-flex size-9 items-center justify-center rounded-lg transition-colors",
+                      isActive
+                        ? "bg-brand-50 text-brand-700"
+                        : "text-slate-500 hover:bg-slate-100 hover:text-slate-900",
+                    )
+                  }
+                >
+                  <Settings aria-hidden className="size-4" />
+                </NavLink>
+              </Tooltip>
+            )}
           </div>
         </header>
 
@@ -489,7 +459,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             only once a record was open would not yet exist at the moment the
             record asked where to go, and the first click would open nothing.
           */}
-          <div ref={setPageHost} />
+          {/*
+            As tall as the window while a record has the page, so the record's
+            Cancel / Save footer can sit at the bottom of a SHORT form instead of
+            just under its last field. Without it this div is only as tall as its
+            content, and `min-h-full` on the page inside it has nothing to be a
+            percentage of - the footer floated under the supplier form and moved
+            whenever a section changed height.
+          */}
+          <div ref={setPageHost} className={clsx(pageOpen && "flex min-h-full flex-col")} />
 
           {/*
             FULL WIDTH, no 1280px cap.
@@ -513,7 +491,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             accessibility tree, so a screen reader is not offering a hundred rows
             that are not on screen.
           */}
-          <div hidden={pageOpen}>{children}</div>
+          <div hidden={pageOpen}>
+            <SectionTabs section={currentSection} />
+            {children}
+          </div>
         </main>
       </div>
     </div>
