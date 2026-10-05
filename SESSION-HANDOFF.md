@@ -1,9 +1,9 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
 **Written:** 2 September 2026, after the unblocking session. **Last extended
-2 October 2026** (§5z). Supersedes all earlier handoffs of the same name.
+5 October 2026** (§5aa). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `6c5fd1c0`.** If `git log` shows commits after
+> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
@@ -116,10 +116,7 @@ evidence-based — every finding cites a file and line. **Do not re-derive it.**
 
 ```
 AC/
-├── AccountManagement.sln          .NET — all 4 projects on net8.0
-├── AccountManagement.Tests/       xUnit (19 tests)
-├── AccountManegment.Repo/Domain/FinancialYear.cs
-├── .github/workflows/ci.yml       build + test + gitleaks + node job
+├── .github/workflows/ci.yml       gitleaks + node job
 ├── Migration-Assessment/          the 18-doc assessment + tools/ + db-extract/
 └── node/                          npm workspaces
     ├── packages/domain/           shared business rules (90 tests)
@@ -131,15 +128,21 @@ AC/
         └── web/                   React 19 + Vite + Tailwind (592 tests)
 ```
 
-**1764 tests pass** — 1745 Node (157 contracts + 90 domain + 906 API + 592 web)
-plus 19 .NET, measured against `6d3a9e98` on 2 Oct 2026. **The API was RUN in
+**The legacy .NET solution is no longer in this repository** (5 Oct 2026, §5aa):
+it was moved to `AC-legacy-reference/`, a sibling folder of this one, and its 19
+tests went with it. Every `.cs` / `.cshtml` path and line number quoted in this
+file points into that folder (or into git history). The `dotnet` commands below
+and the "19 .NET" in the older sections no longer apply to this tree.
+
+**1745 Node tests pass** (157 contracts + 90 domain + 906 API + 592 web),
+measured against `6d3a9e98` on 2 Oct 2026, and nothing under `node/` has changed
+since (`git diff 6d3a9e98..HEAD -- node` is empty). **The API was RUN in
 two halves** (`npx vitest run --shard=1/2` then `2/2`: 26 + 26 files, 470 + 436
 tests, zero failures), because one full run hit the 10-minute background-task
 limit at 27 of 52 files with nothing failing — this machine runs it slower than
 it used to. Contracts, domain and web were RUN one workspace at a time on the
-same tree; the only file that changed after those runs is an API test. The
-.NET figure is proved by the diff since `154d5405`, which touches no `.cs`
-file. `npm run typecheck` and `npm run build` were run the same day on the
+same tree; the only file that changed after those runs is an API test.
+`npm run typecheck` and `npm run build` were run the same day on the
 same tree: exit 0, zero `error TS`, all four workspaces.
 
 **EVERY LEGACY SCREEN IS NOW PORTED.** `nav.ts` carries no `"planned"` item —
@@ -166,7 +169,6 @@ build and by `typecheck`, so a type error in a web TEST file fails the build.
 
 ```bash
 cd node && npm install && npm run build && npm run typecheck && npm test
-cd .. && dotnet build AccountManagement.sln && dotnet test AccountManagement.sln
 ```
 
 ### Run it locally
@@ -202,16 +204,17 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 
 ## 4. Repository state
 
-Branch **`main`**, working tree clean, pushed to `origin/main`. Typechecks, and
-all **1764 tests pass** — 1745 Node (157 contracts + 90 domain + 906 API + 592
-web) + 19 .NET.
+Branch **`main`**. Typechecks, and all **1745 Node tests pass** (157 contracts +
+90 domain + 906 API + 592 web). There is no .NET suite in this tree any more (§3).
 
 The Node suite was measured on the `6d3a9e98` code commit (2 Oct 2026) and
-RUN (the API in two shards — see §3); the .NET figure is proved by the diff
-since `154d5405`, which touches no .NET file. Anything after `6d3a9e98` on `main`
-is documentation — a handoff always commits after its own measurement, so the
+RUN (the API in two shards — see §3); `node/` is unchanged since. Anything after
+`6d3a9e98` on `main` is documentation, CI config or the removal of the legacy
+.NET folders — a handoff always commits after its own measurement, so the
 newest hash is never the one the numbers were taken at, and naming it here would
-be a lie that looks precise.
+be a lie that looks precise. **Push state:** at the start of the 5 Oct session
+`origin/main` was still `6d3a9e98`, the two handoff commits being local only;
+`git rev-parse HEAD origin/main` says whether that has since changed.
 
 - `b8d03922` completed the broken commit `6cefc164` (see §5).
 - `f0f69f95` merged `newNode` into `main`, resolving 3 conflicts.
@@ -274,7 +277,9 @@ be a lie that looks precise.
 - `6d3a9e98` adds the Agency Master (§5z). **Carries migration
   `0021_agencies`**, applied on live: four new tables, 19 seeded work types,
   form row 101 "Agency" granted to every Supplier editor.
-- **`main` is pushed to `origin/main`** and the working tree is clean.
+- `<COMMIT>`, 5 Oct 2026, moves the legacy .NET solution out of the tree (§5aa).
+  **No migration, no code under `node/`.**
+- The tree is clean after that commit; see the push note above for `origin/main`.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
   credential is in the HISTORY, not the working tree. Rotation is the fix.
 
@@ -4485,3 +4490,58 @@ tests went with them) and → 592 with the Agency Master; the API went 883 → 9
 (19 repository tests and 4 migration tests). The API was run in two shards —
 a single full run hit the 10-minute background limit with nothing failing.
 .NET proved by the diff since `154d5405`.
+
+
+---
+
+## 5aa. The legacy .NET solution moved out of the repository (5 Oct 2026)
+
+Commit `<COMMIT>`. **No code under `node/` changed, no migration, nothing to
+deploy.** The live release is still `20261002-142735`.
+
+The user asked for the reference project to be moved out so that what is left
+here is only the working app. The reference project is the ASP.NET solution the
+port was written against: `AccountManegments.Web`, `AccountManegmentAPI`,
+`AccountManegment.Repo`, `AccountManegment.DBContext`, `AccountManagement.Tests`,
+the `.sln`, `slnLaunch.user`, `NuGet.Config` and `.vs`. They now live in
+**`e:\nakul\Chintan Kalathiya\AC-legacy-reference\`**, a sibling of this folder,
+and are still in git history (729 tracked files deleted by this commit).
+`Migration-Assessment/` was deliberately left: PLAN.md, doc 19 and the
+assessment are working documents, not reference code.
+
+**Why a move and not a delete:** the handoff and the assessment quote hundreds
+of `.cs` / `.cshtml` paths and line numbers (`SupplierController.cs:108` and so
+on), and the ported-defect rule ("reproduce it until the business signs off")
+is only checkable against the source. Keeping the folder next to the repo keeps
+those references resolvable at no cost to this tree.
+
+**What was checked before moving.** Nothing under `node/` reads the .NET
+folders: the only mentions are a comment in `financial-year.ts` and its test
+naming `FinancialYear.cs`. The deploy skill's `dotnet` lines describe the live
+VPS's own processes (ports 8080 and 7251), not the repo. So nothing broke, and
+`git diff 6d3a9e98..HEAD -- node` is empty, which is why the Node test count
+was carried forward as measured rather than re-run.
+
+**The one thing that WOULD have broken: CI.** `ci.yml`'s `build-and-test` job
+ran `dotnet restore AccountManagement.sln`, and with the file gone it would have
+failed on every push. The job is removed; `secret-scan` and `node` remain. This
+is not a trap that surfaced after the fact — it was found by reading the
+workflow before committing — but any other place that names the `.sln` has the
+same problem. README.md (rewritten around the Node app) and the `/handoff`
+skill (`dotnet test` step removed) were the other two.
+
+**Honest cost.**
+- The .NET characterisation tests, which README used to say "must agree case for
+  case" with `packages/domain`, are no longer run by anything in this repo. The
+  domain tests remain the specification; if the financial-year or rounding rules
+  are ever questioned, the comparison has to be made by hand in
+  `AC-legacy-reference`.
+- The sections above (§5 – §5z) still say "19 .NET tests", "`dotnet test`" and
+  quote `.cs` paths. They are a log and were not edited; §3 and §4 carry the
+  current position.
+- `AC-legacy-reference` is a plain folder copy, not a git repository and not
+  backed up anywhere but this machine. The history copy in this repo is the
+  backup.
+
+Tests: **1745** Node (157 contracts + 90 domain + 906 API + 592 web), measured
+at `6d3a9e98`; `node/` unchanged since. No .NET suite in this tree.

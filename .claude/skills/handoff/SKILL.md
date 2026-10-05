@@ -121,7 +121,6 @@ Never carry a number forward from the previous section. Run it:
 
 ```bash
 cd node && npm test        # counts per workspace
-cd .. && dotnet test AccountManagement.sln
 git log --oneline -15
 git status --short
 git rev-parse HEAD origin/main     # equal? then it is pushed
