@@ -4,6 +4,7 @@ import { financialYear, invoiceTotal, purchaseOrderTotal } from "@accountmanagem
 import { TERMS_TEMPLATES } from "@accountmanagement/contracts";
 import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { InMemoryUserRepository, UserRepository } from "./user.repository";
+import { ReportsRepository } from "../reports/reports.repository";
 import { ENV, type Env } from "../../config/env";
 import { DATABASE, type Database } from "../../db/database";
 import {
@@ -19,6 +20,8 @@ import {
   forms,
   items,
   payments,
+  payoutListLines,
+  payoutLists,
   purchaseInvoiceItems,
   purchaseInvoices,
   salesInvoiceItems,
@@ -579,6 +582,8 @@ export class DevSeed implements OnModuleInit {
       { userId: admin.id, formId: 100, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
       // Agency — form 101, inserted by migration 0021, same reason as 100.
       { userId: admin.id, formId: 101, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
+      // Payout — form 102, inserted by migration 0022, same reason as 100.
+      { userId: admin.id, formId: 102, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
     ]);
 
     /**
@@ -1216,6 +1221,8 @@ export class DevSeed implements OnModuleInit {
 
     await db.insert(payments).values(paymentRows);
 
+    await this.seedPayoutList(db, admin.id);
+
     /**
      * Inventory arrivals.
      *
@@ -1386,6 +1393,47 @@ export class DevSeed implements OnModuleInit {
         lineNumber: 1,
       });
     }
+  }
+
+  /**
+   * One example payout list, built from what the seeded ledger really owes, so
+   * the screen opens on a list whose "outstanding" column means something. The
+   * first three owed suppliers, the first paid in part (half) and the others in
+   * full, which shows both cases. Skipped quietly when nobody is owed.
+   */
+  private async seedPayoutList(db: Database, adminId: string): Promise<void> {
+    const reports = new ReportsRepository(db);
+    const owed = new Map<string, { name: string; paise: bigint }>();
+    const page = await reports.balances({ direction: "out", show: "outstanding" }, { limit: 200, offset: 0 });
+    for (const row of page.rows) {
+      const [whole = "0", fraction = ""] = row.netAmount.replace("-", "").split(".");
+      const paise = BigInt(whole) * 100n + BigInt((fraction + "00").slice(0, 2));
+      const signed = row.netAmount.startsWith("-") ? -paise : paise;
+      owed.set(row.partyId, { name: row.partyName, paise: (owed.get(row.partyId)?.paise ?? 0n) + signed });
+    }
+    const picked = [...owed.entries()].filter(([, party]) => party.paise > 0n).slice(0, 3);
+    if (picked.length === 0) {
+      return;
+    }
+    const money = (paise: bigint) => `${paise / 100n}.${String(paise % 100n).padStart(2, "0")}`;
+    const [list] = await db
+      .insert(payoutLists)
+      .values({
+        listDate: new Date().toISOString().slice(0, 10),
+        title: "This week's payout",
+        budget: "4000000.00",
+        createdBy: adminId,
+      })
+      .returning({ id: payoutLists.id });
+    await db.insert(payoutListLines).values(
+      picked.map(([partyId, party], index) => ({
+        payoutListId: list!.id,
+        partyId,
+        amount: money(index === 0 ? party.paise / 2n : party.paise),
+        outstandingAtSave: money(party.paise),
+        lineNumber: index + 1,
+      })),
+    );
   }
 
   private async seedFromSnapshot(db: Database, path: string): Promise<void> {

@@ -10,12 +10,16 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
+  BookOpen,
   Boxes,
   Building2,
   ClipboardList,
+  Database,
   FileInput,
   FileText,
+  HandCoins,
   HardHat,
+  Hourglass,
   LayoutDashboard,
   LayoutTemplate,
   MapPin,
@@ -23,8 +27,11 @@ import {
   Package,
   Receipt,
   ScrollText,
+  Settings,
   ShieldCheck,
+  ShoppingBag,
   ShoppingCart,
+  TrendingUp,
   Truck,
   Users,
   Wallet,
@@ -44,18 +51,29 @@ export interface NavItem {
 
 export interface NavSection {
   title: string;
+  /** Shown beside the heading when the rail lists sections rather than screens. */
+  icon: LucideIcon;
   items: NavItem[];
 }
+
+/**
+ * The section that lives behind the gear in the top bar instead of in the rail
+ * (client request: the rail carried too many entries). It stays in `NAV` so its
+ * routes, its breadcrumb and its permission filter work like every other screen.
+ */
+export const SETTINGS_SECTION = "Settings";
 
 export const NAV: NavSection[] = [
   {
     title: "Overview",
+    icon: LayoutDashboard,
     items: [
       { label: "Dashboard", to: "/", icon: LayoutDashboard, permission: "dashboard", status: "ready", legacy: "/Home/Index" },
     ],
   },
   {
     title: "Masters",
+    icon: Database,
     items: [
       { label: "Companies", to: "/companies", icon: Building2, permission: "company", status: "ready", legacy: "/Company/CreateCompany" },
       { label: "Sites", to: "/sites", icon: MapPin, permission: "site", status: "ready", legacy: "/SiteMaster/SiteListView" },
@@ -70,6 +88,7 @@ export const NAV: NavSection[] = [
   },
   {
     title: "Procurement",
+    icon: ShoppingBag,
     items: [
       { label: "Purchase Requests", to: "/purchase-requests", icon: ClipboardList, permission: "purchase-request", status: "ready", legacy: "/PurchaseMaster/PurchaseRequestListView" },
       { label: "Purchase Orders", to: "/purchase-orders", icon: ShoppingCart, permission: "purchase-orders", status: "ready", legacy: "/PurchaseMaster/POListView" },
@@ -79,6 +98,7 @@ export const NAV: NavSection[] = [
   },
   {
     title: "Invoicing",
+    icon: Receipt,
     items: [
       { label: "Purchase Invoices", to: "/purchase-invoices", icon: Receipt, permission: "purchase-invoice", status: "ready", legacy: "/InvoiceMaster/SupplierInvoiceListView" },
       { label: "Sales Invoices", to: "/sales-invoices", icon: FileText, permission: "sales-invoice", status: "ready", legacy: "/Sales/SalesList" },
@@ -86,21 +106,33 @@ export const NAV: NavSection[] = [
     ],
   },
   {
+    // New, no legacy screen: the owner's "I can pay out 40 lakh today" lists (5 Oct 2026).
+    // A section of one, so the rail names it after the screen ("Payout List"): short
+    // enough for 88px at 11px type, which "Payout Lists" is not guaranteed to be.
+    title: "Payout",
+    icon: HandCoins,
+    items: [
+      { label: "Payout List", to: "/payouts", icon: HandCoins, permission: "payout", status: "ready" },
+    ],
+  },
+  {
     title: "Reports",
+    icon: ScrollText,
     items: [
       // Both panels of ONE legacy screen, and both guarded by the subject that
       // screen actually asks for. `sales-report` and `details-report` are dead
       // rows in the Form table, checked nowhere in the .NET solution and inactive
       // in production, so naming them here hid the report from everyone.
-      { label: "Sales Report", to: "/reports/sales", icon: ScrollText, permission: "reports-payments", status: "ready", legacy: "/Sales/SalesReport" },
-      { label: "Ledger", to: "/reports/ledger", icon: ScrollText, permission: "reports-payments", status: "ready", legacy: "/InvoiceMaster/PayOutInvoice" },
+      { label: "Sales Report", to: "/reports/sales", icon: TrendingUp, permission: "reports-payments", status: "ready", legacy: "/Sales/SalesReport" },
+      { label: "Ledger", to: "/reports/ledger", icon: BookOpen, permission: "reports-payments", status: "ready", legacy: "/InvoiceMaster/PayOutInvoice" },
       // Began as the "Pending Ledger", a copy of the ledger for the client to try out (14 Sep 2026).
       // Since 1 Oct 2026 it is only the outstanding summary: site, supplier and net.
-      { label: "Pending Outstanding", to: "/reports/pending-ledger", icon: ScrollText, permission: "reports-payments", status: "ready" },
+      { label: "Pending Outstanding", to: "/reports/pending-ledger", icon: Hourglass, permission: "reports-payments", status: "ready" },
     ],
   },
   {
-    title: "Settings",
+    title: SETTINGS_SECTION,
+    icon: Settings,
     items: [
       // New, with no legacy screen: the old app has one fixed print page per
       // invoice (client request, 14 Sep 2026).

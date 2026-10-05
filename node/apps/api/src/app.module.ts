@@ -27,6 +27,7 @@ import { GridPreferencesModule } from "./modules/grid-preferences/grid-preferenc
 import { DocumentTemplatesModule } from "./modules/document-templates/document-templates.module";
 import { AgenciesModule } from "./modules/agencies/agencies.module";
 import { GeographyModule } from "./modules/geography/geography.module";
+import { PayoutsModule } from "./modules/payouts/payouts.module";
 
 const env = loadEnv();
 
@@ -65,6 +66,7 @@ const env = loadEnv();
     DocumentTemplatesModule,
     AgenciesModule,
     GeographyModule,
+    PayoutsModule,
   ],
   providers: [
     // Order matters: authenticate, then authorise.

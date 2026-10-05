@@ -56,6 +56,10 @@ const CONFLICT_MESSAGES: Record<string, { field: string; message: string }> = {
     field: "name",
     message: "An agency with this name already exists",
   },
+  payout_list_lines_list_party_key: {
+    field: "lines",
+    message: "This party is already in the list",
+  },
   work_types_name_lower_key: {
     field: "name",
     message: "That work type already exists",

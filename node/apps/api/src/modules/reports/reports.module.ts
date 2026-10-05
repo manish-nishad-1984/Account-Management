@@ -12,5 +12,7 @@ import { ReportExportService } from "./report-export.service";
 @Module({
   controllers: [ReportsController],
   providers: [ReportsRepository, ReportExportService],
+  // PayoutsModule reuses the balances query rather than re-deriving what a supplier is owed.
+  exports: [ReportsRepository],
 })
 export class ReportsModule {}
