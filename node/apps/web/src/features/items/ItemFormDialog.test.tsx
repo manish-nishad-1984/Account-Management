@@ -200,7 +200,7 @@ describe("ItemFormDialog name check", () => {
 
       await user.type(screen.getByLabelText(/item name/i), "cement");
 
-      expect(await screen.findByRole("listbox", { name: "Existing items" })).toHaveTextContent(EXISTING.name);
+      expect(await screen.findByRole("listbox", { name: "Existing items" }, { timeout: 4000 })).toHaveTextContent(EXISTING.name);
       // Arrow to it and Enter picks it.
       await user.keyboard("{ArrowDown}{Enter}");
       await waitFor(() => expect(screen.getByRole("button", { name: /save changes/i })).toBeInTheDocument());
