@@ -53,6 +53,16 @@ async function writeClipboardImage(blob: Blob): Promise<boolean> {
   }
 }
 
+/**
+ * A phone or tablet, where the share sheet lists WhatsApp and the chat. On a
+ * desktop the browser hands over to the operating system's share panel, which on
+ * Windows often says "Try that again - we could not show you all the ways you
+ * could share" and offers nothing; the clipboard route below works there.
+ */
+const isTouchDevice = () =>
+  (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData?.mobile === true ||
+  /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
 function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -99,7 +109,7 @@ export function usePayoutSharing() {
    * A `wa.me` link can carry text and nothing else, so an image cannot be
    * attached by link. Three routes, best first:
    *
-   *  1. The share sheet with the image as a file - a phone, and some desktops -
+   *  1. The share sheet with the image as a file - on a phone or tablet only -
    *     where the person picks WhatsApp and then the chat, the image already in it.
    *  2. Otherwise the image is put on the clipboard and WhatsApp is opened: the
    *     person picks the chat and presses paste.
@@ -124,7 +134,7 @@ export function usePayoutSharing() {
       }
 
       const file = new File([blob], name, { type: "image/png" });
-      if (navigator.canShare?.({ files: [file] })) {
+      if (isTouchDevice() && navigator.canShare?.({ files: [file] })) {
         try {
           await navigator.share({ files: [file], title: "Payout list" });
           return;
