@@ -519,6 +519,8 @@ DONE     PO delivery addresses + T&C editor              (9 Sep 2026, §5s)
          Reports: "Ledger" (ledger only), "Pending Outstanding"
          (summary only)                                   (1 Oct 2026, §5z)
          Agency Master: agencies, work types, contacts    (2 Oct 2026, §5z)
+         Narrow-rail sidebar; Payout List (bills, WhatsApp image);
+         compact forms/reports; Purchase Invoice location row (5-6 Oct 2026, §5ab)
 NOW      master-detail ANSWER                            <- with the business now, doc 19 Q12
 BLOCKED  Stock: in, issue to agency, return              <- doc 19 Q16 parts 1-3 first (§5z has the plan)
 NEXT     Document Layouts block editor                   <- step 3 of the layout master, §5v

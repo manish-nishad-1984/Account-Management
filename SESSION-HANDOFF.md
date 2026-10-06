@@ -1,9 +1,9 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
 **Written:** 2 September 2026, after the unblocking session. **Last extended
-5 October 2026** (§5aa). Supersedes all earlier handoffs of the same name.
+6 October 2026** (§5ab). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `9765ece9`.** If `git log` shows commits after
+> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
@@ -29,15 +29,20 @@ every page; on 15 Sep 2026 it served its login page with a 200 and no
 exception text, so that fault appears to have been cleared by someone. Who and
 when is not recorded anywhere in this repository.
 
-**Live release is `20261002-142735`, which is commit `6d3a9e98`** — the newest
-code commit, so **nothing committed is waiting to deploy**. It carries the
-Agency Master and **migration `0021_agencies`**, which applied on the live
-database (`1 applied, 0 adopted, 21 skipped`, 38 → 42 tables). Verified on 2 Oct
-2026: health, a real login (`ckalathiya`), the agency endpoints over the
-loopback, the bundle hash at `https://avfast.in/`, and a browser walk of the
-Agency Master's form against live geography — read-only; nothing was saved, so
-the live master is empty. Rollback target is `20261001-154458` (the §5z report
-rename, `fe5897a8`); rolling back leaves 0021's four tables in place, unused.
+**Live release is `20261006-155914`, which is commit `8838be2b`** — the newest
+code commit, pushed (`origin/main` = `8838be2b`), so **nothing committed is
+waiting to deploy**. Eight releases went out on 5–6 Oct 2026 (§5ab). Two of them
+carried migrations, both applied on the live database: **`0022_payout_lists`**
+(`1 applied, 0 adopted, 22 skipped`, release `20261005-194842`) and
+**`0023_payout_list_invoices`** (`1 applied, 0 adopted, 23 skipped`, release
+`20261006-142137`); live now has 44 tables. Every release was verified on the
+day: health, a real login (`ckalathiya`), the Payout List endpoints with the
+bearer token, the bundle hash at `https://avfast.in/`, `www.avfast.in` 200, and
+the PIDs of 8080 / 7251 / 1433 unchanged. **Nothing was saved to the live
+database from a session** — the Payout List's save, bills and image were
+exercised only on the dev server. Rollback target is `20261006-155358` (the
+Purchase Invoice layout, one commit earlier); migrations are not rolled back, and
+0022 / 0023 only ADD tables, so older code simply ignores them.
 
 **The lesson of the six-day gap (18–21 Sep, closed by `9a11f463`) held again
 on 1–2 Oct.** Both features were committed, gated (tests, typecheck, build)
@@ -50,7 +55,7 @@ before deploying, or at the very latest before the session ends.**
 **The live database holds the history, not just masters.** Read-only counts
 on 15 Sep 2026: 194 suppliers, 2,371 purchase invoices, 583 payments, 180
 inward challans, 24 purchase orders, 24 site addresses, 603 cities. Not
-re-measured since. **The schema has moved once since**: `0021_agencies` (§5z)
+re-measured since. **The schema has moved three times since** — `0022` and `0023` (§5ab) added the three payout tables, and `0021_agencies` (§5z)
 added `agencies`, `agency_contacts`, `agency_work_types` and `work_types` —
 new tables only, nothing existing altered. On 2 Oct the live API reported 35
 states, and Gujarat is spelled **`GUJRAT`** there (the source's own spelling,
@@ -124,8 +129,8 @@ AC/
     ├── tools/import-masters/      the ETL: masters, geography, transactions, apply-snapshot
     ├── tools/deploy/
     └── apps/
-        ├── api/                   NestJS + Fastify + Drizzle (906 tests)
-        └── web/                   React 19 + Vite + Tailwind (592 tests)
+        ├── api/                   NestJS + Fastify + Drizzle (941 tests)
+        └── web/                   React 19 + Vite + Tailwind (653 tests)
 ```
 
 **The legacy .NET solution is no longer in this repository** (5 Oct 2026, §5aa):
@@ -134,16 +139,19 @@ tests went with it. Every `.cs` / `.cshtml` path and line number quoted in this
 file points into that folder (or into git history). The `dotnet` commands below
 and the "19 .NET" in the older sections no longer apply to this tree.
 
-**1745 Node tests pass** (157 contracts + 90 domain + 906 API + 592 web),
-measured against `6d3a9e98` on 2 Oct 2026, and nothing under `node/` has changed
-since (`git diff 6d3a9e98..HEAD -- node` is empty). **The API was RUN in
-two halves** (`npx vitest run --shard=1/2` then `2/2`: 26 + 26 files, 470 + 436
-tests, zero failures), because one full run hit the 10-minute background-task
-limit at 27 of 52 files with nothing failing — this machine runs it slower than
-it used to. Contracts, domain and web were RUN one workspace at a time on the
-same tree; the only file that changed after those runs is an API test.
-`npm run typecheck` and `npm run build` were run the same day on the
-same tree: exit 0, zero `error TS`, all four workspaces.
+**1841 Node tests pass** (157 contracts + 90 domain + 941 API + 653 web),
+measured against `8838be2b` on 6 Oct 2026 by ONE full `npm test` from `node/`
+(output piped to a file, every workspace's summary line read: 8, 6, 55 and 75
+files, no failure anywhere). `npm run build` ran on the same tree for the last
+deploy: exit 0. **`npm run typecheck` was NOT run as a command this session**;
+what was run is `tsc -b` in `apps/web` (clean, and it covers the web tests) and
+`tsc --noEmit` in `apps/api` after the Payout bills change (clean) — enough to
+say nothing is known to be broken, not enough to call the typecheck re-measured.
+**Not every earlier run was green, and the honest note matters:** during the
+deploy gate of 5 Oct one full API run failed four test FILES at load (`print-documents`,
+`item-price-history`, `item-sheet`, `purchase-requests` repository tests — no
+test inside them ran) and all four passed alone, 91/91. The same load flake as
+`PurchaseOrderFormDialog.itemFill` in web. The final run above had neither.
 
 **EVERY LEGACY SCREEN IS NOW PORTED.** `nav.ts` carries no `"planned"` item —
 Payments, the Ledger and the Sales Report were the last three (§5u). What remains
@@ -204,16 +212,15 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 
 ## 4. Repository state
 
-Branch **`main`**. Typechecks, and all **1745 Node tests pass** (157 contracts +
-90 domain + 906 API + 592 web). There is no .NET suite in this tree any more (§3).
+Branch **`main`**. All **1841 Node tests pass** (157 contracts + 90 domain +
+941 API + 653 web) — see §3 for exactly what was run. There is no .NET suite in
+this tree any more (§3).
 
-The Node suite was measured on the `6d3a9e98` code commit (2 Oct 2026) and
-RUN (the API in two shards — see §3); `node/` is unchanged since. Anything after
-`6d3a9e98` on `main` is documentation, CI config or the removal of the legacy
-.NET folders — a handoff always commits after its own measurement, so the
-newest hash is never the one the numbers were taken at, and naming it here would
-be a lie that looks precise. **Push state:** at the start of the 5 Oct session
-`origin/main` was still `6d3a9e98`, the two handoff commits being local only;
+The Node suite was measured on the `8838be2b` code commit (6 Oct 2026). Anything
+after it on `main` is documentation — a handoff always commits after its own
+measurement, so the newest hash is never the one the numbers were taken at, and
+naming it here would be a lie that looks precise. **Push state:** `origin/main`
+was `8838be2b` at the end of the 6 Oct session (pushed, then deployed);
 `git rev-parse HEAD origin/main` says whether that has since changed.
 
 - `b8d03922` completed the broken commit `6cefc164` (see §5).
@@ -279,7 +286,14 @@ be a lie that looks precise. **Push state:** at the start of the 5 Oct session
   form row 101 "Agency" granted to every Supplier editor.
 - `9765ece9`, 5 Oct 2026, moves the legacy .NET solution out of the tree (§5aa).
   **No migration, no code under `node/`.**
-- The tree is clean after that commit; see the push note above for `origin/main`.
+- **5–6 Oct 2026, ten code commits (§5ab):** `e667d461` the Payout List
+  (**migration 0022**); `1fab7001` the narrow-rail sidebar; `4d8a6128` compact
+  forms, report tabs and chrome, row hover / click-to-tick; `a6782333` and
+  `a2027561` report colour, paging and resizable columns; `cb0711f4` Payout
+  bills and the image (**migration 0023**); `ff748958`, `7fd8135b`, `14cff4d8`
+  the Purchase Invoice location / billing / shipping layout; `8838be2b` the
+  desktop WhatsApp route. All pushed and live.
+- The tree is clean after the handoff commit; see the push note above.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
   credential is in the HISTORY, not the working tree. Rotation is the fix.
 
@@ -1726,6 +1740,20 @@ the screens whose UI is gated on `usePermission`.
   read-only `psql "$DATABASE_URL"` sourced from the release's `api/.env`. The
   permission classifier then refused a later, unrelated command as a
   "production read". Ask before touching the live database.
+- **Never put a script with apostrophes or backslashes in `node -e '...'` or a
+  heredoc** (6 Oct 2026): bash mangled it five times in one session, each time
+  with an `eval` syntax error that names a line of the script, not the quote that
+  caused it. Write the script to the scratchpad with the Write tool and run it.
+  The same goes for multi-line source edits: do them as a script of exact-string
+  replacements that throws when an anchor is missing.
+- **The permission classifier refused `ssh` / `scp` to the VPS once** (5 Oct) and
+  allowed the identical command after the user said, in their own words, to try
+  to go live. Ask rather than work around it; it clears when the user says so.
+- **Deploying is one block now** and was run eight times in two days: build, stage
+  (`tools/deploy/stage.mjs`), compare the bundle hash, `tar --force-local`, scp,
+  extract, `npm install --omit=dev`, copy the two workspace packages over their
+  symlinks, `write-env.mjs`, migrate, switch, restart, health poll, chmod walk,
+  PID check, prune. The `/deploy` skill is still the authority.
 - Node v24.15.0 locally; CI pins 22 LTS.
 - `git clone` of this repo needs `-c core.longpaths=true` — some
   `AccountManegments.Web/wwwroot` paths exceed MAX_PATH.
@@ -1769,6 +1797,8 @@ DONE     … per-site address list, site group CRUD, Pending Ledger,
          PO supplier summary                                 (18-21 Sep, §5x)
          Location-paired shipping address, camera capture     (28-29 Sep, §5y)
          "Ledger" / "Pending Outstanding" reports; Agency Master (1-2 Oct, §5z)
+         Narrow-rail sidebar; Payout List with bills and a WhatsApp image;
+         compact forms and report tabs; Purchase Invoice location row (5-6 Oct, §5ab)
 NOW      master-detail ANSWER                <- with the business, doc 19 Q12
 BLOCKED  Stock: in, issue to agency, return  <- doc 19 Q16 parts 1-3 (§5z plan)
 NEXT     Document Layouts block editor       <- step 3 of the layout master
@@ -1784,6 +1814,13 @@ landed in git before they were staged, which is the discipline this line
 exists to keep.
 
 **What is left, in rough order:**
+
+00. **Payout List follow-ups, none of them asked for yet** (§5ab): the same
+    compact Location / Billing / Shipping row on the **Purchase Order** (it still
+    has the card and the shipping dropdown), and a real phone test of the share
+    sheet, which no headless browser can do. A third: the Payout List is a PLAN —
+    the client has not said whether they want a list to turn into payments, and it
+    must not do so quietly (§5ab).
 
 0. **Stock in, issue to an agency, return — once doc 19 Question 16 parts 1-3
    are answered.** The plan is in §5z: one `stock_movements` ledger, stock in
@@ -4545,3 +4582,136 @@ skill (`dotnet test` step removed) were the other two.
 
 Tests: **1745** Node (157 contracts + 90 domain + 906 API + 592 web), measured
 at `6d3a9e98`; `node/` unchanged since. No .NET suite in this tree.
+
+---
+
+## 5ab. The Payout List, a new sidebar, and a pass over every form and report (5–6 Oct 2026)
+
+Commit `<COMMIT>`. Ten code commits, listed in §4, **two migrations (0022 and
+0023)**, eight releases, all pushed and live. The user asked for the first thing
+and the rest came out of looking at screenshots of it, which is how most of this
+file's days go.
+
+**The sidebar.** The client said it showed too many menus and pointed at the
+Keshav repo. Three designs were built and rejected — an accordion that opened one
+section at a time, then a collapsible one — before the user said what they meant:
+one narrow row per section, no folders, no open/close control, the section's
+screens as tabs across the page, Settings as a gear in the top bar. The lesson is
+the order of the questions: the user rejected the accordion repeatedly and each time
+the reply was "no", not "what then"; one question at the start ("one row per
+section, screens as tabs?") would have saved three builds. `AppShell.collapse.test`
+went with the collapse control; `AppShell.nav.test` pins the final shape.
+
+**The Payout List** is the owner saying "I have 40 lakh, who do I pay?". It is
+**a plan, not a payment** and the code says so everywhere: nothing references
+`payments`, and a list that quietly turned into one would be a way to pay a
+supplier without the payment ever being keyed. Decisions, each the user's:
+the outstanding is the Pending Outstanding report's own (summed per party across
+sites; only parties owed money), a part payment is allowed, a saved list is
+reopened and edited days later (the amount, and what the party was owed when it
+was saved, are both stored so an old list still reads as it did), and it is
+sent on WhatsApp to nobody in particular (`wa.me/?text=` takes no number — the
+client forwards it). Permission subject `payout`, form row 102, granted by 0022
+to everyone who already held Reports & Payments, flag for flag; approve is never
+copied.
+
+**Then the bills (0023).** The client wanted each party to open to its invoices,
+tick the party for all of them or single bills, with partial amounts, and the
+list sent as an image. Decisions and why: (1) the bills are **snapshots**
+(`payout_list_invoices` stores the number, date, site and amount as text with no
+foreign key), because a bill later cancelled must not make an old list unreadable
+— `document_id` is only the key that lets an edit tick the same bill again, and
+it is `text` because the pending ledger's source can be `invoice` or
+`opening_balance`; (2) **the server recomputes a line's amount as the sum of its
+bills** and ignores what the form added up, so the two cannot disagree on disk;
+(3) the bills come from `ReportsRepository.pendingLedger` (payments settle the
+oldest bill first), so the list shows the same bills that report does. **A real
+discrepancy, not fixed:** a party's outstanding is the NET over all its sites and
+its bills are pending per (site, party), so a party overpaid at one site and owed
+at another has bills that add to MORE than its outstanding. The API says so in a
+comment; the screen shows both numbers and does not reconcile them. (4) A line
+saved without bills (every list from 5 Oct) is kept as a party-level amount and
+still works; ticking a bill under such a party replaces that amount.
+
+**The WhatsApp image, and the trap.** A `wa.me` link carries text and nothing
+else, so an image cannot be attached by link. The user chose "draw the picture
+and share it" over the WhatsApp Business API (which needs a Meta account, a
+token and a cost per message). It is drawn on a canvas in the browser and never
+stored. The first version used `navigator.share({ files })`, and on the user's
+Windows desktop it opened the operating system's panel saying **"Try that again —
+We couldn't show you all the ways you could share"**, with nothing in it. Desktop
+Chrome hands over to that panel and it routinely does not work. Fixed on the
+same day: the share sheet is used on a phone or tablet only; on a desktop the
+image goes to the clipboard and WhatsApp opens, and the person presses paste
+(measured in a real browser: the clipboard held `image/png` and the WhatsApp page
+opened). **The share sheet on an actual phone has never been run** — headless
+Chrome cannot. The rest of the chain: no clipboard permission → the file downloads;
+no canvas at all → the old text message. The text also carries the bills now.
+
+**Everything else is a pass over screens the user was looking at**, each driven by
+a screenshot and each checked against the next one:
+
+- *Forms:* one sticky full-width footer that does not move, one vertical scroll,
+  a compact sticky title bar, no icon tile in section headings, no helper text
+  under controls that need none. **The traps, each cost a build:** a sticky offset
+  resolves against the scroll container's CONTENT box, and `main` has `py-6`, so
+  `top` / `bottom` need `-6` (and `-mb-6` for the footer); a sticky ancestor with
+  `overflow-hidden` silently stops sticking; `overflow-x-auto` forces
+  `overflow-y: auto` (the tab strip grew a stray vertical scrollbar until
+  `overflow-y-hidden`); `useWideSurface()` is provided BELOW the record page, so
+  the form itself always reads `false` — the payout form reads the layout setting
+  instead; `NavLink` overwrites `aria-current`, so a row that is active by
+  *section* must be a plain `Link`; and the running total sat under the fixed
+  footer until it moved INTO it.
+- *Grids and reports:* numeric column headers are right-aligned through
+  `meta: { align: "right" }` on the column (twenty columns across ten screens);
+  report headers are uppercase; an exact `0.00` is dimmed; row hover is
+  `slate-100` and a row that has a checkbox toggles it on click (Payout List,
+  Approval Queue — NOT the permissions page, where a row has four boxes). A lone
+  report tab is not a tab: it repeated the section tab above it, so it is gone and
+  its controls (the Purchases / Sales switch, the downloads) move up into the
+  section tabs' row through a React portal into `#section-tab-actions`, with an
+  inline fallback where there is no such row. Every report grid has columns that
+  drag wider or narrower (the first drag freezes all widths and switches to a
+  fixed layout; double-click resets). A negative Net — money paid ahead — was
+  green, which reads as "good"; it is **amber** now (the user answered only by
+  saying "fix everything", so this was my suggestion, taken). Reports page 100 rows.
+- *Purchase Invoice:* Location, Billing and Shipping join the Invoice details;
+  billing under the Site, location and shipping together, beside the Purchase
+  Order card. **Shipping is the chosen location's address and nothing else — blank
+  and read-only when the location has none or there is no location**, with no
+  picker to fall back on (the client's words). Purchase Orders were NOT changed
+  and still have the old card and dropdown. A trap in the build: the order card
+  kept its old `sm:col-span-2`, which in the new two-column wrapper pushed it onto
+  a line of its own beneath the block — only a screenshot showed it.
+- *Forms without the banner:* the "A new X is created unapproved" boxes are gone
+  from the invoices, requests, challans and inventory arrival; the Purchase Order
+  form lost its developer note and its footer row that repeated the totals strip.
+
+**What went wrong, the useful parts.**
+- Changing the report page size from 50 to 100 broke three tests that asserted
+  `offset=50`; they were written against the constant's value, not the constant.
+- `z.array(...).default([])` on a contract used as a RESPONSE schema makes its
+  input and output types differ, and `apiRequest` wants `ZodType<T>` with them
+  equal — the web typecheck failed in four places. The defaults were removed from
+  the response schemas (the server always sends the array); they stay on the
+  request schema, where they are right. Every response fixture then needed
+  `invoices: []`.
+- jsdom has no canvas, so the old WhatsApp tests now print `Not implemented:
+  HTMLCanvasElement.prototype.getContext` to stderr and take the text fallback.
+  They pass, and the noise is the canvas path being skipped, not a failure.
+- The bills' ordering puts "Balance brought forward" (no date) first; that is
+  deliberate (opening balance is the oldest thing owed).
+
+**Honest cost.**
+- Many forms lost their helper texts. Some carried a real rule ("Returns and
+  credit notes are money going the other way"; "Tax deducted at source. Subtracted
+  from the total"). The rule is still enforced; only the sentence is gone.
+- The image is drawn at send time, so two sends of the same list on different
+  days differ if the list was edited between; nothing keeps the image that was
+  actually sent.
+- The sidebar's section tabs push every screen down one row of tabs (about 50px)
+  on the screens that have them.
+
+Tests: **1841** Node (157 contracts + 90 domain + 941 API + 653 web), one full
+`npm test` at `8838be2b`, no failure. Live: release `20261006-155914`.
