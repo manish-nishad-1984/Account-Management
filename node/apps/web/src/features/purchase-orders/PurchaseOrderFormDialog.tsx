@@ -44,7 +44,7 @@ import {
   useSupplierOptions,
   useUpdatePurchaseOrder,
 } from "./api";
-import { SiteAddressFields } from "../sites/SiteAddressFields";
+import { SiteLocationAddresses } from "../sites/SiteLocationAddresses";
 import { SiteContactSelect } from "../sites/SiteContactSelect";
 import { GstBreakdown } from "../invoices/GstBreakdown";
 import { useLatestPriceFill } from "../invoices/useLatestPriceFill";
@@ -467,6 +467,27 @@ export function PurchaseOrderFormDialog({
             />
 
             {/*
+              LOCATION, BILLING AND SHIPPING IN THE ORDER (client request, 6 Oct
+              2026, as on the purchase invoice): billing is the site's own address,
+              shipping is the chosen location's address — shown, never typed.
+            */}
+            <div className="col-span-full grid grid-cols-2 items-start gap-x-3 gap-y-2">
+              <SiteLocationAddresses
+                siteId={chosenSiteId}
+                shippingAddress={shippingAddress}
+                onShippingChange={(address) =>
+                  setValue("shippingAddress", address, { shouldDirty: true })
+                }
+                location={{
+                  value: chosenLocationId,
+                  onChange: (locationId) =>
+                    setValue("siteLocationId", locationId, { shouldDirty: true }),
+                  error: errors.siteLocationId?.message,
+                }}
+              />
+            </div>
+
+            {/*
               The number cannot be issued without the company's invoice prefix,
               and `invoice_prefix` is nullable. The source dereferences it with no
               null check and its catch turns the resulting exception into the
@@ -677,15 +698,6 @@ export function PurchaseOrderFormDialog({
             </div>
           </FormSection>
 
-          {/*
-            TWO TO A ROW AT 42/58 (client request, 21 Sep 2026): neither card
-            fills a 1500px line on its own, and stacked they pushed the products
-            — the part of the document people actually work in — below the fold.
-            The split is uneven because delivery is short boxes and addresses are
-            long lines that wrap. Under 1280px they stack, where half a line is
-            too narrow for a labelled field.
-          */}
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,42fr)_minmax(0,58fr)]">
           <FormSection icon={Truck} title="Delivery and contacts" columns={3}>
             <CheckboxField
               label="Deliver immediately"
@@ -737,53 +749,30 @@ export function PurchaseOrderFormDialog({
           </FormSection>
 
           {/*
-            ONE SHIPPING ADDRESS, and the billing address that is always the
-            site's own — the rules of 15 Sep 2026, which replaced the legacy
-            panels that split the order's quantity across several addresses.
+            An order raised before the change may carry the old split. It is
+            shown, not edited, and can be cleared — which it may need to be: the
+            server still refuses a save whose split adds up to more than the
+            order, so reducing a quantity on such an order needs this.
           */}
-          <FormSection icon={MapPin} title="Location and addresses" columns={1}>
-            <SiteAddressFields
-              siteId={chosenSiteId}
-              shippingAddress={shippingAddress}
-              onShippingChange={(address) =>
-                setValue("shippingAddress", address, { shouldDirty: true })
-              }
-              shippingError={errors.shippingAddress?.message}
-              location={{
-                value: chosenLocationId,
-                onChange: (locationId) =>
-                  setValue("siteLocationId", locationId, { shouldDirty: true }),
-                error: errors.siteLocationId?.message,
-              }}
-            />
-
-            {/*
-              An order raised before the change may carry the old split. It is
-              shown, not edited, and can be cleared — which it may need to be: the
-              server still refuses a save whose split adds up to more than the
-              order, so reducing a quantity on such an order needs this.
-            */}
-            {oldSplit.length > 0 && (
-              <Alert tone="info">
-                <div className="font-medium">Delivery split from the old screen</div>
-                <ul className="mt-1 space-y-0.5 text-xs">
-                  {oldSplit.map((row) => (
-                    <li key={row.id}>
-                      <span className="tabular">{formatQuantity(row.quantity)}</span> to {row.address}
-                    </li>
-                  ))}
-                </ul>
-                <Button
-                  variant="secondary"
-                  className="mt-2"
-                  onClick={() => setClearSplit(true)}
-                >
-                  Remove the old split when saving
-                </Button>
-              </Alert>
-            )}
-          </FormSection>
-          </div>
+          {oldSplit.length > 0 && (
+            <Alert tone="info">
+              <div className="font-medium">Delivery split from the old screen</div>
+              <ul className="mt-1 space-y-0.5 text-xs">
+                {oldSplit.map((row) => (
+                  <li key={row.id}>
+                    <span className="tabular">{formatQuantity(row.quantity)}</span> to {row.address}
+                  </li>
+                ))}
+              </ul>
+              <Button
+                variant="secondary"
+                className="mt-2"
+                onClick={() => setClearSplit(true)}
+              >
+                Remove the old split when saving
+              </Button>
+            </Alert>
+          )}
 
           <FormSection icon={ScrollText} title="Terms and conditions" columns={1} className="[&_input]:max-w-none! [&_select]:max-w-none! [&_textarea]:max-w-none!">
             <TermsField

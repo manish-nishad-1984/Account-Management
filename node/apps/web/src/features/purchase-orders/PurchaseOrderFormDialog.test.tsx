@@ -509,24 +509,19 @@ describe("PurchaseOrderFormDialog", () => {
       expect(screen.queryByRole("textbox", { name: /billing address/i })).not.toBeInTheDocument();
     });
 
-    it("offers every address of the site as ONE shipping choice, and posts the one chosen", async () => {
+    it("shows the chosen location's address as shipping, with no picker, and posts both", async () => {
       const user = userEvent.setup();
       fullRoutes();
       open();
 
-      const shipping = (await screen.findByLabelText(/^shipping address/i)) as HTMLSelectElement;
-      // Three addresses and the "choose one" placeholder, each under the source
-      // it came from — the caption the radio rows used to carry.
-      await waitFor(() => expect(within(shipping).getAllByRole("option")).toHaveLength(4));
-      expect(shipping.querySelector('optgroup[label="Location address"]')).not.toBeNull();
+      // Shipping is shown, not chosen: no select, blank until a location is.
+      const shipping = await screen.findByLabelText(/^shipping address/i);
+      expect(shipping.tagName).not.toBe("SELECT");
+      expect(shipping).toBeEmptyDOMElement();
+      await waitFor(() => expect(within(screen.getByLabelText(/^location/i)).getAllByRole("option")).toHaveLength(3));
 
-      await user.selectOptions(shipping, "Gate 3, Plot 9, Mora");
-      // Choosing another moves the one choice; it never adds a second.
-      await user.selectOptions(shipping, "Block A gate, Hazira");
-      expect(shipping.value).toBe("Block A gate, Hazira");
-      // And the chosen one is shown in full beneath the picker, not only
-      // collapsed into the closed select.
-      expect(screen.getAllByText("Block A gate, Hazira").length).toBeGreaterThan(1);
+      await user.selectOptions(screen.getByLabelText(/^location/i), "55555555-5555-4555-8555-555555555555");
+      expect(shipping).toHaveTextContent("Block A gate, Hazira");
 
       await user.selectOptions(screen.getByLabelText(/^supplier/i), SUPPLIER.id);
       await user.selectOptions(screen.getByLabelText(/^company/i), COMPANY.id);
@@ -534,7 +529,6 @@ describe("PurchaseOrderFormDialog", () => {
       await user.selectOptions(screen.getByLabelText(/unit on line 1/i), String(UNIT.id));
       await user.type(screen.getByLabelText(/quantity on line 1/i), "2");
       await user.type(screen.getByLabelText(/price on line 1/i), "100");
-      await user.selectOptions(screen.getByLabelText(/^location/i), "55555555-5555-4555-8555-555555555555");
       await user.click(screen.getByRole("button", { name: /add purchase order/i }));
 
       await waitFor(() => expect(postedBody()).not.toBeNull());
@@ -662,11 +656,9 @@ describe("PurchaseOrderFormDialog", () => {
         openOrder();
 
         expect(await screen.findByText(/delivery split from the old screen/i)).toBeInTheDocument();
-        // An address the site's list does not offer any more stays chosen, under
-        // its own heading in the picker, rather than being quietly dropped.
-        const shipping = (await screen.findByLabelText(/^shipping address/i)) as HTMLSelectElement;
-        await waitFor(() => expect(shipping.value).toBe("Typed by hand, long ago"));
-        expect(shipping.querySelector('optgroup[label="Saved on this document"]')).not.toBeNull();
+        // The address the document was saved with is shown as it was saved.
+        const shipping = await screen.findByLabelText(/^shipping address/i);
+        await waitFor(() => expect(shipping).toHaveTextContent("Typed by hand, long ago"));
         // A contact typed on the old form is not on the site's list; it stays, labelled.
         const contact = screen.getByLabelText(/^contact person/i) as HTMLSelectElement;
         await waitFor(() =>
@@ -707,7 +699,7 @@ describe("PurchaseOrderFormDialog", () => {
       );
     });
 
-    it("says so when the site has no addresses at all", async () => {
+    it("leaves billing and shipping blank when the site has no addresses at all", async () => {
       routeFetch([
         [/\/document-options/, { billingAddress: null, shippingAddresses: [], locations: [] }],
         [/\/units/, list([UNIT])],
@@ -718,8 +710,9 @@ describe("PurchaseOrderFormDialog", () => {
       ]);
       open();
 
-      expect(await screen.findByText(/this site has no addresses yet/i)).toBeInTheDocument();
-      expect(screen.getByLabelText("Billing address")).toHaveTextContent(/has no address/i);
+      const shipping = await screen.findByLabelText(/^shipping address/i);
+      expect(shipping).toBeEmptyDOMElement();
+      await waitFor(() => expect(screen.getByLabelText("Billing address")).toBeEmptyDOMElement());
     });
   });
 });
