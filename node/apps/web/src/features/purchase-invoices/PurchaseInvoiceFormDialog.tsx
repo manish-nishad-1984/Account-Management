@@ -669,6 +669,7 @@ export function PurchaseInvoiceFormDialog({
               where a delivery already went.
             */}
             <SiteAddressFields
+              shippingFollowsLocation
               siteId={chosenSiteId}
               shippingAddress={shippingAddress}
               onShippingChange={(address) =>

@@ -31,11 +31,12 @@ const SITE_OPTIONS = {
   contacts: [],
 };
 
-function Harness() {
+function Harness({ follows = false }: { follows?: boolean }) {
   const [shippingAddress, setShippingAddress] = useState("");
   const [locationId, setLocationId] = useState("");
   return (
     <SiteAddressFields
+      shippingFollowsLocation={follows}
       siteId={SITE_ID}
       shippingAddress={shippingAddress}
       onShippingChange={setShippingAddress}
@@ -90,4 +91,22 @@ describe("choosing a location on SiteAddressFields", () => {
 
     expect(screen.getByLabelText("Shipping address")).toHaveValue("Block A gate, Hazira");
   });
+
+  /** Purchase invoices (client request, 6 Oct 2026): the location is the shipping address, shown as text. */
+  it("shows the shipping address as read-only text while a location with an address is chosen", async () => {
+    renderWithAuth(<Harness follows />);
+    await screen.findByRole("option", { name: "Block A" });
+
+    // No location yet: the picker, to choose an address.
+    expect(screen.getByRole("combobox", { name: "Shipping address" })).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText("Location"), "Block A");
+    expect(screen.queryByRole("combobox", { name: "Shipping address" })).not.toBeInTheDocument();
+    expect(document.querySelector("div[aria-label='Shipping address']")).toHaveTextContent("Block A gate, Hazira");
+
+    // Back to no location: the picker returns, still holding that address.
+    await userEvent.selectOptions(screen.getByLabelText("Location"), "No location");
+    expect(screen.getByRole("combobox", { name: "Shipping address" })).toHaveValue("Block A gate, Hazira");
+  });
+
 });
