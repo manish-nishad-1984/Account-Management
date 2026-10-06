@@ -415,128 +415,135 @@ export function PurchaseInvoiceFormDialog({
               error={errors.companyId?.message}
               {...register("companyId")}
             />
-            <SelectField
-              label="Site"
-              placeholder={scope.isReady ? "No site" : "Loading sites…"}
-              options={siteOptions}
-              error={errors.siteId?.message}
-              {...register("siteId", {
-                // The location, shipping address and contact belonged to the site
-                // chosen before. Cleared HERE, on the person's change, and not by
-                // watching the value — see SiteAddressFields.
-                onChange: () => {
-                  setValue("siteLocationId", "");
-                  setValue("shippingAddress", "");
-                  setValue("contactName", "");
-                  setValue("contactNumber", "");
-                },
-              })}
-            />
-            <SelectField
-              label="Type"
-              options={INVOICE_TYPES.map((value) => ({ value, label: value }))}
-              error={errors.invoiceType?.message}
-              {...register("invoiceType")}
-            />
-
             {/*
-              THE ORDER BELONGS IN THIS CARD, not in one of its own (client
-              request, 21 Sep 2026, from a mockup).
-
-              It is one select and, occasionally, one offer — about a sixth of
-              the content of a section, and as a card of its own it took a
-              heading, an icon tile, a border and 16px of padding to say it.
-              Inline in the tinted well it sits in the second row beside Site and
-              Type, which is where the mockup puts it and where it reads as part
-              of the invoice's own details rather than as a separate subject.
-
-              `sm:col-span-2` is what makes it the right-hand half of that row:
-              the card is four columns wide at this window size, so the row is
-              Site, Type, and this across the remaining two.
+              SITE, TYPE, BILLING, LOCATION AND SHIPPING SIT IN ONE BLOCK BESIDE THE
+              ORDER (client request, 6 Oct 2026): billing under the site, location
+              and shipping together, and no empty strip under the controls. The
+              order's card is the tall one, so the block takes the left half and
+              fills the height it already has.
             */}
-            <div className="rounded-lg border border-brand-100 bg-brand-50/50 p-3 sm:col-span-2">
-              <div className="flex items-center gap-2">
-                <FileText aria-hidden className="size-4 shrink-0 text-brand-600" />
-                <h4 className="text-xs font-semibold leading-4 text-slate-800">
-                  Against a purchase order
-                </h4>
-              </div>
-
-              <div
-                className={clsx(
-                  "mt-2 grid gap-3",
-                  // Side by side only once the offer is actually there, and only
-                  // where there is room for both — otherwise the select would
-                  // sit in half a well for no reason.
-                  askToLoad && orderLines.length > 0 && "xl:grid-cols-2",
-                )}
-              >
-                {/*
-                  `SupplierInvoice.Poid` is an nvarchar holding the order's
-                  NUMBER as text, matched by string equality — assessment 09
-                  §7.5. Renaming or reissuing an order silently detaches its
-                  invoices today. Here it is a real foreign key, chosen from a
-                  list.
-                */}
+            <div className="col-span-full grid items-start gap-3 md:grid-cols-2">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                 <SelectField
-                  label="Purchase order"
-                  placeholder={
-                    !chosenSupplierId
-                      ? "Choose a supplier first"
-                      : orders.isLoading
-                        ? "Loading orders…"
-                        : orderChoices.length === 0
-                          ? "This supplier has no orders"
-                          : "Not against an order"
-                  }
-                  options={orderChoices}
-                  hint="Optional. Only orders raised on the chosen supplier are listed. Choosing one brings its products in."
-                  error={errors.purchaseOrderId?.message}
-                  {...register("purchaseOrderId")}
+                  label="Site"
+                  placeholder={scope.isReady ? "No site" : "Loading sites…"}
+                  options={siteOptions}
+                  error={errors.siteId?.message}
+                  {...register("siteId", {
+                    // The location, shipping address and contact belonged to the site
+                    // chosen before. Cleared HERE, on the person's change, and not by
+                    // watching the value — see SiteAddressFields.
+                    onChange: () => {
+                      setValue("siteLocationId", "");
+                      setValue("shippingAddress", "");
+                      setValue("contactName", "");
+                      setValue("contactNumber", "");
+                    },
+                  })}
+                />
+                <SelectField
+                  label="Type"
+                  options={INVOICE_TYPES.map((value) => ({ value, label: value }))}
+                  error={errors.invoiceType?.message}
+                  {...register("invoiceType")}
                 />
                 {/*
-                  Only when the grid already holds typed lines. Replacing them is
-                  offered rather than done, because there is no undo for it.
+                  LOCATION AND BOTH ADDRESSES IN THE DETAILS (client request, 6 Oct
+                  2026): one compact row instead of a card of their own. Shipping is
+                  the location's address, shown and blank when there is none.
                 */}
-                {askToLoad && orderLines.length > 0 && (
-                  <div className="rounded-md border border-brand-200 bg-white px-2.5 py-2">
-                    <p className="text-xs leading-4 text-slate-700">
-                      This order has {orderLines.length}{" "}
-                      {orderLines.length === 1 ? "product" : "products"}. Loading them replaces
-                      the lines you have entered.
-                    </p>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="mt-2"
-                      onClick={() => {
-                        setAskToLoad(false);
-                        loadOrderLines();
-                      }}
-                    >
-                      Load the order&rsquo;s products
-                    </Button>
-                  </div>
-                )}
+                <SiteLocationAddresses
+                  siteId={chosenSiteId}
+                  shippingAddress={shippingAddress}
+                  onShippingChange={(address) => setValue("shippingAddress", address, { shouldDirty: true })}
+                  location={{
+                    value: chosenLocationId,
+                    onChange: (locationId) => setValue("siteLocationId", locationId, { shouldDirty: true }),
+                    error: errors.siteLocationId?.message,
+                  }}
+                />
+              </div>
+              {/*
+                THE ORDER BELONGS IN THIS CARD, not in one of its own (client
+                request, 21 Sep 2026, from a mockup).
+
+                It is one select and, occasionally, one offer — about a sixth of
+                the content of a section, and as a card of its own it took a
+                heading, an icon tile, a border and 16px of padding to say it.
+                Inline in the tinted well it sits in the second row beside Site and
+                Type, which is where the mockup puts it and where it reads as part
+                of the invoice's own details rather than as a separate subject.
+
+                `sm:col-span-2` is what makes it the right-hand half of that row:
+                the card is four columns wide at this window size, so the row is
+                Site, Type, and this across the remaining two.
+              */}
+              <div className="rounded-lg border border-brand-100 bg-brand-50/50 p-3">
+                <div className="flex items-center gap-2">
+                  <FileText aria-hidden className="size-4 shrink-0 text-brand-600" />
+                  <h4 className="text-xs font-semibold leading-4 text-slate-800">
+                    Against a purchase order
+                  </h4>
+                </div>
+
+                <div
+                  className={clsx(
+                    "mt-2 grid gap-3",
+                    // Side by side only once the offer is actually there, and only
+                    // where there is room for both — otherwise the select would
+                    // sit in half a well for no reason.
+                    askToLoad && orderLines.length > 0 && "xl:grid-cols-2",
+                  )}
+                >
+                  {/*
+                    `SupplierInvoice.Poid` is an nvarchar holding the order's
+                    NUMBER as text, matched by string equality — assessment 09
+                    §7.5. Renaming or reissuing an order silently detaches its
+                    invoices today. Here it is a real foreign key, chosen from a
+                    list.
+                  */}
+                  <SelectField
+                    label="Purchase order"
+                    placeholder={
+                      !chosenSupplierId
+                        ? "Choose a supplier first"
+                        : orders.isLoading
+                          ? "Loading orders…"
+                          : orderChoices.length === 0
+                            ? "This supplier has no orders"
+                            : "Not against an order"
+                    }
+                    options={orderChoices}
+                    error={errors.purchaseOrderId?.message}
+                    {...register("purchaseOrderId")}
+                  />
+                  {/*
+                    Only when the grid already holds typed lines. Replacing them is
+                    offered rather than done, because there is no undo for it.
+                  */}
+                  {askToLoad && orderLines.length > 0 && (
+                    <div className="rounded-md border border-brand-200 bg-white px-2.5 py-2">
+                      <p className="text-xs leading-4 text-slate-700">
+                        This order has {orderLines.length}{" "}
+                        {orderLines.length === 1 ? "product" : "products"}. Loading them replaces
+                        the lines you have entered.
+                      </p>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="mt-2"
+                        onClick={() => {
+                          setAskToLoad(false);
+                          loadOrderLines();
+                        }}
+                      >
+                        Load the order&rsquo;s products
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-
-            {/*
-              LOCATION AND BOTH ADDRESSES IN THE DETAILS (client request, 6 Oct
-              2026): one compact row instead of a card of their own. Shipping is
-              the location's address, shown and blank when there is none.
-            */}
-            <SiteLocationAddresses
-              className="col-span-full"
-              siteId={chosenSiteId}
-              shippingAddress={shippingAddress}
-              onShippingChange={(address) => setValue("shippingAddress", address, { shouldDirty: true })}
-              location={{
-                value: chosenLocationId,
-                onChange: (locationId) => setValue("siteLocationId", locationId, { shouldDirty: true }),
-                error: errors.siteLocationId?.message,
-              }}
-            />
           </FormSection>
 
           {/*
@@ -576,14 +583,12 @@ export function PurchaseInvoiceFormDialog({
                 <TextField
                   label="TDS"
                   inputMode="decimal"
-                  hint="Tax deducted at source. Subtracted from the total."
                   error={errors.tds?.message}
                   {...register("tds")}
                 />
                 <TextField
                   label="Adjustment"
                   inputMode="decimal"
-                  hint="Added to the total. Use a minus to nudge it down."
                   error={errors.roundOff?.message}
                   {...register("roundOff")}
                 />

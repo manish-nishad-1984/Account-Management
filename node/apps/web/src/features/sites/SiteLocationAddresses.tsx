@@ -54,7 +54,10 @@ export function SiteLocationAddresses({
       : (options.data?.billingAddress ?? "");
 
   return (
-    <div className={clsx("grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.4fr)]", className)}>
+    // `contents`: the three cells join whatever grid the caller puts this in, so the
+    // caller decides the layout; billing is the tall one and takes two rows.
+    <div className={clsx("contents", className)}>
+      <ReadOnlyAddress label="Billing address" value={billing} className="row-span-2" />
       <SelectField
         label="Location"
         options={locations}
@@ -68,16 +71,15 @@ export function SiteLocationAddresses({
           onShippingChange(locationId === "" ? "" : addressOf(locationId));
         }}
       />
-      <ReadOnlyAddress label="Billing address" value={billing} />
       <ReadOnlyAddress label="Shipping address" value={(shippingAddress ?? "").trim()} />
     </div>
   );
 }
 
 /** A value shown as text in a box that looks like a field and cannot be typed into. */
-function ReadOnlyAddress({ label, value }: { label: string; value: string }) {
+function ReadOnlyAddress({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
-    <div>
+    <div className={className}>
       <div className={LABEL_BASE}>{label}</div>
       <div
         aria-label={label}
