@@ -44,6 +44,9 @@ function routes() {
         }),
       );
     }
+    if ((init?.method ?? "GET").toUpperCase() === "PATCH") {
+      return Promise.resolve(json({ id: EXISTING.id, name: "renamed", unitId: 1, pricePerUnit: "400.00", gstPercent: null, gstAmount: null, hsnCode: null, isApproved: true }));
+    }
     if ((init?.method ?? "GET").toUpperCase() === "POST") {
       return Promise.resolve(json({ ...EXISTING, id: "new" }, 201));
     }
@@ -135,5 +138,65 @@ describe("ItemFormDialog name check", () => {
     expect(nameChecks()[0]!.searchParams.get("excludeId")).toBe(EXISTING.id);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(screen.queryByText(/already exists/)).not.toBeInTheDocument();
+  });
+
+  describe("picking an existing item while adding", () => {
+    const openAddAs = (permissions: string[]) =>
+      renderWithAuth(<ItemFormDialog open itemId={null} onClose={() => {}} />, { permissions });
+    const patches = () =>
+      vi.mocked(globalThis.fetch).mock.calls.filter((call) => (call[1]?.method ?? "").toUpperCase() === "PATCH");
+
+    it("turns the form into that item's edit form, so it can be renamed and saved as an edit", async () => {
+      const user = userEvent.setup();
+      openAddAs(["item.view", "item.add", "item.edit"]);
+
+      await user.type(screen.getByLabelText(/item name/i), "cement opc");
+      await user.click(await screen.findByRole("button", { name: `Edit ${EXISTING.name}` }));
+
+      const name = await screen.findByLabelText(/item name/i);
+      await waitFor(() => expect(name).toHaveValue(EXISTING.name));
+      expect(screen.getByRole("button", { name: /save changes/i })).toBeInTheDocument();
+
+      await user.clear(name);
+      await user.type(name, "OPC 53 Grade Cement Premium");
+      await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+      await waitFor(() => expect(patches()).toHaveLength(1));
+      expect(String(patches()[0]![0])).toContain(EXISTING.id);
+      expect(JSON.parse(String(patches()[0]![1]!.body)).name).toBe("OPC 53 Grade Cement Premium");
+      expect(posts()).toHaveLength(0);
+    });
+
+    it("offers to edit the item when the same name already exists", async () => {
+      const user = userEvent.setup();
+      openAddAs(["item.view", "item.add", "item.edit"]);
+
+      await user.type(screen.getByLabelText(/item name/i), "OPC 53 Grade Cement");
+      await user.click(await screen.findByRole("button", { name: /edit this item instead/i }));
+
+      await waitFor(() => expect(screen.getByRole("button", { name: /save changes/i })).toBeInTheDocument());
+    });
+
+    it("can go back to adding a new item", async () => {
+      const user = userEvent.setup();
+      openAddAs(["item.view", "item.add", "item.edit"]);
+
+      await user.type(screen.getByLabelText(/item name/i), "cement opc");
+      await user.click(await screen.findByRole("button", { name: `Edit ${EXISTING.name}` }));
+      await user.click(await screen.findByRole("button", { name: /add a new item instead/i }));
+
+      expect(await screen.findByRole("button", { name: /create item/i })).toBeInTheDocument();
+      expect(screen.getByLabelText(/item name/i)).toHaveValue("");
+    });
+
+    it("only lists the matches, without a way to pick, for someone who cannot edit items", async () => {
+      const user = userEvent.setup();
+      openAddAs(["item.view", "item.add"]);
+
+      await user.type(screen.getByLabelText(/item name/i), "cement opc");
+
+      expect(await screen.findByRole("list", { name: "Items with a similar name" })).toHaveTextContent(EXISTING.name);
+      expect(screen.queryByRole("button", { name: `Edit ${EXISTING.name}` })).not.toBeInTheDocument();
+    });
   });
 });

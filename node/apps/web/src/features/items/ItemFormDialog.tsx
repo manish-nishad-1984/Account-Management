@@ -19,6 +19,7 @@ import {
 import { applyServerErrors, unshownValidationMessage } from "../../lib/crud";
 import { text } from "../../lib/form-values";
 import { useDebouncedValue } from "../../lib/use-debounced-value";
+import { usePermission } from "../../lib/permissions";
 import { useAllUnits, useCreateItem, useItem, useItemNameCheck, useUpdateItem } from "./api";
 
 /**
@@ -52,8 +53,19 @@ export function ItemFormDialog({
   itemId: string | null;
   onClose: () => void;
 }) {
-  const isEdit = itemId !== null;
-  const detail = useItem(open && isEdit ? itemId : null);
+  /**
+   * AN EXISTING ITEM PICKED FROM THE MATCHES (client request, 6 Oct 2026). While
+   * adding, the person types a name, sees the items already called something
+   * like it and may choose one instead of creating a duplicate: the form then
+   * becomes that item's edit form, with its name in the box to be renamed. The
+   * save is an ordinary edit, so the server records the price change in the
+   * item's history exactly as it does from the Edit screen.
+   */
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const activeId = itemId ?? pickedId;
+  const isEdit = activeId !== null;
+  const canEditItems = usePermission("item", "edit");
+  const detail = useItem(open && isEdit ? activeId : null);
   const units = useAllUnits();
   const create = useCreateItem();
   const update = useUpdateItem();
@@ -84,12 +96,16 @@ export function ItemFormDialog({
    */
   const typedName = String(watch("name") ?? "");
   const settledName = useDebouncedValue(typedName, 300);
-  const nameCheck = useItemNameCheck(open ? settledName : "", itemId);
+  const nameCheck = useItemNameCheck(open ? settledName : "", activeId);
   const checkIsCurrent =
     normalizeItemName(settledName).toLowerCase() === normalizeItemName(typedName).toLowerCase();
   const sameName = checkIsCurrent ? (nameCheck.data?.exact ?? null) : null;
   const similarNames = checkIsCurrent ? (nameCheck.data?.similar ?? []) : [];
   const checking = typedName.trim().length >= 2 && (!checkIsCurrent || nameCheck.isFetching);
+
+  useEffect(() => {
+    if (!open) setPickedId(null);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -102,6 +118,9 @@ export function ItemFormDialog({
   }, [open, isEdit, detail.data, reset]);
 
   const pending = create.isPending || update.isPending;
+  // Only while ADDING, and only for someone who may edit: picking turns the form
+  // into an edit, which the server would refuse to anyone without the right.
+  const canPick = !itemId && canEditItems;
 
   const onSubmit = handleSubmit(async (values) => {
     setFormError(null);
@@ -111,7 +130,7 @@ export function ItemFormDialog({
     }
     try {
       if (isEdit) {
-        await update.mutateAsync({ id: itemId, body: values });
+        await update.mutateAsync({ id: activeId, body: values });
       } else {
         await create.mutateAsync(values);
       }
@@ -153,6 +172,27 @@ export function ItemFormDialog({
                 }
                 {...register("name")}
               />
+              {sameName && canPick && (
+                <button
+                  type="button"
+                  className="mt-1 text-xs font-medium text-brand-700 underline underline-offset-2"
+                  onClick={() => setPickedId(sameName.id)}
+                >
+                  Edit this item instead
+                </button>
+              )}
+              {pickedId && !itemId && (
+                <button
+                  type="button"
+                  className="mt-1 text-xs font-medium text-slate-600 underline underline-offset-2"
+                  onClick={() => {
+                    setPickedId(null);
+                    reset(EMPTY);
+                  }}
+                >
+                  Add a new item instead
+                </button>
+              )}
               {checking && !sameName && (
                 <p className="mt-1 text-xs leading-4 text-slate-400" aria-live="polite">
                   Checking existing items…
@@ -169,10 +209,26 @@ export function ItemFormDialog({
                   <ul aria-label="Items with a similar name" className="mt-1 space-y-0.5">
                     {similarNames.map((match) => (
                       <li key={match.id} className="truncate text-xs text-amber-900">
-                        {match.name}
+                        {canPick ? (
+                          <button
+                            type="button"
+                            className="max-w-full truncate rounded px-1 text-left underline decoration-amber-400 underline-offset-2 hover:bg-amber-100"
+                            onClick={() => setPickedId(match.id)}
+                            aria-label={`Edit ${match.name}`}
+                          >
+                            {match.name}
+                          </button>
+                        ) : (
+                          match.name
+                        )}
                       </li>
                     ))}
                   </ul>
+                  {canPick && (
+                    <p className="mt-1 text-xs leading-4 text-amber-800">
+                      Choose one to edit it instead of adding a new item.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
