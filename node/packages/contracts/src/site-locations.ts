@@ -69,7 +69,17 @@ export type SiteLocation = z.infer<typeof siteLocationSchema>;
  * sending the address again inside the Location option would put the same words
  * on the screen twice, from two controls that mean different things.
  */
-export const locationChoiceSchema = z.object({ id: z.string(), name: z.string() });
+/**
+ * `address` is the location's OWN address, always — even when it repeats the site's
+ * address or another entry in the shipping list, which the list drops. Shipping is
+ * read from here, not looked up in that list: a location whose address matched one
+ * already offered used to find nothing there and leave shipping blank (6 Oct 2026).
+ */
+export const locationChoiceSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  address: z.string(),
+});
 export type LocationChoice = z.infer<typeof locationChoiceSchema>;
 
 export const siteLocationDetailSchema = z.object({

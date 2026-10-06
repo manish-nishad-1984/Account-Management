@@ -19,8 +19,11 @@ const OPTIONS = {
     { key: "location-loc-1", source: "location", address: "Block A gate, Hazira" },
   ],
   locations: [
-    { id: "loc-1", name: "Block A" },
-    { id: "loc-2", name: "Store Yard (no address yet)" },
+    { id: "loc-1", name: "Block A", address: "Block A gate, Hazira" },
+    { id: "loc-2", name: "Store Yard (no address yet)", address: "" },
+    // Its address is the SITE's own, so the shipping list (which drops a repeat) has no
+    // entry for it. Shipping must still show it.
+    { id: "loc-3", name: "Main Gate", address: "Plot 12, Akwada Lake Front" },
   ],
   contacts: [],
 };
@@ -74,5 +77,13 @@ describe("SiteLocationAddresses", () => {
 
     await userEvent.selectOptions(screen.getByLabelText("Location"), "Store Yard (no address yet)");
     expect(box("Shipping address")).toBeEmptyDOMElement();
+  });
+
+  it("shows a location's address even when it is the same as the site's own", async () => {
+    renderWithAuth(<Harness />);
+    await screen.findByRole("option", { name: "Main Gate" });
+
+    await userEvent.selectOptions(screen.getByLabelText("Location"), "Main Gate");
+    expect(box("Shipping address")).toHaveTextContent("Plot 12, Akwada Lake Front");
   });
 });

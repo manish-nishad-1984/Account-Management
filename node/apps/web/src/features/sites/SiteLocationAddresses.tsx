@@ -44,8 +44,10 @@ export function SiteLocationAddresses({
     ...(options.data?.locations ?? []).map((row) => ({ value: row.id, label: row.name })),
   ];
   const selected = typeof location.value === "string" ? location.value : "";
+  // The location's own address. Not looked up in the shipping list, which drops an
+  // address that repeats another one and so left shipping blank for such a location.
   const addressOf = (locationId: string): string =>
-    (options.data?.shippingAddresses ?? []).find((choice) => choice.key === `location-${locationId}`)?.address ?? "";
+    (options.data?.locations ?? []).find((row) => row.id === locationId)?.address ?? "";
 
   const billing = !chosenSite
     ? ""

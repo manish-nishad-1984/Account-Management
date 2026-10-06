@@ -81,7 +81,9 @@ export function SiteAddressFields({
    * swaps a different saved document into this mounted form.
    */
   const addressOfLocation = (locationId: string): string =>
-    choices.find((choice) => choice.key === `location-${locationId}`)?.address ?? "";
+    (options.data?.locations ?? []).find((row) => row.id === locationId)?.address ??
+    choices.find((choice) => choice.key === `location-${locationId}`)?.address ??
+    "";
 
   const selectedLocationId = location && typeof location.value === "string" ? location.value : "";
   const selectedLocationHasNoAddress =

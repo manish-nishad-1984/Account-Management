@@ -87,8 +87,8 @@ const SITE_OPTIONS = {
     },
   ],
   locations: [
-    { id: "55555555-5555-4555-8555-555555555555", name: "Block A" },
-    { id: "66666666-6666-4666-8666-666666666666", name: "Store Yard" },
+    { id: "55555555-5555-4555-8555-555555555555", name: "Block A", address: "Block A gate, Hazira" },
+    { id: "66666666-6666-4666-8666-666666666666", name: "Store Yard", address: "" },
   ],
   contacts: [
     { id: "c1", name: "Ramesh", phone: "9824000001" },

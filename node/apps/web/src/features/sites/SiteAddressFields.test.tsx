@@ -24,9 +24,9 @@ const SITE_OPTIONS = {
     { key: "location-loc-1", source: "location", address: "Block A gate, Hazira" },
   ],
   locations: [
-    { id: "loc-1", name: "Block A" },
+    { id: "loc-1", name: "Block A", address: "Block A gate, Hazira" },
     // Named on the Site Location screen, but its own row has no address paired.
-    { id: "loc-2", name: "Store Yard (no address yet)" },
+    { id: "loc-2", name: "Store Yard (no address yet)", address: "" },
   ],
   contacts: [],
 };

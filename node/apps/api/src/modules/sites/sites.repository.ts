@@ -524,7 +524,7 @@ export class SitesRepository extends BaseRepository {
        */
       locations: pairs
         .filter((pair) => pair.name !== "")
-        .map((pair) => ({ id: pair.id, name: pair.name })),
+        .map((pair) => ({ id: pair.id, name: pair.name, address: (pair.address ?? "").trim() })),
       contacts,
     };
   }
