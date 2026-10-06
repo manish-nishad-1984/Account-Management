@@ -39,6 +39,11 @@ export function buildPayoutMessage(
 
   detail.lines.forEach((line, index) => {
     lines.push(`${index + 1}. ${line.partyName} - ${rupees(line.amount)}`);
+    // The bills under a party, when the list was built from bills.
+    for (const bill of line.invoices ?? []) {
+      const date = bill.documentDate ? ` (${formatListDate(bill.documentDate)})` : "";
+      lines.push(`    ${bill.displayNo}${date} - ${rupees(bill.amount)}`);
+    }
   });
 
   lines.push(`Total: ${rupees(sumAmounts(detail.lines.map((line) => line.amount)))}`);

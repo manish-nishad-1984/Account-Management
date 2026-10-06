@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { Copy, MessageCircle, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, MessageCircle, Search } from "lucide-react";
 import {
   createPayoutListSchema,
   type CreatePayoutList,
   type PayoutLine,
   type PayoutListDetail,
+  type PayoutPendingInvoice,
 } from "@accountmanagement/contracts";
 import { Alert, Button, FormDialog, FormSection, TextField } from "../../components/ui";
 import { useRecordLayout } from "../../contexts/RecordLayoutContext";
@@ -14,6 +15,7 @@ import { todayInput } from "../../lib/dates";
 import { formatMoney } from "../../lib/format";
 import { useCreatePayoutList, usePayoutList, usePayoutOutstanding, useUpdatePayoutList } from "./api";
 import { fromPaise, sumAmounts, toPaise } from "./decimal";
+import { formatListDate } from "./message";
 import { ShareNotice, usePayoutSharing } from "./share";
 
 /**
@@ -44,6 +46,18 @@ type Errors = {
 const NO_ERRORS: Errors = { fields: {}, lines: {}, banner: null };
 const FIELDS: readonly string[] = ["listDate", "title", "budget", "note"];
 
+/**
+ * A bill under a party (client request, 6 Oct 2026). `pending` is what is unpaid
+ * NOW; "0" for a bill saved on a list that has since been paid, which is kept so
+ * the list is not changed by the bill having been settled.
+ */
+interface Bill extends Omit<PayoutPendingInvoice, "pending" | "amount"> {
+  key: string;
+  pending: string;
+}
+
+const billKey = (bill: { source: string; documentId: string }) => `${bill.source}:${bill.documentId}`;
+
 /** One row of the builder: a party we owe, or a saved line whose party is no longer in the owed list. */
 interface BuilderRow {
   partyId: string;
@@ -51,6 +65,7 @@ interface BuilderRow {
   /** What is owed NOW. "0" for a saved party that owes nothing any more. */
   owed: string;
   saved: PayoutLine | undefined;
+  bills: Bill[];
 }
 
 type Issue = { path: ReadonlyArray<string | number>; message: string };
@@ -131,6 +146,13 @@ export function PayoutListFormDialog({
   const [note, setNote] = useState("");
   /** The ticked parties and the amount typed for each. Presence = ticked. */
   const [picked, setPicked] = useState<Record<string, string>>({});
+  /**
+   * The ticked bills of each party and the amount for each. A party with ticked
+   * bills is paid the SUM of them; one with none is paid `picked`'s amount, which is
+   * how a list kept party by party (and a party with no bills listed) still works.
+   */
+  const [bills, setBills] = useState<Record<string, Record<string, string>>>({});
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [tickedOnly, setTickedOnly] = useState(false);
   const [errors, setErrors] = useState<Errors>(NO_ERRORS);
@@ -155,13 +177,26 @@ export function PayoutListFormDialog({
       setBudget("");
       setNote("");
       setPicked({});
+      setBills({});
+      setExpanded(new Set());
     } else if (detail.data) {
       seeded.current = key;
       setListDate(detail.data.listDate);
       setTitle(detail.data.title ?? "");
       setBudget(detail.data.budget ?? "");
       setNote(detail.data.note ?? "");
-      setPicked(Object.fromEntries(detail.data.lines.map((line) => [line.partyId, line.amount])));
+      const withBills = detail.data.lines.filter((line) => (line.invoices ?? []).length > 0);
+      setPicked(
+        Object.fromEntries(
+          detail.data.lines.filter((line) => line.invoices.length === 0).map((line) => [line.partyId, line.amount]),
+        ),
+      );
+      setBills(
+        Object.fromEntries(
+          withBills.map((line) => [line.partyId, Object.fromEntries(line.invoices.map((bill) => [billKey(bill), bill.amount]))]),
+        ),
+      );
+      setExpanded(new Set());
     } else {
       return;
     }
@@ -180,53 +215,157 @@ export function PayoutListFormDialog({
    */
   const rows = useMemo<BuilderRow[]>(() => {
     const savedBy = new Map((detail.data?.lines ?? []).map((line) => [line.partyId, line]));
+    /** The offered bills, then any saved bill that has since been paid, so an edit never drops one unseen. */
+    const billsOf = (offered: PayoutPendingInvoice[], saved: PayoutLine | undefined): Bill[] => {
+      const out: Bill[] = offered.map(({ amount: _amount, ...bill }) => ({ ...bill, key: billKey(bill) }));
+      const have = new Set(out.map((bill) => bill.key));
+      for (const bill of saved?.invoices ?? []) {
+        const key = billKey(bill);
+        if (!have.has(key)) {
+          out.push({
+            key,
+            source: bill.source,
+            documentId: bill.documentId,
+            displayNo: bill.displayNo,
+            documentDate: bill.documentDate,
+            siteName: bill.siteName,
+            pending: "0",
+          });
+        }
+      }
+      return out;
+    };
     const owedRows: BuilderRow[] = (outstanding.data?.rows ?? []).map((row) => ({
       partyId: row.partyId,
       partyName: row.partyName,
       owed: row.outstanding,
       saved: savedBy.get(row.partyId),
+      bills: billsOf(row.invoices ?? [], savedBy.get(row.partyId)),
     }));
     const listed = new Set(owedRows.map((row) => row.partyId));
     const gone: BuilderRow[] = (isEdit ? (detail.data?.lines ?? []) : [])
       .filter((line) => !listed.has(line.partyId))
-      .map((line) => ({ partyId: line.partyId, partyName: line.partyName, owed: line.outstandingNow, saved: line }));
+      .map((line) => ({
+        partyId: line.partyId,
+        partyName: line.partyName,
+        owed: line.outstandingNow,
+        saved: line,
+        bills: billsOf([], line),
+      }));
     return [...owedRows, ...gone];
   }, [outstanding.data, detail.data, isEdit]);
 
+  const hasBills = (row: BuilderRow) => Object.keys(bills[row.partyId] ?? {}).length > 0;
+  const isTicked = (row: BuilderRow) => hasBills(row) || row.partyId in picked;
+  /** The sum of the ticked bills, or the amount typed against the party when no bill is ticked. */
+  const amountOf = (row: BuilderRow) =>
+    hasBills(row) ? sumAmounts(Object.values(bills[row.partyId] ?? {})) : (picked[row.partyId] ?? "");
+
   const needle = search.trim().toLowerCase();
   const shown = rows.filter(
-    (row) => (!needle || row.partyName.toLowerCase().includes(needle)) && (!tickedOnly || row.partyId in picked),
+    (row) => (!needle || row.partyName.toLowerCase().includes(needle)) && (!tickedOnly || isTicked(row)),
   );
 
-  const tickedRows = rows.filter((row) => row.partyId in picked);
-  const total = sumAmounts(tickedRows.map((row) => picked[row.partyId] ?? ""));
+  const tickedRows = rows.filter(isTicked);
+  const total = sumAmounts(tickedRows.map(amountOf));
   const budgetPaise = toPaise(budget);
   const totalPaise = toPaise(total) ?? 0n;
 
-  const toggle = (row: BuilderRow) =>
+  /**
+   * THE PARTY'S TICK is "all of it": ticking pays every pending bill in full
+   * (and opens them so the owner sees what he has chosen), unticking clears the
+   * party. Part-way, with some bills ticked, it clears them.
+   */
+  const toggle = (row: BuilderRow) => {
+    const dropBills = (current: Record<string, Record<string, string>>) => {
+      const { [row.partyId]: _dropped, ...rest } = current;
+      return rest;
+    };
+    if (isTicked(row)) {
+      setPicked((current) => {
+        const { [row.partyId]: _dropped, ...rest } = current;
+        return rest;
+      });
+      setBills(dropBills);
+      return;
+    }
+    const payable = row.bills.filter((bill) => (toPaise(bill.pending) ?? 0n) > 0n);
+    if (payable.length > 0) {
+      setBills((current) => ({
+        ...current,
+        [row.partyId]: Object.fromEntries(payable.map((bill) => [bill.key, bill.pending])),
+      }));
+      setExpanded((current) => new Set(current).add(row.partyId));
+      return;
+    }
+    // No bill to pick from: the party is paid as a whole, as before. Part payment allowed.
+    const owed = toPaise(row.owed);
+    setPicked((current) => ({ ...current, [row.partyId]: owed !== null && owed > 0n ? row.owed : "" }));
+  };
+
+  const toggleBill = (row: BuilderRow, bill: Bill) => {
     setPicked((current) => {
-      if (row.partyId in current) {
+      if (!(row.partyId in current)) return current;
+      const { [row.partyId]: _dropped, ...rest } = current;
+      return rest;
+    });
+    setBills((current) => {
+      const mine = { ...(current[row.partyId] ?? {}) };
+      if (bill.key in mine) {
+        delete mine[bill.key];
+      } else {
+        mine[bill.key] = bill.pending;
+      }
+      if (Object.keys(mine).length === 0) {
         const { [row.partyId]: _dropped, ...rest } = current;
         return rest;
       }
-      // Prefilled with what is owed, and editable: a part payment is allowed.
-      const owed = toPaise(row.owed);
-      return { ...current, [row.partyId]: owed !== null && owed > 0n ? row.owed : "" };
+      return { ...current, [row.partyId]: mine };
+    });
+  };
+
+  const setBillAmount = (partyId: string, key: string, value: string) => {
+    setBills((current) => ({ ...current, [partyId]: { ...(current[partyId] ?? {}), [key]: cleanAmount(value) } }));
+    clearLineError(partyId);
+  };
+
+  const toggleOpen = (partyId: string) =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (!next.delete(partyId)) next.add(partyId);
+      return next;
     });
 
-  const setAmount = (partyId: string, value: string) => {
-    setPicked((current) => ({ ...current, [partyId]: cleanAmount(value) }));
+  const clearLineError = (partyId: string) =>
     setErrors((current) => {
       if (!(partyId in current.lines)) return current;
       const { [partyId]: _cleared, ...lines } = current.lines;
       return { ...current, lines };
     });
+
+  const setAmount = (partyId: string, value: string) => {
+    setPicked((current) => ({ ...current, [partyId]: cleanAmount(value) }));
+    clearLineError(partyId);
   };
 
   const pending = create.isPending || update.isPending;
 
   const submit = async () => {
-    const lines = tickedRows.map((row) => ({ partyId: row.partyId, amount: (picked[row.partyId] ?? "").trim() }));
+    const lines = tickedRows.map((row) => ({
+      partyId: row.partyId,
+      amount: amountOf(row).trim(),
+      invoices: row.bills
+        .filter((bill) => bill.key in (bills[row.partyId] ?? {}))
+        .map((bill) => ({
+          source: bill.source,
+          documentId: bill.documentId,
+          displayNo: bill.displayNo,
+          documentDate: bill.documentDate,
+          siteName: bill.siteName,
+          amount: (bills[row.partyId]?.[bill.key] ?? "").trim(),
+          pending: bill.pending,
+        })),
+    }));
     const order = lines.map((line) => line.partyId);
     const parsed = createPayoutListSchema.safeParse({ listDate, title, budget, note, lines });
     if (!parsed.success) {
@@ -426,53 +565,156 @@ export function PayoutListFormDialog({
                       </tr>
                     )}
                     {shown.map((row) => {
-                      const ticked = row.partyId in picked;
-                      const amount = picked[row.partyId] ?? "";
+                      const ticked = isTicked(row);
+                      const partyBills = bills[row.partyId] ?? {};
+                      const tickedCount = Object.keys(partyBills).length;
+                      const byBill = tickedCount > 0;
+                      const amount = amountOf(row);
                       const flag = ticked ? lineFlag(row, amount) : null;
+                      const open = expanded.has(row.partyId);
+                      const canOpen = row.bills.length > 0;
                       return (
-                        <tr
-                          key={row.partyId}
-                          className={clsx("cursor-pointer transition-colors", ticked ? "bg-brand-50 hover:bg-brand-100/70" : "hover:bg-slate-100")}
-                          onClick={(event) => {
-                            // A click on the amount box or the box itself is theirs, not the row's.
-                            if ((event.target as HTMLElement).closest("input, button, a, label")) return;
-                            toggle(row);
-                          }}
-                        >
-                          <td className="px-3 py-1 align-top">
-                            <input
-                              type="checkbox"
-                              aria-label={`Pay ${row.partyName}`}
-                              className="mt-1 size-4 rounded border-slate-300 text-brand-600"
-                              checked={ticked}
-                              onChange={() => toggle(row)}
-                            />
-                          </td>
-                          <td className="px-2 py-1 align-top">
-                            <div className="pt-0.5 font-medium text-slate-900">{row.partyName}</div>
-                            {flag && <div className="mt-0.5 text-xs text-amber-700">{flag}</div>}
-                          </td>
-                          <td className="tabular px-2 py-1 pt-1.5 text-right align-top text-slate-700">
-                            {formatMoney(row.owed)}
-                          </td>
-                          <td className="px-2 py-1 align-top">
-                            {ticked ? (
-                              <TextField
-                                label={`Amount for ${row.partyName}`}
-                                labelHidden
-                                compact
-                                inputMode="decimal"
-                                placeholder="0.00"
-                                className="[&_input]:text-right"
-                                value={amount}
-                                onChange={(event) => setAmount(row.partyId, event.target.value)}
-                                error={errors.lines[row.partyId]}
-                              />
-                            ) : (
-                              <span className="block pt-1 text-right text-slate-300">—</span>
+                        <Fragment key={row.partyId}>
+                          <tr
+                            className={clsx(
+                              "cursor-pointer transition-colors",
+                              ticked ? "bg-brand-50 hover:bg-brand-100/70" : "hover:bg-slate-100",
                             )}
-                          </td>
-                        </tr>
+                            onClick={(event) => {
+                              // A click on the amount box or the box itself is theirs, not the row's.
+                              if ((event.target as HTMLElement).closest("input, button, a, label")) return;
+                              toggle(row);
+                            }}
+                          >
+                            <td className="px-3 py-1 align-top">
+                              <input
+                                type="checkbox"
+                                aria-label={`Pay ${row.partyName}`}
+                                className="mt-1 size-4 rounded border-slate-300 text-brand-600"
+                                checked={ticked}
+                                ref={(element) => {
+                                  // Part of the bills ticked: the box says "some".
+                                  if (element) element.indeterminate = byBill && tickedCount < row.bills.length;
+                                }}
+                                onChange={() => toggle(row)}
+                              />
+                            </td>
+                            <td className="px-2 py-1 align-top">
+                              <div className="flex items-center gap-1 pt-0.5">
+                                {canOpen ? (
+                                  <button
+                                    type="button"
+                                    aria-expanded={open}
+                                    aria-label={`${open ? "Hide" : "Show"} the bills of ${row.partyName}`}
+                                    className="-ml-1 rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-800"
+                                    onClick={() => toggleOpen(row.partyId)}
+                                  >
+                                    {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                                  </button>
+                                ) : (
+                                  <span className="size-4" />
+                                )}
+                                <span className="font-medium text-slate-900">{row.partyName}</span>
+                                {canOpen && (
+                                  <span className="text-xs text-slate-500">
+                                    {byBill
+                                      ? `${tickedCount} of ${row.bills.length} bills`
+                                      : `${row.bills.length} ${row.bills.length === 1 ? "bill" : "bills"}`}
+                                  </span>
+                                )}
+                              </div>
+                              {flag && <div className="mt-0.5 pl-5 text-xs text-amber-700">{flag}</div>}
+                            </td>
+                            <td className="tabular px-2 py-1 pt-1.5 text-right align-top text-slate-700">
+                              {formatMoney(row.owed)}
+                            </td>
+                            <td className="px-2 py-1 align-top">
+                              {ticked && !byBill ? (
+                                <TextField
+                                  label={`Amount for ${row.partyName}`}
+                                  labelHidden
+                                  compact
+                                  inputMode="decimal"
+                                  placeholder="0.00"
+                                  className="[&_input]:text-right"
+                                  value={amount}
+                                  onChange={(event) => setAmount(row.partyId, event.target.value)}
+                                  error={errors.lines[row.partyId]}
+                                />
+                              ) : byBill ? (
+                                <>
+                                  <span className="tabular block pt-1 text-right font-medium text-slate-900">
+                                    {formatMoney(amount)}
+                                  </span>
+                                  {errors.lines[row.partyId] && (
+                                    <span role="alert" className="block text-right text-xs text-red-600">
+                                      {errors.lines[row.partyId]}
+                                    </span>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="block pt-1 text-right text-slate-300">—</span>
+                              )}
+                            </td>
+                          </tr>
+                          {open &&
+                            row.bills.map((bill) => {
+                              const on = bill.key in partyBills;
+                              return (
+                                <tr
+                                  key={bill.key}
+                                  className={clsx(
+                                    "cursor-pointer transition-colors",
+                                    on ? "bg-brand-50/60 hover:bg-brand-100/70" : "bg-slate-50/60 hover:bg-slate-100",
+                                  )}
+                                  onClick={(event) => {
+                                    if ((event.target as HTMLElement).closest("input, button, a, label")) return;
+                                    toggleBill(row, bill);
+                                  }}
+                                >
+                                  <td className="px-3 py-0.5 align-top">
+                                    <input
+                                      type="checkbox"
+                                      aria-label={`Pay bill ${bill.displayNo} of ${row.partyName}`}
+                                      className="mt-1.5 ml-3 size-4 rounded border-slate-300 text-brand-600"
+                                      checked={on}
+                                      onChange={() => toggleBill(row, bill)}
+                                    />
+                                  </td>
+                                  <td className="px-2 py-0.5 pl-9 align-top text-slate-700">
+                                    <span className="font-medium">{bill.displayNo}</span>
+                                    <span className="ml-2 text-xs text-slate-500">
+                                      {[bill.documentDate ? formatListDate(bill.documentDate) : null, bill.siteName]
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                    </span>
+                                    {bill.pending === "0" && (
+                                      <span className="ml-2 text-xs text-amber-700">paid since this list was saved</span>
+                                    )}
+                                  </td>
+                                  <td className="tabular px-2 py-0.5 pt-1.5 text-right align-top text-slate-600">
+                                    {formatMoney(bill.pending)}
+                                  </td>
+                                  <td className="px-2 py-0.5 align-top">
+                                    {on ? (
+                                      <TextField
+                                        label={`Amount for bill ${bill.displayNo}`}
+                                        labelHidden
+                                        compact
+                                        inputMode="decimal"
+                                        placeholder="0.00"
+                                        className="[&_input]:text-right"
+                                        value={partyBills[bill.key] ?? ""}
+                                        onChange={(event) => setBillAmount(row.partyId, bill.key, event.target.value)}
+                                      />
+                                    ) : (
+                                      <span className="block pt-1 text-right text-slate-300">—</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </Fragment>
                       );
                     })}
                   </tbody>

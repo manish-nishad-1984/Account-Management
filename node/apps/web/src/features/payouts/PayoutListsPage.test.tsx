@@ -37,8 +37,8 @@ const DETAIL = {
   updatedByName: null,
   note: null,
   lines: [
-    { id: "l1", partyId: "p1", partyName: "Ambica Steel Traders", amount: "125000.00", outstandingAtSave: "125000.00", outstandingNow: "125000.00" },
-    { id: "l2", partyId: "p2", partyName: "Shree Cement", amount: "515000.00", outstandingAtSave: "515000.00", outstandingNow: "515000.00" },
+    { id: "l1", partyId: "p1", partyName: "Ambica Steel Traders", amount: "125000.00", outstandingAtSave: "125000.00", outstandingNow: "125000.00", invoices: [] },
+    { id: "l2", partyId: "p2", partyName: "Shree Cement", amount: "515000.00", outstandingAtSave: "515000.00", outstandingNow: "515000.00", invoices: [] },
   ],
 };
 

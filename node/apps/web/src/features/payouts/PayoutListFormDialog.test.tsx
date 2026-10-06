@@ -14,10 +14,10 @@ const GONE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9";
 
 const OWED = {
   rows: [
-    { partyId: P1, partyName: "Ambica Steel Traders", outstanding: "125000.00" },
-    { partyId: P2, partyName: "Shree Cement", outstanding: "4000000.00" },
-    { partyId: P3, partyName: "Dime Traders", outstanding: "0.10" },
-    { partyId: P4, partyName: "Fifth Traders", outstanding: "0.20" },
+    { partyId: P1, partyName: "Ambica Steel Traders", outstanding: "125000.00", invoices: [] },
+    { partyId: P2, partyName: "Shree Cement", outstanding: "4000000.00", invoices: [] },
+    { partyId: P3, partyName: "Dime Traders", outstanding: "0.10", invoices: [] },
+    { partyId: P4, partyName: "Fifth Traders", outstanding: "0.20", invoices: [] },
   ],
   total: "4125000.30",
 };
@@ -35,11 +35,11 @@ const DETAIL = {
   updatedByName: null,
   note: "Call before paying",
   lines: [
-    { id: "l1", partyId: P1, partyName: "Ambica Steel Traders", amount: "125000.00", outstandingAtSave: "125000.00", outstandingNow: "125000.00" },
+    { id: "l1", partyId: P1, partyName: "Ambica Steel Traders", amount: "125000.00", outstandingAtSave: "125000.00", outstandingNow: "125000.00", invoices: [] },
     // Saved at 80,000 against 4,000,000 owed; since then the owed figure stands at 30,000 (paid since).
-    { id: "l2", partyId: P2, partyName: "Shree Cement", amount: "80000.00", outstandingAtSave: "4000000.00", outstandingNow: "30000.00" },
+    { id: "l2", partyId: P2, partyName: "Shree Cement", amount: "80000.00", outstandingAtSave: "4000000.00", outstandingNow: "30000.00", invoices: [] },
     // Paid in full since: no longer in the owed list at all.
-    { id: "l3", partyId: GONE, partyName: "Settled Supplies", amount: "60000.00", outstandingAtSave: "60000.00", outstandingNow: "0" },
+    { id: "l3", partyId: GONE, partyName: "Settled Supplies", amount: "60000.00", outstandingAtSave: "60000.00", outstandingNow: "0", invoices: [] },
   ],
 };
 
@@ -124,7 +124,7 @@ describe("PayoutListFormDialog", () => {
       title: "Friday payout",
       budget: null,
       note: null,
-      lines: [{ partyId: P1, amount: "50000" }],
+      lines: [{ partyId: P1, amount: "50000", invoices: [] }],
     });
   });
 
@@ -311,9 +311,9 @@ describe("PayoutListFormDialog", () => {
         budget: "300000.00",
         note: "Call before paying",
         lines: [
-          { partyId: P1, amount: "125000.00" },
-          { partyId: P2, amount: "80000.00" },
-          { partyId: GONE, amount: "60000.00" },
+          { partyId: P1, amount: "125000.00", invoices: [] },
+          { partyId: P2, amount: "80000.00", invoices: [] },
+          { partyId: GONE, amount: "60000.00", invoices: [] },
         ],
       });
       const patch = vi

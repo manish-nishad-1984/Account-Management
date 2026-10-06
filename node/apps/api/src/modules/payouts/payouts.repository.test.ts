@@ -115,8 +115,8 @@ describe("PayoutsRepository (real PostgreSQL)", () => {
     it("sums each supplier over its sites, drops anyone owed nothing, and sorts by name", async () => {
       const result = await repo.outstanding();
       expect(result.rows).toEqual([
-        { partyId: alId, partyName: "AL BURHAN PIPES", outstanding: "2000.00" },
-        { partyId: shahId, partyName: "SHAH ENTERPRISE", outstanding: "700.00" },
+        { partyId: alId, partyName: "AL BURHAN PIPES", outstanding: "2000.00", invoices: expect.any(Array) },
+        { partyId: shahId, partyName: "SHAH ENTERPRISE", outstanding: "700.00", invoices: expect.any(Array) },
       ]);
       expect(result.total).toBe("2700.00");
     });
@@ -329,6 +329,78 @@ describe("PayoutsRepository (real PostgreSQL)", () => {
       );
       const [row] = (await repo.list(listQuerySchema.parse({}))).rows;
       expect(row).toMatchObject({ total: "30.30", partyCount: 2, createdByName: "Ravi Desai" });
+    });
+  });
+
+  /**
+   * THE BILLS UNDER A PARTY (client request, 6 Oct 2026): the owner ticks the
+   * invoices he is paying, and the party's amount is their sum.
+   */
+  describe("bills", () => {
+    it("offers each party's pending bills, oldest paid first, with what is still unpaid of each", async () => {
+      const result = await repo.outstanding();
+      const shah = result.rows.find((row) => row.partyId === shahId)!;
+      // 1,000 invoiced and 300 paid: the one bill, 700 still to pay.
+      expect(shah.invoices.map((bill) => [bill.displayNo, bill.amount, bill.pending])).toEqual([
+        [expect.any(String), "1000.00", "700.00"],
+      ]);
+      const al = result.rows.find((row) => row.partyId === alId)!;
+      expect(al.invoices.map((bill) => bill.pending).sort()).toEqual(["1500.00", "500.00"]);
+      expect(al.invoices.map((bill) => bill.siteName).sort()).toEqual(["Akwada", "Surat"]);
+    });
+
+    const withBills = async () => {
+      const offered = (await repo.outstanding()).rows.find((row) => row.partyId === alId)!;
+      const [first, second] = offered.invoices;
+      return { first: first!, second: second! };
+    };
+
+    it("keeps the bills with a line, and the line is the sum of them, whatever the form added up", async () => {
+      const { first, second } = await withBills();
+      const created = await repo.create(
+        input([
+          {
+            partyId: alId,
+            amount: "1.00",
+            invoices: [
+              { source: first.source, documentId: first.documentId, displayNo: first.displayNo, documentDate: first.documentDate, siteName: first.siteName, amount: "400.00", pending: first.pending },
+              { source: second.source, documentId: second.documentId, displayNo: second.displayNo, documentDate: second.documentDate, siteName: second.siteName, amount: second.pending, pending: second.pending },
+            ],
+          },
+        ] as never),
+        ACTOR,
+      );
+      const [line] = created.lines;
+      expect(line!.invoices).toHaveLength(2);
+      expect(line!.invoices.map((bill) => bill.displayNo).sort()).toEqual([first.displayNo, second.displayNo].sort());
+      const expected = (400 + Number(second.pending)).toFixed(2);
+      expect(line!.amount).toBe(expected);
+      expect(created.total).toBe(expected);
+    });
+
+    it("replaces the bills when the list is edited, and keeps a list with none as it was", async () => {
+      const { first } = await withBills();
+      const created = await repo.create(
+        input([
+          {
+            partyId: alId,
+            amount: "10.00",
+            invoices: [{ source: first.source, documentId: first.documentId, displayNo: first.displayNo, amount: "10.00" }],
+          },
+          { partyId: shahId, amount: "50.00" },
+        ] as never),
+        ACTOR,
+      );
+      expect(created.lines.find((line) => line.partyId === shahId)!.invoices).toEqual([]);
+
+      const edited = await repo.update(
+        created.id,
+        input([{ partyId: alId, amount: "75.00" }] as never),
+        OTHER_ACTOR,
+      );
+      expect(edited.lines).toHaveLength(1);
+      expect(edited.lines[0]!.invoices).toEqual([]);
+      expect(edited.lines[0]!.amount).toBe("75.00");
     });
   });
 });

@@ -162,6 +162,13 @@
       "when": 1791200415519,
       "tag": "0022_payout_lists",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791275671274,
+      "tag": "0023_payout_list_invoices",
+      "breakpoints": true
     }
   ]
 }

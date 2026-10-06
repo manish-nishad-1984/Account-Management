@@ -8,6 +8,7 @@ const line = (partyName: string, amount: string, n = 1) => ({
   amount,
   outstandingAtSave: null,
   outstandingNow: amount,
+  invoices: [] as never[],
 });
 
 const list = (overrides: Record<string, unknown> = {}) => ({
@@ -65,7 +66,7 @@ describe("buildPayoutMessage", () => {
   it("shows a part amount as chosen, not as owed", () => {
     const text = buildPayoutMessage({
       ...list(),
-      lines: [{ ...line("Part Paid", "50000.00", 1), outstandingNow: "125000.00" }],
+      lines: [{ ...line("Part Paid", "50000.00", 1), outstandingNow: "125000.00", invoices: [] }],
     });
     expect(text).toContain("1. Part Paid - Rs 50,000.00");
     expect(text).toContain("Total: Rs 50,000.00");

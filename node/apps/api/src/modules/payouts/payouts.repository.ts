@@ -5,11 +5,13 @@ import type {
   ListQuery,
   PayoutListDetail,
   PayoutListRow,
+  PayoutInvoiceInput,
   PayoutOutstandingResponse,
+  PayoutPendingInvoice,
   UpdatePayoutList,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
-import { payoutListLines, payoutLists, suppliers, users } from "../../db/schema";
+import { payoutListInvoices, payoutListLines, payoutLists, suppliers, users } from "../../db/schema";
 import { decodeCursor, encodeCursor } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
@@ -128,13 +130,52 @@ export class PayoutsRepository extends BaseRepository {
     return sums;
   }
 
+  /**
+   * THE BILLS STILL TO BE PAID, per party, from the Pending Outstanding report's
+   * own pending ledger (payments settle the oldest bill first), so a list shows
+   * the same bills that report does. Oldest first, which is the order they should
+   * be paid in.
+   */
+  private async pendingByParty(): Promise<Map<string, PayoutPendingInvoice[]>> {
+    const byParty = new Map<string, PayoutPendingInvoice[]>();
+    for (let offset = 0; ; offset += BALANCES_PAGE) {
+      const page = await this.reports.pendingLedger({ direction: "out" }, { limit: BALANCES_PAGE, offset });
+      for (const row of page.rows) {
+        const list = byParty.get(row.partyId) ?? [];
+        list.push({
+          source: row.source,
+          documentId: row.documentId,
+          displayNo: row.displayNo,
+          documentDate: row.documentDate,
+          siteName: row.siteName,
+          amount: row.amount,
+          pending: row.pending,
+        });
+        byParty.set(row.partyId, list);
+      }
+      if (page.nextCursor === null) {
+        break;
+      }
+    }
+    for (const list of byParty.values()) {
+      list.sort((a, b) => (a.documentDate ?? "").localeCompare(b.documentDate ?? "") || a.displayNo.localeCompare(b.displayNo));
+    }
+    return byParty;
+  }
+
   async outstanding(): Promise<PayoutOutstandingResponse> {
     const owed = [...(await this.owedByParty()).values()].sort(
       (a, b) => a.partyName.localeCompare(b.partyName) || a.partyId.localeCompare(b.partyId),
     );
+    const bills = await this.pendingByParty();
     const total = owed.reduce((sum, row) => sum + row.paise, 0n);
     return {
-      rows: owed.map((row) => ({ partyId: row.partyId, partyName: row.partyName, outstanding: fromPaise(row.paise) })),
+      rows: owed.map((row) => ({
+        partyId: row.partyId,
+        partyName: row.partyName,
+        outstanding: fromPaise(row.paise),
+        invoices: bills.get(row.partyId) ?? [],
+      })),
       total: fromPaise(total),
     };
   }
@@ -235,6 +276,23 @@ export class PayoutsRepository extends BaseRepository {
       .where(eq(payoutListLines.payoutListId, id))
       .orderBy(asc(payoutListLines.lineNumber));
 
+    const bills = lines.length
+      ? await this.db
+          .select({
+            lineId: payoutListInvoices.payoutLineId,
+            source: payoutListInvoices.source,
+            documentId: payoutListInvoices.documentId,
+            displayNo: payoutListInvoices.displayNo,
+            documentDate: sql<string | null>`${payoutListInvoices.documentDate}::text`,
+            siteName: payoutListInvoices.siteName,
+            amount: sql<string>`${payoutListInvoices.amount}::text`,
+            pendingAtSave: sql<string | null>`${payoutListInvoices.pendingAtSave}::text`,
+          })
+          .from(payoutListInvoices)
+          .where(inArray(payoutListInvoices.payoutLineId, lines.map((line) => line.id)))
+          .orderBy(asc(payoutListInvoices.lineNumber))
+      : [];
+
     const owed = await this.owedByParty();
     return {
       ...this.toRow(header),
@@ -242,6 +300,9 @@ export class PayoutsRepository extends BaseRepository {
       lines: lines.map((line) => ({
         ...line,
         outstandingNow: fromPaise(owed.get(line.partyId)?.paise ?? 0n),
+        invoices: bills
+          .filter((bill) => bill.lineId === line.id)
+          .map(({ lineId: _lineId, source, ...rest }) => ({ source: source as "invoice" | "opening_balance", ...rest })),
       })),
     };
   }
@@ -329,7 +390,11 @@ export class PayoutsRepository extends BaseRepository {
     const owed = await this.owedByParty();
     return input.lines.map((line, index) => ({
       partyId: line.partyId,
-      amount: line.amount,
+      // With bills, the line IS their sum: whatever the form added up is not trusted.
+      amount: line.invoices.length
+        ? fromPaise(line.invoices.reduce((sum, bill) => sum + toPaise(bill.amount), 0n))
+        : line.amount,
+      invoices: line.invoices,
       outstandingAtSave: fromPaise(owed.get(line.partyId)?.paise ?? 0n),
       lineNumber: index + 1,
     }));
@@ -338,9 +403,39 @@ export class PayoutsRepository extends BaseRepository {
   private async writeLines(
     db: Database,
     payoutListId: string,
-    lines: { partyId: string; amount: string; outstandingAtSave: string; lineNumber: number }[],
+    lines: {
+      partyId: string;
+      amount: string;
+      invoices: PayoutInvoiceInput[];
+      outstandingAtSave: string;
+      lineNumber: number;
+    }[],
   ) {
+    // The bills go with their line (ON DELETE CASCADE), so clearing the lines clears both.
     await db.delete(payoutListLines).where(eq(payoutListLines.payoutListId, payoutListId));
-    await db.insert(payoutListLines).values(lines.map((line) => ({ payoutListId, ...line })));
+    const saved = await db
+      .insert(payoutListLines)
+      .values(
+        lines.map(({ invoices: _invoices, ...line }) => ({ payoutListId, ...line })),
+      )
+      .returning({ id: payoutListLines.id, partyId: payoutListLines.partyId });
+    const lineOf = new Map(saved.map((row) => [row.partyId, row.id]));
+
+    const bills = lines.flatMap((line) =>
+      line.invoices.map((bill, index) => ({
+        payoutLineId: lineOf.get(line.partyId)!,
+        source: bill.source,
+        documentId: bill.documentId,
+        displayNo: bill.displayNo,
+        documentDate: bill.documentDate ?? null,
+        siteName: bill.siteName ?? null,
+        amount: bill.amount,
+        pendingAtSave: bill.pending ?? null,
+        lineNumber: index + 1,
+      })),
+    );
+    if (bills.length > 0) {
+      await db.insert(payoutListInvoices).values(bills);
+    }
   }
 }

@@ -28,11 +28,33 @@ import { rowCapabilitiesSchema } from "./pagination";
 
 const LIST_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
+const positive = (label: string) =>
+  money(label).refine((value) => Number.parseFloat(value) > 0, {
+    message: "The amount must be more than zero",
+  });
+
+/**
+ * A bill the owner is paying (client request, 6 Oct 2026). The number, date and
+ * site travel with it so the list is kept as it read on the day; `documentId` is
+ * what lets an edit tick the same bill again.
+ */
+export const payoutInvoiceInputSchema = z.object({
+  source: z.enum(["invoice", "opening_balance"]),
+  documentId: z.string().trim().min(1).max(64),
+  displayNo: z.string().trim().min(1).max(120),
+  documentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}/).nullable().optional(),
+  siteName: z.string().max(200).nullable().optional(),
+  /** What is paid of this bill: it may be less than what is pending. */
+  amount: positive("Amount"),
+  pending: money("Pending").nullable().optional(),
+});
+export type PayoutInvoiceInput = z.infer<typeof payoutInvoiceInputSchema>;
+
 export const payoutLineInputSchema = z.object({
   partyId: uuidId,
-  amount: money("Amount").refine((value) => Number.parseFloat(value) > 0, {
-    message: "The amount must be more than zero",
-  }),
+  /** With bills, the server uses their sum and this is only what the form added up. */
+  amount: positive("Amount"),
+  invoices: z.array(payoutInvoiceInputSchema).max(500).default([]),
 });
 export type PayoutLineInput = z.infer<typeof payoutLineInputSchema>;
 
@@ -81,6 +103,17 @@ export const payoutListRowSchema = z.object({
 });
 export type PayoutListRow = z.infer<typeof payoutListRowSchema>;
 
+export const payoutInvoiceSchema = z.object({
+  source: z.enum(["invoice", "opening_balance"]),
+  documentId: z.string(),
+  displayNo: z.string(),
+  documentDate: z.string().nullable(),
+  siteName: z.string().nullable(),
+  amount: z.string(),
+  pendingAtSave: z.string().nullable(),
+});
+export type PayoutInvoice = z.infer<typeof payoutInvoiceSchema>;
+
 export const payoutLineSchema = z.object({
   id: z.string(),
   partyId: z.string(),
@@ -98,6 +131,8 @@ export const payoutLineSchema = z.object({
    * paid since and the line is out of date.
    */
   outstandingNow: z.string(),
+  /** The bills it was built from; empty for a list kept party by party. */
+  invoices: z.array(payoutInvoiceSchema),
 });
 export type PayoutLine = z.infer<typeof payoutLineSchema>;
 
@@ -107,11 +142,27 @@ export const payoutListDetailSchema = payoutListRowSchema.omit({ capabilities: t
 });
 export type PayoutListDetail = z.infer<typeof payoutListDetailSchema>;
 
+/** A bill still to be paid, from the Pending Outstanding report. */
+export const payoutPendingInvoiceSchema = z.object({
+  source: z.enum(["invoice", "opening_balance"]),
+  documentId: z.string(),
+  displayNo: z.string(),
+  documentDate: z.string().nullable(),
+  siteName: z.string().nullable(),
+  /** The bill's total. */
+  amount: z.string(),
+  /** The part of it not yet paid. */
+  pending: z.string(),
+});
+export type PayoutPendingInvoice = z.infer<typeof payoutPendingInvoiceSchema>;
+
 /** A party that is owed money, for building a list. */
 export const payoutOutstandingRowSchema = z.object({
   partyId: z.string(),
   partyName: z.string(),
   outstanding: z.string(),
+  /** Oldest first. Their pending can add to more than `outstanding` when a party is overpaid at one site. */
+  invoices: z.array(payoutPendingInvoiceSchema),
 });
 export type PayoutOutstandingRow = z.infer<typeof payoutOutstandingRowSchema>;
 

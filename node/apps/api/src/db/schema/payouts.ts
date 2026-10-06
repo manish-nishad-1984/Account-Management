@@ -61,3 +61,38 @@ export const payoutListLines = pgTable(
     check("payout_list_lines_amount_positive", sql`${table.amount} > 0`),
   ],
 );
+
+/**
+ * The bills a line was built from (client request, 6 Oct 2026): the owner ticks
+ * the invoices he is paying, not only the party. A line with bills has an amount
+ * equal to their sum.
+ *
+ * SNAPSHOT COLUMNS, NO FOREIGN KEY. The bill number, date and site are copied in
+ * at save, so an old list reads as it did on the day and a document that is later
+ * cancelled does not make the list unreadable. `document_id` is only the key that
+ * lets the form tick the same bill again on an edit.
+ */
+export const payoutListInvoices = pgTable(
+  "payout_list_invoices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    payoutLineId: uuid("payout_line_id")
+      .notNull()
+      .references(() => payoutListLines.id, { onDelete: "cascade" }),
+    /** `invoice` or `opening_balance`, as the Pending Outstanding report names them. */
+    source: text("source").notNull(),
+    documentId: text("document_id").notNull(),
+    displayNo: text("display_no").notNull(),
+    documentDate: date("document_date"),
+    siteName: text("site_name"),
+    /** What is to be paid of this bill. May be less than what is pending (a part payment). */
+    amount: numeric("amount", { precision: 18, scale: 2 }).notNull(),
+    pendingAtSave: numeric("pending_at_save", { precision: 18, scale: 2 }),
+    lineNumber: integer("line_number").notNull(),
+  },
+  (table) => [
+    index("payout_list_invoices_line_idx").on(table.payoutLineId),
+    unique("payout_list_invoices_line_doc_key").on(table.payoutLineId, table.source, table.documentId),
+    check("payout_list_invoices_amount_positive", sql`${table.amount} > 0`),
+  ],
+);
