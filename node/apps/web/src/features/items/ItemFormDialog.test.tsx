@@ -29,6 +29,11 @@ function routes() {
         json({ exact: isSame ? EXISTING : null, similar: isSimilar && excludeId !== EXISTING.id ? [EXISTING] : [] }),
       );
     }
+    if (url.pathname.endsWith("/items") && url.searchParams.has("search")) {
+      const words = (url.searchParams.get("search") ?? "").toLowerCase().split(" ");
+      const hit = words.every((word) => EXISTING.name.toLowerCase().includes(word));
+      return Promise.resolve(json({ rows: hit ? [{ ...EXISTING, unitId: 1, unitName: "Bag", pricePerUnit: "395.00", gstPercent: null, gstAmount: null, hsnCode: null, isApproved: true, capabilities: CAPS }] : [], nextCursor: null, total: hit ? 1 : 0 }));
+    }
     if (url.pathname.includes("/units")) return Promise.resolve(json(UNITS));
     if (url.pathname.endsWith(`/items/${EXISTING.id}`)) {
       return Promise.resolve(
@@ -151,7 +156,7 @@ describe("ItemFormDialog name check", () => {
       openAddAs(["item.view", "item.add", "item.edit"]);
 
       await user.type(screen.getByLabelText(/item name/i), "cement opc");
-      await user.click(await screen.findByRole("button", { name: `Edit ${EXISTING.name}` }));
+      await user.click(await screen.findByRole("option", { name: EXISTING.name }));
 
       const name = await screen.findByLabelText(/item name/i);
       await waitFor(() => expect(name).toHaveValue(EXISTING.name));
@@ -182,11 +187,23 @@ describe("ItemFormDialog name check", () => {
       openAddAs(["item.view", "item.add", "item.edit"]);
 
       await user.type(screen.getByLabelText(/item name/i), "cement opc");
-      await user.click(await screen.findByRole("button", { name: `Edit ${EXISTING.name}` }));
+      await user.click(await screen.findByRole("option", { name: EXISTING.name }));
       await user.click(await screen.findByRole("button", { name: /add a new item instead/i }));
 
       expect(await screen.findByRole("button", { name: /create item/i })).toBeInTheDocument();
       expect(screen.getByLabelText(/item name/i)).toHaveValue("");
+    });
+
+    it("shows the matches as a dropdown as soon as typing pauses, and Enter without an arrow still saves", async () => {
+      const user = userEvent.setup();
+      openAddAs(["item.view", "item.add", "item.edit"]);
+
+      await user.type(screen.getByLabelText(/item name/i), "cement");
+
+      expect(await screen.findByRole("listbox", { name: "Existing items" })).toHaveTextContent(EXISTING.name);
+      // Arrow to it and Enter picks it.
+      await user.keyboard("{ArrowDown}{Enter}");
+      await waitFor(() => expect(screen.getByRole("button", { name: /save changes/i })).toBeInTheDocument());
     });
 
     it("only lists the matches, without a way to pick, for someone who cannot edit items", async () => {
@@ -196,7 +213,7 @@ describe("ItemFormDialog name check", () => {
       await user.type(screen.getByLabelText(/item name/i), "cement opc");
 
       expect(await screen.findByRole("list", { name: "Items with a similar name" })).toHaveTextContent(EXISTING.name);
-      expect(screen.queryByRole("button", { name: `Edit ${EXISTING.name}` })).not.toBeInTheDocument();
+      expect(screen.queryByRole("option", { name: EXISTING.name })).not.toBeInTheDocument();
     });
   });
 });

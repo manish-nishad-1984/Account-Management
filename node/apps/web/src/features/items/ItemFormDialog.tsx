@@ -20,7 +20,7 @@ import { applyServerErrors, unshownValidationMessage } from "../../lib/crud";
 import { text } from "../../lib/form-values";
 import { useDebouncedValue } from "../../lib/use-debounced-value";
 import { usePermission } from "../../lib/permissions";
-import { useAllUnits, useCreateItem, useItem, useItemNameCheck, useUpdateItem } from "./api";
+import { useAllUnits, useCreateItem, useItem, useItemNameCheck, useItemOptions, useUpdateItem } from "./api";
 
 /**
  * The item form.
@@ -65,6 +65,9 @@ export function ItemFormDialog({
   const activeId = itemId ?? pickedId;
   const isEdit = activeId !== null;
   const canEditItems = usePermission("item", "edit");
+  // Only while ADDING, and only for someone who may edit: picking turns the form
+  // into an edit, which the server would refuse to anyone without the right.
+  const canPick = !itemId && canEditItems;
   const detail = useItem(open && isEdit ? activeId : null);
   const units = useAllUnits();
   const create = useCreateItem();
@@ -118,9 +121,22 @@ export function ItemFormDialog({
   }, [open, isEdit, detail.data, reset]);
 
   const pending = create.isPending || update.isPending;
-  // Only while ADDING, and only for someone who may edit: picking turns the form
-  // into an edit, which the server would refuse to anyone without the right.
-  const canPick = !itemId && canEditItems;
+
+  /**
+   * THE MATCHES AS A DROPDOWN UNDER THE NAME BOX, instantly (client request,
+   * 6 Oct 2026): the same search-as-you-type the invoice's product box has. It is
+   * the item search itself, not the name check, so it lists every item whose name
+   * contains what is typed, after a short pause of 150ms rather than the name
+   * check's 300.
+   */
+  const [listOpen, setListOpen] = useState(false);
+  const [highlight, setHighlight] = useState(-1);
+  const listTerm = useDebouncedValue(typedName.trim(), 150);
+  const matchesQuery = useItemOptions(open && !itemId && listTerm.length >= 1 ? listTerm : "");
+  const matches = (listTerm.length >= 1 ? (matchesQuery.data?.rows ?? []) : []).filter(
+    (row) => row.id !== activeId,
+  );
+
 
   const onSubmit = handleSubmit(async (values) => {
     setFormError(null);
@@ -161,7 +177,30 @@ export function ItemFormDialog({
       ) : (
         <>
           <FormSection icon={Package} title="Item">
-            <div>
+            <div
+              className="relative"
+              onFocus={() => setListOpen(true)}
+              onBlur={() => window.setTimeout(() => setListOpen(false), 150)}
+              onKeyDown={(event) => {
+                if (!canPick || !listOpen || matches.length === 0) return;
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setHighlight((i) => Math.min(i + 1, matches.length - 1));
+                } else if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setHighlight((i) => Math.max(i - 1, 0));
+                } else if (event.key === "Enter" && highlight >= 0) {
+                  // Only once an item was arrowed to: a plain Enter still saves.
+                  event.preventDefault();
+                  setPickedId(matches[highlight]!.id);
+                  setListOpen(false);
+                } else if (event.key === "Escape") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setListOpen(false);
+                }
+              }}
+            >
               <TextField
                 label="Item name"
                 required
@@ -170,8 +209,41 @@ export function ItemFormDialog({
                 error={
                   sameName ? duplicateItemNameMessage(sameName.name) : errors.name?.message
                 }
-                {...register("name")}
+                {...register("name", { onChange: () => { setHighlight(-1); setListOpen(true); } })}
               />
+              {canPick && listOpen && matches.length > 0 && (
+                <ul
+                  role="listbox"
+                  aria-label="Existing items"
+                  className="scroll-subtle absolute left-0 right-0 z-30 mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-pop"
+                >
+                  <li className="px-3 pb-1 pt-0.5 text-xs text-slate-500" aria-hidden>
+                    Existing items — choose one to edit it
+                  </li>
+                  {matches.map((match, index) => (
+                    <li
+                      key={match.id}
+                      role="option"
+                      aria-selected={index === highlight}
+                      // `onMouseDown`, not `onClick`: the input's blur would close
+                      // the list before a click could land.
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        setPickedId(match.id);
+                        setListOpen(false);
+                      }}
+                      onMouseEnter={() => setHighlight(index)}
+                      className={
+                        index === highlight
+                          ? "cursor-pointer bg-brand-50 px-3 py-2 text-brand-900"
+                          : "cursor-pointer px-3 py-2 text-slate-700"
+                      }
+                    >
+                      {match.name}
+                    </li>
+                  ))}
+                </ul>
+              )}
               {sameName && canPick && (
                 <button
                   type="button"
@@ -198,7 +270,7 @@ export function ItemFormDialog({
                   Checking existing items…
                 </p>
               )}
-              {!checking && similarNames.length > 0 && (
+              {!checking && !canPick && similarNames.length > 0 && (
                 <div
                   className="mt-1.5 rounded-md bg-amber-50 px-2.5 py-2 ring-1 ring-inset ring-amber-200"
                   aria-live="polite"
