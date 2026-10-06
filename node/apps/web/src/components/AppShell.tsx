@@ -431,7 +431,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         */}
         <main
           className={clsx(
-            "flex-1 overflow-y-auto py-6 transition-[padding] duration-200",
+            // `relative` so an absolutely positioned child (every `sr-only` label) is
+            // clipped by THIS scroller. Without it the label's containing block was
+            // the page, and one below the fold of a long form stretched the document
+            // and gave the window a second vertical scrollbar.
+            "relative flex-1 overflow-y-auto py-6 transition-[padding] duration-200",
             "pl-4 lg:pl-8",
             /*
              * The right padding is expressed ONCE, as one class or the other.
