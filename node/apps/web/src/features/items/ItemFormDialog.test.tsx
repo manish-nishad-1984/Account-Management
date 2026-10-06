@@ -90,7 +90,7 @@ describe("ItemFormDialog name check", () => {
 
     await user.type(screen.getByLabelText(/item name/i), "cement opc");
 
-    const similar = await screen.findByRole("list", { name: "Items with a similar name" });
+    const similar = await screen.findByRole("listbox", { name: "Existing items" });
     expect(similar).toHaveTextContent("OPC 53 Grade Cement");
   });
 
@@ -145,75 +145,82 @@ describe("ItemFormDialog name check", () => {
     expect(screen.queryByText(/already exists/)).not.toBeInTheDocument();
   });
 
-  describe("picking an existing item while adding", () => {
+  describe("starting a NEW item from a suggested one", () => {
     const openAddAs = (permissions: string[]) =>
       renderWithAuth(<ItemFormDialog open itemId={null} onClose={() => {}} />, { permissions });
     const patches = () =>
       vi.mocked(globalThis.fetch).mock.calls.filter((call) => (call[1]?.method ?? "").toUpperCase() === "PATCH");
 
-    it("turns the form into that item's edit form, so it can be renamed and saved as an edit", async () => {
-      const user = userEvent.setup();
-      openAddAs(["item.view", "item.add", "item.edit"]);
-
-      await user.type(screen.getByLabelText(/item name/i), "cement opc");
-      await user.click(await screen.findByRole("option", { name: EXISTING.name }));
-
-      const name = await screen.findByLabelText(/item name/i);
-      await waitFor(() => expect(name).toHaveValue(EXISTING.name));
-      expect(screen.getByRole("button", { name: /save changes/i })).toBeInTheDocument();
-
-      await user.clear(name);
-      await user.type(name, "OPC 53 Grade Cement Premium");
-      await user.click(screen.getByRole("button", { name: /save changes/i }));
-
-      await waitFor(() => expect(patches()).toHaveLength(1));
-      expect(String(patches()[0]![0])).toContain(EXISTING.id);
-      expect(JSON.parse(String(patches()[0]![1]!.body)).name).toBe("OPC 53 Grade Cement Premium");
-      expect(posts()).toHaveLength(0);
-    });
-
-    it("offers to edit the item when the same name already exists", async () => {
-      const user = userEvent.setup();
-      openAddAs(["item.view", "item.add", "item.edit"]);
-
-      await user.type(screen.getByLabelText(/item name/i), "OPC 53 Grade Cement");
-      await user.click(await screen.findByRole("button", { name: /edit this item instead/i }));
-
-      await waitFor(() => expect(screen.getByRole("button", { name: /save changes/i })).toBeInTheDocument());
-    });
-
-    it("can go back to adding a new item", async () => {
-      const user = userEvent.setup();
-      openAddAs(["item.view", "item.add", "item.edit"]);
-
-      await user.type(screen.getByLabelText(/item name/i), "cement opc");
-      await user.click(await screen.findByRole("option", { name: EXISTING.name }));
-      await user.click(await screen.findByRole("button", { name: /add a new item instead/i }));
-
-      expect(await screen.findByRole("button", { name: /create item/i })).toBeInTheDocument();
-      expect(screen.getByLabelText(/item name/i)).toHaveValue("");
-    });
-
-    it("shows the matches as a dropdown as soon as typing pauses, and Enter without an arrow still saves", async () => {
-      const user = userEvent.setup();
-      openAddAs(["item.view", "item.add", "item.edit"]);
-
-      await user.type(screen.getByLabelText(/item name/i), "cement");
-
-      expect(await screen.findByRole("listbox", { name: "Existing items" }, { timeout: 4000 })).toHaveTextContent(EXISTING.name);
-      // Arrow to it and Enter picks it.
-      await user.keyboard("{ArrowDown}{Enter}");
-      await waitFor(() => expect(screen.getByRole("button", { name: /save changes/i })).toBeInTheDocument());
-    });
-
-    it("only lists the matches, without a way to pick, for someone who cannot edit items", async () => {
+    it("copies the picked item's details, and saving after a rename creates a NEW item, not an edit", async () => {
       const user = userEvent.setup();
       openAddAs(["item.view", "item.add"]);
 
       await user.type(screen.getByLabelText(/item name/i), "cement opc");
+      await user.click(await screen.findByRole("option", { name: EXISTING.name }));
 
-      expect(await screen.findByRole("list", { name: "Items with a similar name" })).toHaveTextContent(EXISTING.name);
-      expect(screen.queryByRole("option", { name: EXISTING.name })).not.toBeInTheDocument();
+      const name = screen.getByLabelText(/item name/i);
+      await waitFor(() => expect(name).toHaveValue(EXISTING.name));
+      expect(screen.getByLabelText(/price per unit/i)).toHaveValue("395.00");
+      expect(screen.getByRole("button", { name: /create item/i })).toBeInTheDocument();
+
+      await user.clear(name);
+      await user.type(name, "OPC 43 Grade Cement");
+      await user.click(screen.getByRole("button", { name: /create item/i }));
+
+      await waitFor(() => expect(posts()).toHaveLength(1));
+      const body = JSON.parse(String(posts()[0]![1]!.body));
+      expect(body.name).toBe("OPC 43 Grade Cement");
+      expect(body.pricePerUnit).toBe("395.00");
+      expect(patches()).toHaveLength(0);
+    });
+
+    it("will not save the copy under the picked item's own name", async () => {
+      const user = userEvent.setup();
+      openAddAs(["item.view", "item.add"]);
+
+      await user.type(screen.getByLabelText(/item name/i), "cement opc");
+      await user.click(await screen.findByRole("option", { name: EXISTING.name }));
+      await waitFor(() => expect(screen.getByLabelText(/item name/i)).toHaveValue(EXISTING.name));
+      await screen.findByText(/already exists/);
+
+      await user.click(screen.getByRole("button", { name: /create item/i }));
+
+      expect(posts()).toHaveLength(0);
+    });
+
+    it("offers to start from the item when the same name already exists", async () => {
+      const user = userEvent.setup();
+      openAddAs(["item.view", "item.add"]);
+
+      await user.type(screen.getByLabelText(/item name/i), "OPC 53 Grade Cement");
+      await user.click(await screen.findByRole("button", { name: /start from this item/i }));
+
+      await waitFor(() => expect(screen.getByLabelText(/price per unit/i)).toHaveValue("395.00"));
+      expect(screen.getByRole("button", { name: /create item/i })).toBeInTheDocument();
+    });
+
+    it("can start blank again", async () => {
+      const user = userEvent.setup();
+      openAddAs(["item.view", "item.add"]);
+
+      await user.type(screen.getByLabelText(/item name/i), "cement opc");
+      await user.click(await screen.findByRole("option", { name: EXISTING.name }));
+      await user.click(await screen.findByRole("button", { name: /start blank/i }));
+
+      await waitFor(() => expect(screen.getByLabelText(/item name/i)).toHaveValue(""));
+      expect(screen.getByLabelText(/price per unit/i)).toHaveValue("");
+    });
+
+    it("shows the matches as a dropdown as soon as typing pauses, and the keyboard picks one", async () => {
+      const user = userEvent.setup();
+      openAddAs(["item.view", "item.add"]);
+
+      await user.type(screen.getByLabelText(/item name/i), "cement");
+
+      expect(await screen.findByRole("listbox", { name: "Existing items" }, { timeout: 4000 })).toHaveTextContent(EXISTING.name);
+      await user.keyboard("{ArrowDown}{Enter}");
+      await waitFor(() => expect(screen.getByLabelText(/price per unit/i)).toHaveValue("395.00"));
+      expect(screen.getByRole("button", { name: /create item/i })).toBeInTheDocument();
     });
   });
 });

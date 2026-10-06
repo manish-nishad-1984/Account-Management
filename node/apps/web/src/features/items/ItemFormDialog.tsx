@@ -1,5 +1,5 @@
 import { Package, Percent } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
@@ -19,7 +19,6 @@ import {
 import { applyServerErrors, unshownValidationMessage } from "../../lib/crud";
 import { text } from "../../lib/form-values";
 import { useDebouncedValue } from "../../lib/use-debounced-value";
-import { usePermission } from "../../lib/permissions";
 import { useAllUnits, useCreateItem, useItem, useItemNameCheck, useItemOptions, useUpdateItem } from "./api";
 
 /**
@@ -54,21 +53,19 @@ export function ItemFormDialog({
   onClose: () => void;
 }) {
   /**
-   * AN EXISTING ITEM PICKED FROM THE MATCHES (client request, 6 Oct 2026). While
-   * adding, the person types a name, sees the items already called something
-   * like it and may choose one instead of creating a duplicate: the form then
-   * becomes that item's edit form, with its name in the box to be renamed. The
-   * save is an ordinary edit, so the server records the price change in the
-   * item's history exactly as it does from the Edit screen.
+   * A STARTING POINT PICKED FROM THE MATCHES (client request, 6 Oct 2026). While
+   * ADDING, the person types a name, sees the items already called something like
+   * it and may choose one: its unit, price, GST and HSN fill the form, and the
+   * name is left in the box to be changed. The save is still a NEW item. It is
+   * not an edit of the one picked, and the name check refuses the picked item's
+   * own name, so the person has to change it. The new item's price history
+   * begins with its own "created" row.
    */
   const [pickedId, setPickedId] = useState<string | null>(null);
-  const activeId = itemId ?? pickedId;
-  const isEdit = activeId !== null;
-  const canEditItems = usePermission("item", "edit");
-  // Only while ADDING, and only for someone who may edit: picking turns the form
-  // into an edit, which the server would refuse to anyone without the right.
-  const canPick = !itemId && canEditItems;
-  const detail = useItem(open && isEdit ? activeId : null);
+  const isEdit = itemId !== null;
+  const canPick = !isEdit;
+  const detail = useItem(open && isEdit ? itemId : null);
+  const template = useItem(open && !isEdit ? pickedId : null);
   const units = useAllUnits();
   const create = useCreateItem();
   const update = useUpdateItem();
@@ -79,6 +76,7 @@ export function ItemFormDialog({
     handleSubmit,
     reset,
     setError,
+    setFocus,
     watch,
     formState: { errors },
   } = useForm<FormValues, unknown, Submitted>({
@@ -99,7 +97,7 @@ export function ItemFormDialog({
    */
   const typedName = String(watch("name") ?? "");
   const settledName = useDebouncedValue(typedName, 300);
-  const nameCheck = useItemNameCheck(open ? settledName : "", activeId);
+  const nameCheck = useItemNameCheck(open ? settledName : "", itemId);
   const checkIsCurrent =
     normalizeItemName(settledName).toLowerCase() === normalizeItemName(typedName).toLowerCase();
   const sameName = checkIsCurrent ? (nameCheck.data?.exact ?? null) : null;
@@ -114,11 +112,17 @@ export function ItemFormDialog({
     if (!open) return;
     setFormError(null);
     if (!isEdit) {
-      reset(EMPTY);
+      if (!pickedId) {
+        reset(EMPTY);
+      } else if (template.data) {
+        // The copy lands on the name box, selected, ready to be typed over.
+        reset(toFormValues(template.data));
+        setFocus("name", { shouldSelect: true });
+      }
     } else if (detail.data) {
       reset(toFormValues(detail.data));
     }
-  }, [open, isEdit, detail.data, reset]);
+  }, [open, isEdit, detail.data, pickedId, template.data, reset, setFocus]);
 
   const pending = create.isPending || update.isPending;
 
@@ -130,12 +134,14 @@ export function ItemFormDialog({
    * check's 300.
    */
   const [listOpen, setListOpen] = useState(false);
+  // The close after a blur is delayed so a click on an option can land first. It
+  // must be CANCELLED when the box is focused again inside that delay, or a quick
+  // refocus has the list shut under the person's hands.
+  const closeTimer = useRef<number | undefined>(undefined);
   const [highlight, setHighlight] = useState(-1);
   const listTerm = useDebouncedValue(typedName.trim(), 150);
   const matchesQuery = useItemOptions(open && !itemId && listTerm.length >= 1 ? listTerm : "");
-  const matches = (listTerm.length >= 1 ? (matchesQuery.data?.rows ?? []) : []).filter(
-    (row) => row.id !== activeId,
-  );
+  const matches = listTerm.length >= 1 ? (matchesQuery.data?.rows ?? []) : [];
 
 
   const onSubmit = handleSubmit(async (values) => {
@@ -146,7 +152,7 @@ export function ItemFormDialog({
     }
     try {
       if (isEdit) {
-        await update.mutateAsync({ id: activeId, body: values });
+        await update.mutateAsync({ id: itemId, body: values });
       } else {
         await create.mutateAsync(values);
       }
@@ -179,8 +185,14 @@ export function ItemFormDialog({
           <FormSection icon={Package} title="Item">
             <div
               className="relative"
-              onFocus={() => setListOpen(true)}
-              onBlur={() => window.setTimeout(() => setListOpen(false), 150)}
+              onFocus={() => {
+                window.clearTimeout(closeTimer.current);
+                setListOpen(true);
+              }}
+              onBlur={() => {
+                window.clearTimeout(closeTimer.current);
+                closeTimer.current = window.setTimeout(() => setListOpen(false), 150);
+              }}
               onKeyDown={(event) => {
                 if (!canPick || !listOpen || matches.length === 0) return;
                 if (event.key === "ArrowDown") {
@@ -209,7 +221,13 @@ export function ItemFormDialog({
                 error={
                   sameName ? duplicateItemNameMessage(sameName.name) : errors.name?.message
                 }
-                {...register("name", { onChange: () => { setHighlight(-1); setListOpen(true); } })}
+                {...register("name", {
+                  onChange: () => {
+                    setHighlight(-1);
+                    window.clearTimeout(closeTimer.current);
+                    setListOpen(true);
+                  },
+                })}
               />
               {canPick && listOpen && matches.length > 0 && (
                 <ul
@@ -218,7 +236,7 @@ export function ItemFormDialog({
                   className="scroll-subtle absolute left-0 right-0 z-30 mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-pop"
                 >
                   <li className="px-3 pb-1 pt-0.5 text-xs text-slate-500" aria-hidden>
-                    Existing items — choose one to edit it
+                    Existing items — choose one to start from
                   </li>
                   {matches.map((match, index) => (
                     <li
@@ -244,26 +262,29 @@ export function ItemFormDialog({
                   ))}
                 </ul>
               )}
-              {sameName && canPick && (
+              {sameName && canPick && !pickedId && (
                 <button
                   type="button"
                   className="mt-1 text-xs font-medium text-brand-700 underline underline-offset-2"
                   onClick={() => setPickedId(sameName.id)}
                 >
-                  Edit this item instead
+                  Start from this item&rsquo;s details
                 </button>
               )}
-              {pickedId && !itemId && (
-                <button
-                  type="button"
-                  className="mt-1 text-xs font-medium text-slate-600 underline underline-offset-2"
-                  onClick={() => {
-                    setPickedId(null);
-                    reset(EMPTY);
-                  }}
-                >
-                  Add a new item instead
-                </button>
+              {pickedId && canPick && (
+                <p className="mt-1 text-xs leading-4 text-slate-500" aria-live="polite">
+                  Details copied from an existing item. Change the name to save it as a new item.{" "}
+                  <button
+                    type="button"
+                    className="font-medium text-slate-700 underline underline-offset-2"
+                    onClick={() => {
+                      setPickedId(null);
+                      reset(EMPTY);
+                    }}
+                  >
+                    Start blank
+                  </button>
+                </p>
               )}
               {checking && !sameName && (
                 <p className="mt-1 text-xs leading-4 text-slate-400" aria-live="polite">
@@ -281,26 +302,10 @@ export function ItemFormDialog({
                   <ul aria-label="Items with a similar name" className="mt-1 space-y-0.5">
                     {similarNames.map((match) => (
                       <li key={match.id} className="truncate text-xs text-amber-900">
-                        {canPick ? (
-                          <button
-                            type="button"
-                            className="max-w-full truncate rounded px-1 text-left underline decoration-amber-400 underline-offset-2 hover:bg-amber-100"
-                            onClick={() => setPickedId(match.id)}
-                            aria-label={`Edit ${match.name}`}
-                          >
-                            {match.name}
-                          </button>
-                        ) : (
-                          match.name
-                        )}
+                        {match.name}
                       </li>
                     ))}
                   </ul>
-                  {canPick && (
-                    <p className="mt-1 text-xs leading-4 text-amber-800">
-                      Choose one to edit it instead of adding a new item.
-                    </p>
-                  )}
                 </div>
               )}
             </div>
