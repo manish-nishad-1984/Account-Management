@@ -3,7 +3,7 @@
 **Written:** 2 September 2026, after the unblocking session. **Last extended
 6 October 2026** (§5ab). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
+> **This file is current as of `2465de97`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
@@ -4587,7 +4587,7 @@ at `6d3a9e98`; `node/` unchanged since. No .NET suite in this tree.
 
 ## 5ab. The Payout List, a new sidebar, and a pass over every form and report (5–6 Oct 2026)
 
-Commit `<COMMIT>`. Ten code commits, listed in §4, **two migrations (0022 and
+Commit `2465de97` (the handoff; the code is `8838be2b` and earlier). Ten code commits, listed in §4, **two migrations (0022 and
 0023)**, eight releases, all pushed and live. The user asked for the first thing
 and the rest came out of looking at screenshots of it, which is how most of this
 file's days go.
