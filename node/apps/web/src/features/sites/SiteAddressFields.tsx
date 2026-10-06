@@ -34,7 +34,6 @@ export function SiteAddressFields({
   onShippingChange,
   shippingError,
   location,
-  shippingFollowsLocation = false,
 }: {
   siteId: string | null | undefined;
   shippingAddress: string | null | undefined;
@@ -47,14 +46,6 @@ export function SiteAddressFields({
     onChange: (locationId: string) => void;
     error?: string;
   };
-  /**
-   * Show the shipping address as text, not a picker, while a location that has an
-   * address is chosen (client request, 6 Oct 2026, purchase invoices): the
-   * location IS the shipping address, so a second box to choose it again is the
-   * same answer asked twice. With no location, or one without an address, the
-   * picker is back, so an address can still be chosen.
-   */
-  shippingFollowsLocation?: boolean;
 }) {
   const chosenSite = siteId && siteId !== "" ? siteId : null;
   const options = useSiteDocumentOptions(chosenSite);
@@ -95,13 +86,6 @@ export function SiteAddressFields({
   const selectedLocationId = location && typeof location.value === "string" ? location.value : "";
   const selectedLocationHasNoAddress =
     selectedLocationId !== "" && addressOfLocation(selectedLocationId) === "";
-
-  const shippingIsLocations =
-    shippingFollowsLocation &&
-    selectedLocationId !== "" &&
-    !selectedLocationHasNoAddress &&
-    current !== "" &&
-    current === addressOfLocation(selectedLocationId);
 
   return (
     <div className="space-y-3">
@@ -160,19 +144,7 @@ export function SiteAddressFields({
         </div>
       </div>
 
-      {shippingIsLocations && (
-        <div>
-          <div className="text-xs font-medium text-slate-600">Shipping address</div>
-          <div
-            className="mt-1 whitespace-pre-line rounded-lg bg-slate-50 px-2.5 py-2 text-sm text-slate-800 ring-1 ring-inset ring-slate-200"
-            aria-label="Shipping address"
-          >
-            {current}
-          </div>
-        </div>
-      )}
-
-      <div hidden={shippingIsLocations}>
+      <div>
         <label htmlFor={SHIPPING_ID} className={LABEL_BASE}>
           Shipping address
         </label>

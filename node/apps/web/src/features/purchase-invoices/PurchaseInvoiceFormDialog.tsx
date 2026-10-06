@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Boxes, FileText, MapPin, Receipt, Truck } from "lucide-react";
+import { Boxes, FileText, Receipt, Truck } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -37,7 +37,7 @@ import {
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { todayInput } from "../../lib/dates";
 import { SavedDocumentPdfButton } from "../document-templates/DocumentActions";
-import { SiteAddressFields } from "../sites/SiteAddressFields";
+import { SiteLocationAddresses } from "../sites/SiteLocationAddresses";
 import { SiteContactSelect } from "../sites/SiteContactSelect";
 
 /**
@@ -390,7 +390,6 @@ export function PurchaseInvoiceFormDialog({
               label="Supplier's invoice number"
               required
               autoFocus
-              hint="As printed on their invoice — BB/154, 016, AE/26-27/00872"
               error={errors.supplierInvoiceNo?.message}
               {...register("supplierInvoiceNo")}
             />
@@ -420,7 +419,6 @@ export function PurchaseInvoiceFormDialog({
               label="Site"
               placeholder={scope.isReady ? "No site" : "Loading sites…"}
               options={siteOptions}
-              hint="Optional — the source allows an invoice with no site"
               error={errors.siteId?.message}
               {...register("siteId", {
                 // The location, shipping address and contact belonged to the site
@@ -437,7 +435,6 @@ export function PurchaseInvoiceFormDialog({
             <SelectField
               label="Type"
               options={INVOICE_TYPES.map((value) => ({ value, label: value }))}
-              hint="Returns and credit notes are money going the other way"
               error={errors.invoiceType?.message}
               {...register("invoiceType")}
             />
@@ -523,6 +520,23 @@ export function PurchaseInvoiceFormDialog({
                 )}
               </div>
             </div>
+
+            {/*
+              LOCATION AND BOTH ADDRESSES IN THE DETAILS (client request, 6 Oct
+              2026): one compact row instead of a card of their own. Shipping is
+              the location's address, shown and blank when there is none.
+            */}
+            <SiteLocationAddresses
+              className="col-span-full"
+              siteId={chosenSiteId}
+              shippingAddress={shippingAddress}
+              onShippingChange={(address) => setValue("shippingAddress", address, { shouldDirty: true })}
+              location={{
+                value: chosenLocationId,
+                onChange: (locationId) => setValue("siteLocationId", locationId, { shouldDirty: true }),
+                error: errors.siteLocationId?.message,
+              }}
+            />
           </FormSection>
 
           {/*
@@ -618,16 +632,7 @@ export function PurchaseInvoiceFormDialog({
             </div>
           </FormSection>
 
-          {/*
-            THE LAST TWO CARDS SHARE A ROW, at 42/58 rather than in half (client
-            request, 21 Sep 2026, from a mockup). Delivery is six short boxes —
-            a challan number, a vehicle number — and addresses are long lines
-            that wrap, so an even split leaves air on the left and wrapping on
-            the right. Under 1280px they stack, where half a line is too narrow
-            for a labelled field.
-          */}
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,42fr)_minmax(0,58fr)]">
-          <FormSection icon={Truck} title="Delivery and contacts" columns={3}>
+          <FormSection icon={Truck} title="Delivery, contacts and notes" columns={3}>
             <TextField
               label="Challan number"
               error={errors.challanNo?.message}
@@ -659,38 +664,14 @@ export function PurchaseInvoiceFormDialog({
               error={errors.paymentTerms?.message}
               {...register("paymentTerms")}
             />
-          </FormSection>
-
-          <FormSection icon={MapPin} title="Location, addresses and notes" columns={1}>
-            {/*
-              Billing is the site's own address; shipping is ONE of the site's
-              addresses, chosen — the rules of 15 Sep 2026. Either is copied onto
-              the invoice as text, so correcting the site later cannot rewrite
-              where a delivery already went.
-            */}
-            <SiteAddressFields
-              shippingFollowsLocation
-              siteId={chosenSiteId}
-              shippingAddress={shippingAddress}
-              onShippingChange={(address) =>
-                setValue("shippingAddress", address, { shouldDirty: true })
-              }
-              shippingError={errors.shippingAddress?.message}
-              location={{
-                value: chosenLocationId,
-                onChange: (locationId) =>
-                  setValue("siteLocationId", locationId, { shouldDirty: true }),
-                error: errors.siteLocationId?.message,
-              }}
-            />
             <TextAreaField
               label="Notes"
-              rows={3}
+              className="col-span-full"
+              rows={1}
               error={errors.description?.message}
               {...register("description")}
             />
           </FormSection>
-          </div>
         </>
       )}
     </FormDialog>
