@@ -55,6 +55,13 @@ export function Modal({
   const backdropMouseDown = useRef(false);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
+  // Read through a ref so a caller's inline `onClose` (a new function on every
+  // render) does not re-run the effect below. Re-running it on each keystroke
+  // returned focus to the trigger and then to the first control, which made
+  // typing in a dialog's field lag and lose the caret.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
 
@@ -68,7 +75,7 @@ export function Modal({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -101,7 +108,7 @@ export function Modal({
       document.body.style.overflow = previousOverflow;
       previouslyFocused.current?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
