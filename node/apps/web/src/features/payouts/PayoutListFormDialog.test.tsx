@@ -94,6 +94,28 @@ describe("PayoutListFormDialog", () => {
     expect(screen.getByText("0 parties ticked")).toBeInTheDocument();
   });
 
+  it("asks only for the header's site, and shows total outstanding, selected and remain to pay", async () => {
+    const user = userEvent.setup();
+    const SITE = "11111111-1111-4111-8111-111111111111";
+    renderWithAuth(<PayoutListFormDialog open listId={null} onClose={() => {}} />, {
+      permissions: ["payout.view", "payout.add"],
+      scope: { siteId: SITE, siteName: "Akwada Lake Front", sites: [{ id: SITE, name: "Akwada Lake Front" }] },
+    });
+
+    await screen.findByLabelText("Pay Ambica Steel Traders");
+    const asked = vi.mocked(globalThis.fetch).mock.calls.map(([input]) => String(input));
+    expect(asked.some((url) => url.includes(`/payout-lists/outstanding?siteId=${SITE}`))).toBe(true);
+
+    const summary = screen.getByLabelText("Payout summary");
+    expect(summary).toHaveTextContent("Akwada Lake Front");
+    expect(summary).toHaveTextContent("41,25,000.30");
+    expect(summary).toHaveTextContent(/Selecteds*0.00/);
+
+    await user.click(screen.getByLabelText("Pay Ambica Steel Traders"));
+    expect(summary).toHaveTextContent(/Selecteds*1,25,000.00/);
+    expect(summary).toHaveTextContent(/Remain to pays*40,00,000.30/);
+  });
+
   it("prefills the amount with the outstanding when a party is ticked, and unticking removes it", async () => {
     const user = userEvent.setup();
     openNew();

@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   Body,
   Controller,
@@ -36,6 +37,9 @@ import type { AccessTokenClaims } from "../auth/token.service";
  */
 const SUBJECT = "payout";
 
+/** The site in the header's filter, or nothing for every site. */
+const outstandingQuerySchema = z.object({ siteId: z.string().uuid().optional() });
+
 @Controller("payout-lists")
 export class PayoutsController {
   constructor(private readonly payouts: PayoutsRepository) {}
@@ -59,8 +63,10 @@ export class PayoutsController {
   /** A static segment beside `:id` — Fastify prefers it whatever the order. */
   @Get("outstanding")
   @Permissions("payout.view")
-  outstanding(): Promise<PayoutOutstandingResponse> {
-    return this.payouts.outstanding();
+  outstanding(
+    @Query(new ZodValidationPipe(outstandingQuerySchema)) query: { siteId?: string },
+  ): Promise<PayoutOutstandingResponse> {
+    return this.payouts.outstanding(query.siteId);
   }
 
   @Get(":id")

@@ -103,11 +103,11 @@ export class PayoutsRepository extends BaseRepository {
    * useless without the outstanding beside each party, and migration 0022 grants
    * `payout` only to people who already hold that report.
    */
-  private async owedByParty(): Promise<Map<string, Owed>> {
+  private async owedByParty(siteId?: string): Promise<Map<string, Owed>> {
     const sums = new Map<string, Owed>();
     for (let offset = 0; ; offset += BALANCES_PAGE) {
       const page = await this.reports.balances(
-        { direction: "out", show: "outstanding" },
+        { direction: "out", show: "outstanding", siteId },
         { limit: BALANCES_PAGE, offset },
       );
       for (const row of page.rows) {
@@ -136,10 +136,10 @@ export class PayoutsRepository extends BaseRepository {
    * the same bills that report does. Oldest first, which is the order they should
    * be paid in.
    */
-  private async pendingByParty(): Promise<Map<string, PayoutPendingInvoice[]>> {
+  private async pendingByParty(siteId?: string): Promise<Map<string, PayoutPendingInvoice[]>> {
     const byParty = new Map<string, PayoutPendingInvoice[]>();
     for (let offset = 0; ; offset += BALANCES_PAGE) {
-      const page = await this.reports.pendingLedger({ direction: "out" }, { limit: BALANCES_PAGE, offset });
+      const page = await this.reports.pendingLedger({ direction: "out", siteId }, { limit: BALANCES_PAGE, offset });
       for (const row of page.rows) {
         const list = byParty.get(row.partyId) ?? [];
         list.push({
@@ -163,11 +163,17 @@ export class PayoutsRepository extends BaseRepository {
     return byParty;
   }
 
-  async outstanding(): Promise<PayoutOutstandingResponse> {
-    const owed = [...(await this.owedByParty()).values()].sort(
+  /**
+   * With a `siteId`, only what is owed AT THAT SITE: each party's outstanding is
+   * its balance there, and a party owed nothing at that site is not listed, even
+   * if it is owed elsewhere (client request, 7 Oct 2026: the header's site).
+   * Without one, as before: the sum over every site, netted per party.
+   */
+  async outstanding(siteId?: string): Promise<PayoutOutstandingResponse> {
+    const owed = [...(await this.owedByParty(siteId)).values()].sort(
       (a, b) => a.partyName.localeCompare(b.partyName) || a.partyId.localeCompare(b.partyId),
     );
-    const bills = await this.pendingByParty();
+    const bills = await this.pendingByParty(siteId);
     const total = owed.reduce((sum, row) => sum + row.paise, 0n);
     return {
       rows: owed.map((row) => ({

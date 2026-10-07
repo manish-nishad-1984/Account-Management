@@ -10,6 +10,7 @@ import {
 } from "@accountmanagement/contracts";
 import { Alert, Button, FormDialog, FormSection, TextField } from "../../components/ui";
 import { useRecordLayout } from "../../contexts/RecordLayoutContext";
+import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { ApiError } from "../../lib/api-client";
 import { todayInput } from "../../lib/dates";
 import { formatMoney } from "../../lib/format";
@@ -116,7 +117,11 @@ export function PayoutListFormDialog({
 }) {
   const isEdit = listId !== null;
   const detail = usePayoutList(open && isEdit ? listId : null);
-  const outstanding = usePayoutOutstanding(open && !readOnly);
+  // Only the site in the header's filter (client request, 7 Oct 2026); every site
+  // when it is on "All sites". Not fetched before the scope is known, or an
+  // assigned user would see every site's parties for a moment.
+  const scope = useSiteScope();
+  const outstanding = usePayoutOutstanding(open && !readOnly && scope.isReady, scope.siteId);
   const create = useCreatePayoutList();
   const update = useUpdatePayoutList();
   const share = usePayoutSharing();
@@ -402,6 +407,10 @@ export function PayoutListFormDialog({
 
   const saved: PayoutListDetail | undefined = isEdit ? detail.data : undefined;
 
+  /** Owed at the site (or at every site), what is ticked, and what is left of it. */
+  const owedPaise = toPaise(outstanding.data?.total ?? "0") ?? 0n;
+  const remainPaise = owedPaise - totalPaise;
+
   const budgetLine =
     budgetPaise === null || budget.trim() === ""
       ? null
@@ -463,6 +472,36 @@ export function PayoutListFormDialog({
       ) : (
         <>
           <ShareNotice notice={share.notice} />
+          {!readOnly && (
+            <div
+              aria-label="Payout summary"
+              className="grid grid-cols-3 gap-2 rounded-lg bg-slate-50 p-2 ring-1 ring-inset ring-slate-200"
+            >
+              <div>
+                <div className="text-xs text-slate-500">
+                  Total outstanding{scope.siteName ? ` · ${scope.siteName}` : " · all sites"}
+                </div>
+                <div className="tabular text-base font-semibold text-slate-900">
+                  {outstanding.isLoading ? "…" : formatMoney(fromPaise(owedPaise))}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500">Selected</div>
+                <div className="tabular text-base font-semibold text-brand-700">{formatMoney(total)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500">Remain to pay</div>
+                <div
+                  className={clsx(
+                    "tabular text-base font-semibold",
+                    remainPaise < 0n ? "text-amber-700" : "text-slate-900",
+                  )}
+                >
+                  {outstanding.isLoading ? "…" : formatMoney(fromPaise(remainPaise))}
+                </div>
+              </div>
+            </div>
+          )}
           <FormSection title="List details" className="p-3!">
             <TextField
               label="List date"

@@ -134,6 +134,20 @@ describe("PayoutsRepository (real PostgreSQL)", () => {
       }
     });
 
+    it("with a site, lists only what is owed AT that site, with only that site's bills", async () => {
+      const here = await repo.outstanding(siteId);
+      expect(here.rows.map((row) => [row.partyName, row.outstanding])).toEqual([
+        ["AL BURHAN PIPES", "1500.00"],
+        ["SHAH ENTERPRISE", "700.00"],
+      ]);
+      expect(here.total).toBe("2200.00");
+      expect(here.rows.flatMap((row) => row.invoices).map((bill) => bill.displayNo).sort()).toEqual(["A1", "S1"]);
+
+      const there = await repo.outstanding(otherSiteId);
+      expect(there.rows.map((row) => [row.partyName, row.outstanding])).toEqual([["AL BURHAN PIPES", "500.00"]]);
+      expect(there.total).toBe("500.00");
+    });
+
     it("nets an overpaid site against an owed one, and omits a party that nets to nothing owed", async () => {
       await pay(shahId, "1000.00", otherSiteId); // +700 at Akwada, -1000 at Surat = -300
       const result = await repo.outstanding();

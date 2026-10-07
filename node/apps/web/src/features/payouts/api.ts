@@ -53,14 +53,17 @@ export function usePayoutDetailLoader() {
  * Parties we owe, for the builder. Fetched fresh each time a form opens: a list
  * built five days after the last is built from what is owed NOW.
  */
-export const usePayoutOutstanding = (enabled: boolean) =>
+export const usePayoutOutstanding = (enabled: boolean, siteId: string | null = null) =>
   useQuery({
-    queryKey: [RESOURCE, "outstanding"],
+    queryKey: [RESOURCE, "outstanding", siteId],
     enabled,
     staleTime: 0,
     refetchOnMount: "always",
     queryFn: ({ signal }) =>
-      apiRequest(`/${RESOURCE}/outstanding`, { schema: payoutOutstandingResponseSchema, signal }),
+      apiRequest(`/${RESOURCE}/outstanding${siteId ? `?siteId=${siteId}` : ""}`, {
+        schema: payoutOutstandingResponseSchema,
+        signal,
+      }),
   });
 
 export const useCreatePayoutList = () =>
