@@ -152,6 +152,23 @@ export function RecordPage({
           */}
           {description && <p className="sr-only">{description}</p>}
         </div>
+
+        {/*
+          THE ACTIONS ARE IN THE TITLE BAR, at its right-hand end (client request,
+          7 Oct 2026). They were a bar pinned to the bottom of the window; the
+          client wants Save, Cancel and the rest where the title is, so they are
+          always at the top, beside the name of what is being saved.
+
+          The buttons are forced to 28px, the height of the back arrow, so the bar
+          stays 41px: the payout form sticks its own rows beneath this bar and
+          needs that number to hold. They submit through the `form` attribute, so
+          living outside the form element changes nothing.
+        */}
+        {footer && (
+          <div className="ml-auto flex shrink-0 items-center gap-2 [&_button]:h-7! [&_button]:text-xs!">
+            {footer}
+          </div>
+        )}
       </div>
 
       {/*
@@ -183,32 +200,6 @@ export function RecordPage({
         </div>
       </RecordSurfaceContext.Provider>
 
-      {footer && (
-        /*
-          THE FOOTER IS PINNED TO THE BOTTOM OF THE WINDOW, edge to edge, and it
-          no longer moves with the form.
-
-          It used to be the last child of the content box, sticky, with a margin
-          above it. A short form therefore left it floating just under the last
-          field, and every row ticked, error shown or section opened moved it up
-          or down with the content - the "up down" the client saw on the payout
-          form. It is now a sibling AFTER the content, which is `flex-1` inside a
-          column at least as tall as the window, so a short form pushes it to the
-          bottom and a tall one leaves it sticky there.
-
-          Full width, not a floating card: `-mx-4` / `lg:-mx-8` undo the content
-          area's own side padding, and it sits OUTSIDE the `max-w-[1800px]` box so
-          a very wide window does not leave it narrower than the page. Still
-          opaque, because the form passes under it (see the note on the header).
-
-          `-bottom-6 -mb-6` is the measured pair from before: a sticky offset
-          resolves against the content box, so `bottom-0` would park it 24px up
-          from the window edge with the form scrolling through the strip below.
-        */
-        <div className="sticky -bottom-6 -mx-4 -mb-6 mt-4 flex items-center justify-end gap-2 border-t border-slate-200 bg-white px-4 py-2.5 shadow-raised lg:-mx-8 lg:px-8">
-          {footer}
-        </div>
-      )}
     </section>
   );
 }
