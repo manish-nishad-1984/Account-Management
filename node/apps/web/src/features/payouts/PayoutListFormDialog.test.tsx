@@ -121,7 +121,7 @@ describe("PayoutListFormDialog", () => {
     openNew();
 
     await user.click(await screen.findByLabelText("Pay Ambica Steel Traders"));
-    expect(amountBox("Ambica Steel Traders")).toHaveValue("125000.00");
+    expect(amountBox("Ambica Steel Traders")).toHaveValue("1,25,000.00");
     expect(screen.getByText("1 party ticked")).toBeInTheDocument();
     expect(total()).toHaveTextContent("1,25,000.00");
 
@@ -281,12 +281,12 @@ describe("PayoutListFormDialog", () => {
     it("ticks the saved lines with their saved amounts and the saved header", async () => {
       openEdit();
 
-      await waitFor(() => expect(amountBox("Ambica Steel Traders")).toHaveValue("125000.00"));
-      expect(amountBox("Shree Cement")).toHaveValue("80000.00");
+      await waitFor(() => expect(amountBox("Ambica Steel Traders")).toHaveValue("1,25,000.00"));
+      expect(amountBox("Shree Cement")).toHaveValue("80,000.00");
       expect(screen.getByLabelText("Pay Dime Traders")).not.toBeChecked();
       expect(screen.getByLabelText(/list date/i)).toHaveValue("2026-10-01");
       expect(screen.getByLabelText(/^title/i)).toHaveValue("Weekly payout");
-      expect(screen.getByLabelText(/^budget/i)).toHaveValue("300000.00");
+      expect(screen.getByLabelText(/^budget/i)).toHaveValue("3,00,000.00");
       expect(screen.getByLabelText(/^note/i)).toHaveValue("Call before paying");
       expect(screen.getByText("3 parties ticked")).toBeInTheDocument();
       expect(total()).toHaveTextContent("2,65,000.00");
@@ -300,7 +300,7 @@ describe("PayoutListFormDialog", () => {
     it("flags a saved line that is now more than the party owes", async () => {
       const user = userEvent.setup();
       openEdit();
-      await waitFor(() => expect(amountBox("Ambica Steel Traders")).toHaveValue("125000.00"));
+      await waitFor(() => expect(amountBox("Ambica Steel Traders")).toHaveValue("1,25,000.00"));
 
       const shree = screen.getByText("Shree Cement").closest("tr")!;
       expect(within(shree).queryByText(/paid since/)).not.toBeInTheDocument();
@@ -316,13 +316,13 @@ describe("PayoutListFormDialog", () => {
       const settled = (await screen.findByText("Settled Supplies")).closest("tr")!;
       expect(within(settled).getByLabelText("Pay Settled Supplies")).toBeChecked();
       expect(within(settled).getByText(/no longer owes anything/)).toBeInTheDocument();
-      expect(within(settled).getByLabelText("Amount for Settled Supplies")).toHaveValue("60000.00");
+      expect(within(settled).getByLabelText("Amount for Settled Supplies")).toHaveValue("60,000.00");
     });
 
     it("saves every line it opened with when nothing is changed - none is dropped", async () => {
       const user = userEvent.setup();
       openEdit();
-      await waitFor(() => expect(amountBox("Ambica Steel Traders")).toHaveValue("125000.00"));
+      await waitFor(() => expect(amountBox("Ambica Steel Traders")).toHaveValue("1,25,000.00"));
 
       await save(user);
 

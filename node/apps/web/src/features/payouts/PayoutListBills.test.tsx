@@ -77,7 +77,7 @@ describe("PayoutListFormDialog - bills", () => {
 
     expect(screen.getByText("2 of 2 bills")).toBeInTheDocument();
     expect(screen.getByLabelText("Pay bill BE-1 of Ambica Steel Traders")).toBeChecked();
-    expect(screen.getByLabelText("Amount for bill BE-2")).toHaveValue("40000.00");
+    expect(screen.getByLabelText("Amount for bill BE-2")).toHaveValue("40,000.00");
     expect(screen.getByText("Total").parentElement).toHaveTextContent("1,00,000.00");
   });
 

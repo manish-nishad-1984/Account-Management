@@ -1,8 +1,9 @@
 import clsx from "clsx";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
-import { forwardRef } from "react";
+import { forwardRef, useCallback, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
 import { ArrowLeft, Loader2 } from "lucide-react";
+import { DatePickerButton } from "./DatePicker";
 import {
   CONTROL_BASE,
   CONTROL_COMPACT,
@@ -284,6 +285,18 @@ export const TextField = forwardRef<
   ref,
 ) {
   const inputId = id ?? `field-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  // A date field keeps its real input and gets a calendar beside it. Its own ref
+  // is merged with the caller's (a form library's) so both can reach the element.
+  const isDate = rest.type === "date";
+  const localRef = useRef<HTMLInputElement | null>(null);
+  const setRefs = useCallback(
+    (node: HTMLInputElement | null) => {
+      localRef.current = node;
+      if (typeof ref === "function") ref(node);
+      else if (ref) ref.current = node;
+    },
+    [ref],
+  );
   return (
     <div className={className}>
       <label htmlFor={inputId} className={labelHidden ? "sr-only" : LABEL_BASE}>
@@ -297,7 +310,7 @@ export const TextField = forwardRef<
           />
         )}
         <input
-          ref={ref}
+          ref={isDate ? setRefs : ref}
           id={inputId}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${inputId}-error` : undefined}
@@ -307,9 +320,22 @@ export const TextField = forwardRef<
             compact ? CONTROL_COMPACT : CONTROL_BASE,
             ringFor(error),
             Icon ? "pl-8 pr-2.5" : "px-2.5",
+            // Room for the calendar button; the browser's own indicator is hidden in index.css.
+            isDate && "pr-9",
           )}
           {...rest}
         />
+        {isDate && !rest.readOnly && (
+          <DatePickerButton
+            inputRef={localRef}
+            min={typeof rest.min === "string" ? rest.min : undefined}
+            max={typeof rest.max === "string" ? rest.max : undefined}
+            required={rest.required}
+            disabled={rest.disabled}
+            label={label}
+            compact={compact}
+          />
+        )}
       </div>
       {error ? (
         <p id={`${inputId}-error`} className={clsx(MESSAGE_BASE, "font-medium text-rose-600")}>

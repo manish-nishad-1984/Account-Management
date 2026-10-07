@@ -6,6 +6,14 @@ import { SECTION_TAB_ACTIONS_ID } from "../../components/section-tab-slot";
 import { useFitHeight } from "../../lib/use-fit-height";
 
 /**
+ * THE LOOK IS THE APPLICATION'S OWN GRID (client request, 7 Oct 2026: the ruled,
+ * spreadsheet-style report grid was not liked, "use the grid every other screen
+ * uses"). The cell rules, the 13px text and the heavy outline are gone; the header,
+ * the row dividers and tint, the 40px rows and the totals row are those of the
+ * DataGrid component. What follows describes the old ruled look, and is kept for the
+ * reasoning behind the column layout (shared amount width, right-aligned figures,
+ * wrapped names, sticky header and totals), all of which still holds.
+ *
  * A report's figures as a ruled grid — the look of a spreadsheet, because that
  * is what an accountant reads a ledger against (client request, 18 Sep 2026:
  * "proper grid me, amount perfect align with column header").
@@ -117,12 +125,12 @@ export function ReportGrid<T>({
     <div
       ref={fitted.ref}
       className={clsx(
-        "scroll-subtle overflow-auto rounded-lg border border-slate-300 bg-white",
+        "scroll-subtle relative overflow-auto rounded-lg border border-slate-200 bg-white",
         !fit && "max-h-[70vh]",
       )}
       style={{ ...(fit ? { maxHeight: fitted.height } : null), ...(maxWidth ? { maxWidth } : null) }}
     >
-      <table aria-label={label} className="w-full border-separate border-spacing-0 text-[13px]" style={sizes ? { tableLayout: "fixed", width: `max(100%, ${sizes.reduce((a, b) => a + b, 0)}px)` } : { minWidth }}>
+      <table aria-label={label} className="w-full border-separate border-spacing-0 text-sm" style={sizes ? { tableLayout: "fixed", width: `max(100%, ${sizes.reduce((a, b) => a + b, 0)}px)` } : { minWidth }}>
         <colgroup>
           {columns.map((column, index) => (
             <col
@@ -141,8 +149,8 @@ export function ReportGrid<T>({
                 }}
                 scope="col"
                 className={clsx(
-                  "sticky top-0 z-10 border-b border-slate-300 bg-surface-muted px-2.5 py-2 text-xs font-semibold uppercase tracking-[0.05em] text-slate-500",
-                  index < columns.length - 1 && "border-r",
+                  "sticky top-0 z-20 bg-surface-muted px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.05em] text-slate-500",
+                  "shadow-[inset_0_-1px_0_var(--color-slate-200)]",
                   column.numeric ? "text-right" : "text-left",
                   (column.numeric || column.nowrap) && "whitespace-nowrap",
                 )}
@@ -163,7 +171,7 @@ export function ReportGrid<T>({
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={rowKey(row)} className="align-top hover:[&>td]:bg-slate-900/[0.06]">
+            <tr key={rowKey(row)} className="group transition-colors hover:[&>td]:bg-slate-100">
               {columns.map((column, index) => {
                 const content = column.cell(row);
                 // A zero is the absence of a figure: dimmed, so the amounts that
@@ -173,11 +181,10 @@ export function ReportGrid<T>({
                   <td
                     key={column.key}
                     className={clsx(
-                      "border-b border-slate-200 px-2.5 py-1.5",
-                      index < columns.length - 1 && "border-r",
+                      "border-b border-slate-100 bg-white px-4 py-2.5",
                       column.numeric
-                        ? "tabular whitespace-nowrap text-right"
-                        : clsx("text-slate-700", column.nowrap ? "whitespace-nowrap" : "break-words"),
+                        ? "tabular whitespace-nowrap text-right text-slate-600"
+                        : clsx("text-slate-600", column.nowrap ? "whitespace-nowrap" : "break-words"),
                       column.className?.(row),
                       zero && "text-slate-300!",
                     )}
@@ -195,7 +202,7 @@ export function ReportGrid<T>({
               {firstFooter > 0 && (
                 <td
                   colSpan={firstFooter}
-                  className="sticky bottom-0 border-r border-t-2 border-slate-300 bg-slate-100 px-2.5 py-2 font-semibold text-slate-700"
+                  className="sticky bottom-0 z-20 bg-surface-muted px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-[inset_0_2px_0_var(--color-slate-200)]"
                 >
                   {footerLabel}
                 </td>
@@ -204,8 +211,8 @@ export function ReportGrid<T>({
                 <td
                   key={column.key}
                   className={clsx(
-                    "sticky bottom-0 border-t-2 border-slate-300 bg-slate-100 px-2.5 py-2 font-semibold",
-                    firstFooter + index < columns.length - 1 && "border-r",
+                    "sticky bottom-0 z-20 bg-surface-muted px-4 py-2.5 text-sm font-semibold text-slate-800",
+                    "shadow-[inset_0_2px_0_var(--color-slate-200)]",
                     column.numeric && "tabular whitespace-nowrap text-right",
                   )}
                 >

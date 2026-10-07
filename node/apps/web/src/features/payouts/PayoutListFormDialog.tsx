@@ -15,6 +15,7 @@ import { ApiError } from "../../lib/api-client";
 import { todayInput } from "../../lib/dates";
 import { formatMoney } from "../../lib/format";
 import { useCreatePayoutList, usePayoutList, usePayoutOutstanding, useUpdatePayoutList } from "./api";
+import { AmountField } from "./AmountField";
 import { fromPaise, sumAmounts, toPaise } from "./decimal";
 import { formatListDate } from "./message";
 import { ShareNotice, usePayoutSharing } from "./share";
@@ -144,6 +145,8 @@ export function PayoutListFormDialog({
   // INSIDE the record page, below this component, so here it is always false.
   const onPage = useRecordLayout().layout === "page";
   const stickyTop = onPage ? "1.1rem" : "0px";
+  // Search row (2.75rem) plus the summary (3rem and its 0.5rem of space), when shown.
+  const headOffset = readOnly ? "2.75rem" : "6.25rem";
 
   const [listDate, setListDate] = useState(todayInput);
   const [title, setTitle] = useState("");
@@ -472,36 +475,6 @@ export function PayoutListFormDialog({
       ) : (
         <>
           <ShareNotice notice={share.notice} />
-          {!readOnly && (
-            <div
-              aria-label="Payout summary"
-              className="grid grid-cols-3 gap-2 rounded-lg bg-slate-50 p-2 ring-1 ring-inset ring-slate-200"
-            >
-              <div>
-                <div className="text-xs text-slate-500">
-                  Total outstanding{scope.siteName ? ` · ${scope.siteName}` : " · all sites"}
-                </div>
-                <div className="tabular text-base font-semibold text-slate-900">
-                  {outstanding.isLoading ? "…" : formatMoney(fromPaise(owedPaise))}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-slate-500">Selected</div>
-                <div className="tabular text-base font-semibold text-brand-700">{formatMoney(total)}</div>
-              </div>
-              <div>
-                <div className="text-xs text-slate-500">Remain to pay</div>
-                <div
-                  className={clsx(
-                    "tabular text-base font-semibold",
-                    remainPaise < 0n ? "text-amber-700" : "text-slate-900",
-                  )}
-                >
-                  {outstanding.isLoading ? "…" : formatMoney(fromPaise(remainPaise))}
-                </div>
-              </div>
-            </div>
-          )}
           <FormSection title="List details" className="p-3!">
             <TextField
               label="List date"
@@ -523,12 +496,12 @@ export function PayoutListFormDialog({
               `inputMode`, not `type="number"`, which hands back a float: money is
               a decimal string end to end.
             */}
-            <TextField
+            <AmountField
               label="Budget (optional)"
               inputMode="decimal"
               placeholder="What the owner can pay out"
               value={budget}
-              onChange={(event) => setBudget(cleanAmount(event.target.value))}
+              onValue={(raw) => setBudget(raw)}
               error={errors.fields.budget}
             />
             <TextField
@@ -545,14 +518,21 @@ export function PayoutListFormDialog({
             className="p-3!"
             columns={1}
           >
+            {/*
+              THE SEARCH ROW AND THE SUMMARY STAY PUT while the parties scroll
+              (client request, 7 Oct 2026). The summary sits under the filter, and the
+              column headings stick beneath both: 2.75rem for the search row and
+              3.5rem for the summary, which are fixed heights for that reason.
+            */}
             <div
               className={clsx(
-                "sticky z-[5] flex h-11 items-center gap-3 border-b border-slate-200 bg-white",
+                "sticky z-[5] border-b border-slate-200 bg-white",
                 // The page card is `p-3` here; a dialog or panel has no card to bleed into.
                 onPage && "-mx-3 px-3",
               )}
               style={{ top: stickyTop }}
             >
+            <div className="flex h-11 items-center gap-3">
               <TextField
                 label="Search parties"
                 labelHidden
@@ -572,6 +552,37 @@ export function PayoutListFormDialog({
                 Ticked only
               </label>
             </div>
+            {!readOnly && (
+              <div
+                aria-label="Payout summary"
+                className="mb-2 grid h-12 grid-cols-3 items-center gap-2 rounded-lg bg-slate-50 px-3 ring-1 ring-inset ring-slate-200"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-xs text-slate-500">
+                    Total outstanding{scope.siteName ? ` · ${scope.siteName}` : " · all sites"}
+                  </div>
+                  <div className="tabular text-sm font-semibold text-slate-900">
+                    {outstanding.isLoading ? "…" : formatMoney(fromPaise(owedPaise))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500">Selected</div>
+                  <div className="tabular text-sm font-semibold text-brand-700">{formatMoney(total)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500">Remain to pay</div>
+                  <div
+                    className={clsx(
+                      "tabular text-sm font-semibold",
+                      remainPaise < 0n ? "text-amber-700" : "text-slate-900",
+                    )}
+                  >
+                    {outstanding.isLoading ? "…" : formatMoney(fromPaise(remainPaise))}
+                  </div>
+                </div>
+              </div>
+            )}
+            </div>
 
             {errors.noLines && <Alert tone="danger">{errors.noLines}</Alert>}
             {outstanding.error && !readOnly && (
@@ -587,12 +598,12 @@ export function PayoutListFormDialog({
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 text-xs text-slate-600">
                     <tr>
-                      <th className="sticky z-[4] w-10 bg-slate-50 px-3 py-1.5" style={{ top: `calc(${stickyTop} + 2.75rem)` }}>
+                      <th className="sticky z-[4] w-10 bg-slate-50 px-3 py-1.5" style={{ top: `calc(${stickyTop} + ${headOffset})` }}>
                         <span className="sr-only">Pay</span>
                       </th>
-                      <th className="sticky z-[4] bg-slate-50 px-2 py-1.5 text-left font-medium" style={{ top: `calc(${stickyTop} + 2.75rem)` }}>Party</th>
-                      <th className="sticky z-[4] bg-slate-50 px-2 py-1.5 text-right font-medium" style={{ top: `calc(${stickyTop} + 2.75rem)` }}>Outstanding</th>
-                      <th className="sticky z-[4] w-48 bg-slate-50 px-2 py-1.5 text-right font-medium" style={{ top: `calc(${stickyTop} + 2.75rem)` }}>Amount to pay</th>
+                      <th className="sticky z-[4] bg-slate-50 px-2 py-1.5 text-left font-medium" style={{ top: `calc(${stickyTop} + ${headOffset})` }}>Party</th>
+                      <th className="sticky z-[4] bg-slate-50 px-2 py-1.5 text-right font-medium" style={{ top: `calc(${stickyTop} + ${headOffset})` }}>Outstanding</th>
+                      <th className="sticky z-[4] w-48 bg-slate-50 px-2 py-1.5 text-right font-medium" style={{ top: `calc(${stickyTop} + ${headOffset})` }}>Amount to pay</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -669,7 +680,7 @@ export function PayoutListFormDialog({
                             </td>
                             <td className="px-2 py-1 align-top">
                               {ticked && !byBill ? (
-                                <TextField
+                                <AmountField
                                   label={`Amount for ${row.partyName}`}
                                   labelHidden
                                   compact
@@ -677,7 +688,7 @@ export function PayoutListFormDialog({
                                   placeholder="0.00"
                                   className="[&_input]:text-right"
                                   value={amount}
-                                  onChange={(event) => setAmount(row.partyId, event.target.value)}
+                                  onValue={(raw) => setAmount(row.partyId, raw)}
                                   error={errors.lines[row.partyId]}
                                 />
                               ) : byBill ? (
@@ -736,7 +747,7 @@ export function PayoutListFormDialog({
                                   </td>
                                   <td className="px-2 py-0.5 align-top">
                                     {on ? (
-                                      <TextField
+                                      <AmountField
                                         label={`Amount for bill ${bill.displayNo}`}
                                         labelHidden
                                         compact
@@ -744,7 +755,7 @@ export function PayoutListFormDialog({
                                         placeholder="0.00"
                                         className="[&_input]:text-right"
                                         value={partyBills[bill.key] ?? ""}
-                                        onChange={(event) => setBillAmount(row.partyId, bill.key, event.target.value)}
+                                        onValue={(raw) => setBillAmount(row.partyId, bill.key, raw)}
                                       />
                                     ) : (
                                       <span className="block pt-1 text-right text-slate-300">—</span>

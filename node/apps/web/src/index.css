@@ -384,3 +384,9 @@ svg.lucide {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* The date field has its own calendar button (components/ui/DatePicker.tsx), so the
+   browser's built-in indicator, which opens a different popup, is hidden. */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  display: none;
+}
