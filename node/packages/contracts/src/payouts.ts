@@ -11,10 +11,12 @@ import { rowCapabilitiesSchema } from "./pagination";
  * five days later, or the same day, and sometimes it has to be changed. It is
  * then sent on WhatsApp.
  *
- * A LIST IS A PLAN, NOT A PAYMENT. Nothing here moves the ledger; the payment is
- * still entered on the Payments screen. That separation is deliberate: a plan
- * that quietly became a payment would be a way to pay a supplier without the
- * payment ever being keyed.
+ * A LIST IS A PLAN, NOT A PAYMENT, until somebody CONFIRMS it (7 Oct 2026). A
+ * draft moves nothing. Confirming is a deliberate act by a user who holds the
+ * right to do it, recording that the owner has paid: it makes the payments and
+ * settles the bills named. That is the only way a list becomes a payment, and it
+ * can be reversed. A plan that quietly became a payment would be a way to pay a
+ * supplier without anyone having said so.
  *
  * ONE LINE PER PARTY. The owner asks for "party name and amount", and the
  * Pending Outstanding report is already party-wise. The amount is whatever is
@@ -87,8 +89,13 @@ export type CreatePayoutList = z.infer<typeof createPayoutListSchema>;
 export const updatePayoutListSchema = createPayoutListSchema;
 export type UpdatePayoutList = CreatePayoutList;
 
+export const PAYOUT_STATUSES = ["draft", "confirmed"] as const;
+export type PayoutStatus = (typeof PAYOUT_STATUSES)[number];
+
 export const payoutListRowSchema = z.object({
   id: z.string(),
+  status: z.enum(PAYOUT_STATUSES),
+  confirmedAt: z.string().nullable(),
   listDate: z.string(),
   title: z.string().nullable(),
   budget: z.string().nullable(),
@@ -110,6 +117,8 @@ export const payoutInvoiceSchema = z.object({
   documentDate: z.string().nullable(),
   siteName: z.string().nullable(),
   amount: z.string(),
+  /** What was ACTUALLY paid, once the list is confirmed; null while it is a draft. */
+  paidAmount: z.string().nullable(),
   pendingAtSave: z.string().nullable(),
 });
 export type PayoutInvoice = z.infer<typeof payoutInvoiceSchema>;
@@ -131,6 +140,8 @@ export const payoutLineSchema = z.object({
    * paid since and the line is out of date.
    */
   outstandingNow: z.string(),
+  /** Paid above the bills ticked, once confirmed (an advance); null while a draft. */
+  extraPaid: z.string().nullable(),
   /** The bills it was built from; empty for a list kept party by party. */
   invoices: z.array(payoutInvoiceSchema),
 });
@@ -138,6 +149,7 @@ export type PayoutLine = z.infer<typeof payoutLineSchema>;
 
 export const payoutListDetailSchema = payoutListRowSchema.omit({ capabilities: true }).extend({
   note: z.string().nullable(),
+  confirmedByName: z.string().nullable(),
   lines: z.array(payoutLineSchema),
 });
 export type PayoutListDetail = z.infer<typeof payoutListDetailSchema>;
@@ -172,3 +184,50 @@ export const payoutOutstandingResponseSchema = z.object({
   total: z.string(),
 });
 export type PayoutOutstandingResponse = z.infer<typeof payoutOutstandingResponseSchema>;
+
+/**
+ * CONFIRMING A LIST (7 Oct 2026): what was actually paid.
+ *
+ * The owner says "I have paid", and sometimes "I paid this one less" or "this one
+ * more". The person confirming types what really went out. A bill paid LESS than
+ * planned stays open for the difference. Paid MORE than the bills ticked is the
+ * party's `extra`, an advance that the reports then apply to the oldest bill left,
+ * as they do any payment nobody tied to a bill.
+ *
+ * A bill left out, or paid 0, was not paid. Every bill must belong to the list,
+ * and what is paid of it may not exceed what is still pending on it.
+ */
+const nonNegative = (label: string) =>
+  money(label).refine((value) => Number.parseFloat(value) >= 0, { message: "The amount cannot be negative" });
+
+export const confirmPayoutBillSchema = z.object({
+  source: z.enum(["invoice", "opening_balance"]),
+  documentId: z.string().trim().min(1).max(64),
+  paid: nonNegative("Paid"),
+});
+
+export const confirmPayoutLineSchema = z.object({
+  partyId: uuidId,
+  bills: z.array(confirmPayoutBillSchema).max(500).default([]),
+  /** Paid above the bills ticked. */
+  extra: optionalMoney("Extra"),
+});
+
+export const confirmPayoutListSchema = z
+  .object({
+    /** `YYYY-MM-DD`: the day the money went. */
+    paymentDate: z.string().trim().regex(LIST_DATE_PATTERN, "Choose the payment date"),
+    method: optionalText(100),
+    referenceNo: optionalText(120),
+    lines: z.array(confirmPayoutLineSchema).min(1).max(500),
+  })
+  .superRefine((value, ctx) => {
+    const seen = new Set<string>();
+    value.lines.forEach((line, index) => {
+      if (seen.has(line.partyId)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["lines", index, "partyId"], message: "This party is listed twice" });
+      }
+      seen.add(line.partyId);
+    });
+  });
+export type ConfirmPayoutList = z.infer<typeof confirmPayoutListSchema>;

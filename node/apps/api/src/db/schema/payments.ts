@@ -1,4 +1,5 @@
-import { boolean, index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { boolean, check, index, numeric, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { companies, sites } from "./users";
 import { suppliers } from "./masters";
 import { siteGroups } from "./site-groups";
@@ -137,17 +138,66 @@ export const payments = pgTable(
      */
     isDeleted: boolean("is_deleted").notNull().default(false),
 
+    /**
+     * The payout list this payment was made by, when it was made by confirming one
+     * (7 Oct 2026). Null for a payment keyed on the Payments screen. It is what lets
+     * "reverse the confirmation" find exactly the payments that list created and no
+     * others. No foreign key: the payout tables are a later layer than this one.
+     */
+    sourcePayoutListId: uuid("source_payout_list_id"),
+
     createdBy: uuid("created_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedBy: uuid("updated_by"),
     updatedAt: timestamp("updated_at", { withTimezone: true }),
   },
   (table) => [
+    index("payments_source_payout_list_idx").on(table.sourcePayoutListId),
     index("payments_party_id_idx").on(table.partyId),
     index("payments_company_id_idx").on(table.companyId),
     index("payments_site_id_idx").on(table.siteId),
     index("payments_direction_idx").on(table.direction),
     index("payments_payment_date_idx").on(table.paymentDate),
     index("payments_created_at_idx").on(table.createdAt),
+  ],
+);
+
+/**
+ * WHICH BILLS A PAYMENT SETTLES (client request, 7 Oct 2026).
+ *
+ * A payment on its own only moves the party's balance, and the reports ASSUME it
+ * paid the oldest bills first. A row here says, instead, "this much of this
+ * payment paid this bill". A payment with no rows is exactly what it always was,
+ * and keeps the oldest-first rule; only the part of a payment not named here
+ * falls back to it. So an existing payment needs no row, and nothing about the
+ * 583 that exist changes.
+ *
+ * `document_kind` is `invoice` or `opening_balance`, the two kinds of thing that
+ * can be owed, as the Pending Outstanding report names them. `document_id` is
+ * not a foreign key to either, because it points at two tables. A reader that
+ * joins this to the ledger entries by id and kind gets the bill.
+ *
+ * A payment and the bill it pays are always the same party, company and site: the
+ * ledger groups by party and site, and an allocation that crossed groups would
+ * make one group's balance disagree with its own bills. The server refuses it.
+ */
+export const paymentAllocations = pgTable(
+  "payment_allocations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    paymentId: uuid("payment_id")
+      .notNull()
+      .references(() => payments.id),
+    documentKind: text("document_kind").notNull(),
+    documentId: uuid("document_id").notNull(),
+    amount: numeric("amount", { precision: 18, scale: 2 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("payment_allocations_payment_idx").on(table.paymentId),
+    index("payment_allocations_document_idx").on(table.documentKind, table.documentId),
+    unique("payment_allocations_payment_document_key").on(table.paymentId, table.documentKind, table.documentId),
+    check("payment_allocations_amount_positive", sql`${table.amount} > 0`),
+    check("payment_allocations_kind", sql`${table.documentKind} in ('invoice', 'opening_balance')`),
   ],
 );

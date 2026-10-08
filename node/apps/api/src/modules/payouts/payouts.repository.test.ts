@@ -1,7 +1,12 @@
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createPayoutListSchema, createPurchaseInvoiceSchema, listQuerySchema } from "@accountmanagement/contracts";
+import {
+  confirmPayoutListSchema,
+  createPayoutListSchema,
+  createPurchaseInvoiceSchema,
+  listQuerySchema,
+} from "@accountmanagement/contracts";
 import { PayoutsRepository } from "./payouts.repository";
 import { ReportsRepository } from "../reports/reports.repository";
 import { PaymentsRepository } from "../payments/payments.repository";
@@ -415,6 +420,196 @@ describe("PayoutsRepository (real PostgreSQL)", () => {
       expect(edited.lines).toHaveLength(1);
       expect(edited.lines[0]!.invoices).toEqual([]);
       expect(edited.lines[0]!.amount).toBe("75.00");
+    });
+  });
+
+  describe("confirming a list", () => {
+    /** A draft list for one party, built from the bills given, each paid in full unless said. */
+    const draft = async (
+      partyId: string,
+      bills: { id: string; no: string; amount: string; site?: string }[],
+      title = "Week 41",
+    ) =>
+      repo.create(
+        createPayoutListSchema.parse({
+          listDate: "2026-10-07",
+          title,
+          lines: [
+            {
+              partyId,
+              amount: bills.reduce((sum, bill) => sum + Number(bill.amount), 0).toFixed(2),
+              invoices: bills.map((bill) => ({
+                source: "invoice",
+                documentId: bill.id,
+                displayNo: bill.no,
+                siteName: bill.site ?? null,
+                amount: bill.amount,
+              })),
+            },
+          ],
+        }),
+        ACTOR,
+      );
+
+    const confirmInput = (
+      partyId: string,
+      bills: { id: string; paid: string }[],
+      extra: string | null = null,
+      overrides: Record<string, unknown> = {},
+    ) =>
+      confirmPayoutListSchema.parse({
+        paymentDate: "2026-10-07",
+        method: "NEFT",
+        referenceNo: "UTR123",
+        lines: [{ partyId, bills: bills.map((bill) => ({ source: "invoice", documentId: bill.id, paid: bill.paid })), extra }],
+        ...overrides,
+      });
+
+    const billId = async (no: string) => {
+      const [row] = await db.select({ id: schema.purchaseInvoices.id }).from(schema.purchaseInvoices).where(eq(schema.purchaseInvoices.supplierInvoiceNo, no));
+      return row!.id;
+    };
+
+    const pendingOf = async (partyId: string) => {
+      const page = await reports.pendingLedger({ direction: "out", partyId }, { limit: 200, offset: 0 });
+      return Object.fromEntries(page.rows.map((row) => [row.displayNo, row.pending]));
+    };
+
+    it("makes a payment for each site, tied to its bills, and settles them", async () => {
+      const a1 = await billId("A1"); // Akwada 1500
+      const a2 = await billId("A2"); // Surat 500
+      const list = await draft(alId, [
+        { id: a1, no: "A1", amount: "1500.00" },
+        { id: a2, no: "A2", amount: "500.00" },
+      ]);
+
+      const confirmed = await repo.confirm(list.id, confirmInput(alId, [{ id: a1, paid: "1500.00" }, { id: a2, paid: "500.00" }]), OTHER_ACTOR);
+
+      expect(confirmed).toMatchObject({ status: "confirmed" });
+      expect(confirmed.confirmedAt).not.toBeNull();
+      expect(confirmed.lines[0]!.invoices.map((bill) => bill.paidAmount)).toEqual(["1500.00", "500.00"]);
+
+      const made = await db.select().from(schema.payments).where(eq(schema.payments.sourcePayoutListId, list.id));
+      expect(made.map((p) => [p.siteId, p.amount, p.method, p.referenceNo, p.kind, p.direction]).sort()).toEqual(
+        [
+          [siteId, "1500.00", "NEFT", "UTR123", "payment", "out"],
+          [otherSiteId, "500.00", "NEFT", "UTR123", "payment", "out"],
+        ].sort(),
+      );
+      expect(await db.select().from(schema.paymentAllocations)).toHaveLength(2);
+      expect(await pendingOf(alId)).toEqual({});
+      expect((await repo.outstanding()).rows.map((row) => row.partyName)).toEqual(["SHAH ENTERPRISE"]);
+    });
+
+    it("leaves the bill open for the difference when paid less than planned", async () => {
+      const a1 = await billId("A1");
+      const list = await draft(alId, [{ id: a1, no: "A1", amount: "1500.00" }]);
+
+      await repo.confirm(list.id, confirmInput(alId, [{ id: a1, paid: "1000.00" }]), ACTOR);
+
+      expect(await pendingOf(alId)).toMatchObject({ A1: "500.00" });
+    });
+
+    it("settles the bills that were ACTUALLY paid, not the oldest ones", async () => {
+      const newer = await invoice(alId, "A3", "300.00"); // newer than A1, same site
+      const a3 = await billId("A3");
+      const list = await draft(alId, [{ id: a3, no: "A3", amount: "300.00" }]);
+      void newer;
+
+      await repo.confirm(list.id, confirmInput(alId, [{ id: a3, paid: "300.00" }]), ACTOR);
+
+      // Oldest-first alone would have paid A1 and left A3 open. A3 was paid, so A1 stays whole.
+      const open = await pendingOf(alId);
+      expect(open).toMatchObject({ A1: "1500.00" });
+      expect(open).not.toHaveProperty("A3");
+    });
+
+    it("never changes what a party owes, only which bills are open", async () => {
+      const before = await reports.balances({ direction: "out", show: "outstanding" }, { limit: 200, offset: 0 });
+      const a1 = await billId("A1");
+      const list = await draft(alId, [{ id: a1, no: "A1", amount: "1500.00" }]);
+      await repo.confirm(list.id, confirmInput(alId, [{ id: a1, paid: "1500.00" }]), ACTOR);
+      const after = await reports.balances({ direction: "out", show: "outstanding" }, { limit: 200, offset: 0 });
+
+      const net = (response: typeof before, party: string) =>
+        response.rows.filter((row) => row.partyId === party).map((row) => [row.siteName, row.netAmount]);
+      expect(net(after, alId)).toEqual([["Surat", "500.00"]]);
+      expect(Number(before.closingBalance) - Number(after.closingBalance)).toBe(1500);
+    });
+
+    it("keeps an extra amount as an advance on the party's largest payment", async () => {
+      const a1 = await billId("A1");
+      const list = await draft(alId, [{ id: a1, no: "A1", amount: "1500.00" }]);
+
+      const confirmed = await repo.confirm(list.id, confirmInput(alId, [{ id: a1, paid: "1500.00" }], "250.00"), ACTOR);
+
+      const [made] = await db.select().from(schema.payments).where(eq(schema.payments.sourcePayoutListId, list.id));
+      expect(made!.amount).toBe("1750.00");
+      expect(confirmed.lines[0]!.extraPaid).toBe("250.00");
+      // The 250 is applied oldest-first to what is left (A2 at the other site is a different group), so Akwada nets to -250.
+      const balances = await reports.balances({ direction: "out", show: "all" }, { limit: 200, offset: 0 });
+      expect(balances.rows.find((row) => row.partyId === alId && row.siteName === "Akwada")!.netAmount).toBe("-250.00");
+    });
+
+    it("refuses paying a bill more than is pending, a bill not on the list, and nothing at all", async () => {
+      const a1 = await billId("A1");
+      const a2 = await billId("A2");
+      const list = await draft(alId, [{ id: a1, no: "A1", amount: "1500.00" }]);
+
+      const tooMuch = await repo.confirm(list.id, confirmInput(alId, [{ id: a1, paid: "1500.01" }]), ACTOR).catch((e: unknown) => e);
+      expect(tooMuch).toBeInstanceOf(BadRequestException);
+      expect(JSON.stringify((tooMuch as BadRequestException).getResponse())).toContain("Only 1500.00 is pending on A1");
+
+      const notListed = await repo.confirm(list.id, confirmInput(alId, [{ id: a2, paid: "10.00" }]), ACTOR).catch((e: unknown) => e);
+      expect(JSON.stringify((notListed as BadRequestException).getResponse())).toContain("This bill is not on the list");
+
+      const nothing = await repo.confirm(list.id, confirmInput(alId, [{ id: a1, paid: "0" }]), ACTOR).catch((e: unknown) => e);
+      expect(JSON.stringify((nothing as BadRequestException).getResponse())).toContain("Nothing was paid");
+
+      expect((await repo.findById(list.id)).status).toBe("draft");
+      expect(await db.select().from(schema.paymentAllocations)).toHaveLength(0);
+    });
+
+    it("refuses a line kept party by party, which has no bill to take a site from", async () => {
+      const list = await repo.create(input([{ partyId: shahId, amount: "700.00" }]), ACTOR);
+      const error = await repo.confirm(list.id, confirmInput(shahId, []), ACTOR).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect(JSON.stringify((error as BadRequestException).getResponse())).toContain("no bills ticked");
+    });
+
+    it("cannot be confirmed twice, and a confirmed list cannot be edited or deleted", async () => {
+      const a1 = await billId("A1");
+      const list = await draft(alId, [{ id: a1, no: "A1", amount: "1500.00" }]);
+      await repo.confirm(list.id, confirmInput(alId, [{ id: a1, paid: "1500.00" }]), ACTOR);
+
+      await expect(repo.confirm(list.id, confirmInput(alId, [{ id: a1, paid: "1.00" }]), ACTOR)).rejects.toBeInstanceOf(ConflictException);
+      await expect(repo.update(list.id, input([{ partyId: alId, amount: "1.00" }]), ACTOR)).rejects.toBeInstanceOf(ConflictException);
+      await expect(repo.remove(list.id, ACTOR)).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it("reverses: its payments go, its bills open again, and the list is a draft", async () => {
+      const a1 = await billId("A1");
+      const list = await draft(alId, [{ id: a1, no: "A1", amount: "1500.00" }]);
+      await repo.confirm(list.id, confirmInput(alId, [{ id: a1, paid: "1500.00" }], "100.00"), ACTOR);
+      expect(await pendingOf(alId)).not.toHaveProperty("A1");
+
+      const reversed = await repo.reverse(list.id, OTHER_ACTOR);
+
+      expect(reversed).toMatchObject({ status: "draft", confirmedAt: null });
+      expect(reversed.lines[0]!.invoices[0]!.paidAmount).toBeNull();
+      expect(reversed.lines[0]!.extraPaid).toBeNull();
+      expect(await pendingOf(alId)).toMatchObject({ A1: "1500.00" });
+      const made = await db.select().from(schema.payments).where(eq(schema.payments.sourcePayoutListId, list.id));
+      expect(made.every((payment) => payment.isDeleted)).toBe(true);
+      expect(await db.select().from(schema.paymentAllocations)).toHaveLength(0);
+      // And it can be confirmed again.
+      await repo.confirm(list.id, confirmInput(alId, [{ id: a1, paid: "1500.00" }]), ACTOR);
+      expect((await repo.findById(list.id)).status).toBe("confirmed");
+    });
+
+    it("will not reverse a list that is not confirmed", async () => {
+      const list = await repo.create(input([{ partyId: alId, amount: "1.00" }]), ACTOR);
+      await expect(repo.reverse(list.id, ACTOR)).rejects.toBeInstanceOf(ConflictException);
     });
   });
 });

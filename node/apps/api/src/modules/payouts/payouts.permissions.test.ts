@@ -20,6 +20,8 @@ describe("payout list permissions", () => {
     ["create", "payout.add"],
     ["update", "payout.edit"],
     ["remove", "payout.delete"],
+    ["confirm", "payout.approve"],
+    ["reverse", "payout.approve"],
   ])("%s asks for %s", (method, right) => {
     expect(permissionsOf(method)).toEqual([right]);
   });

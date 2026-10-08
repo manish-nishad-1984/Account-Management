@@ -12,10 +12,12 @@ import {
   Query,
 } from "@nestjs/common";
 import {
+  confirmPayoutListSchema,
   createPayoutListSchema,
   hasPermission,
   listQuerySchema,
   updatePayoutListSchema,
+  type ConfirmPayoutList,
   type CreatePayoutList,
   type ListQuery,
   type ListResponse,
@@ -54,7 +56,8 @@ export class PayoutsController {
     const capabilities = {
       canEdit: hasPermission(granted, SUBJECT, "edit"),
       canDelete: hasPermission(granted, SUBJECT, "delete"),
-      canApprove: false,
+      // "Approve" on the Payout form is the right to CONFIRM a list (and reverse it).
+      canApprove: hasPermission(granted, SUBJECT, "approve"),
     };
     const [page, total] = await Promise.all([this.payouts.list(query), this.payouts.total(query.search)]);
     return { rows: page.rows.map((row) => ({ ...row, capabilities })), nextCursor: page.nextCursor, total };
@@ -93,6 +96,31 @@ export class PayoutsController {
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<PayoutListDetail> {
     return this.payouts.update(id, body, actorId(caller));
+  }
+
+  /**
+   * CONFIRM: the owner has paid, and this user records it. Makes the payments and
+   * settles the bills; see PayoutsRepository.confirm. Its own right, `payout.approve`,
+   * because it moves the ledger.
+   */
+  @Post(":id/confirm")
+  @Permissions("payout.approve")
+  confirm(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(confirmPayoutListSchema)) body: ConfirmPayoutList,
+    @CurrentUser() caller: AccessTokenClaims | undefined,
+  ): Promise<PayoutListDetail> {
+    return this.payouts.confirm(id, body, actorId(caller));
+  }
+
+  /** Undo a confirmation: removes the payments it made and opens its bills again. */
+  @Post(":id/reverse")
+  @Permissions("payout.approve")
+  reverse(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() caller: AccessTokenClaims | undefined,
+  ): Promise<PayoutListDetail> {
+    return this.payouts.reverse(id, actorId(caller));
   }
 
   @Delete(":id")

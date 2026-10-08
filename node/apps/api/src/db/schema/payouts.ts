@@ -21,6 +21,15 @@ export const payoutLists = pgTable(
     /** What the owner said he can spend. Informational; the lines are not capped by it. */
     budget: numeric("budget", { precision: 18, scale: 2 }),
     note: text("note"),
+    /**
+     * `draft` is a plan and touches nothing. `confirmed` means the owner has paid
+     * it and a user with the right has recorded that: its payments exist, its
+     * bills are settled, and it is locked. Reversing a confirmation returns it to
+     * `draft` and removes those payments (7 Oct 2026).
+     */
+    status: text("status").notNull().default("draft"),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    confirmedBy: uuid("confirmed_by"),
     isDeleted: boolean("is_deleted").notNull().default(false),
     createdBy: uuid("created_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -53,6 +62,8 @@ export const payoutListLines = pgTable(
     amount: numeric("amount", { precision: 18, scale: 2 }).notNull(),
     /** What the party was owed when the line was saved, so an old list still reads as it did. */
     outstandingAtSave: numeric("outstanding_at_save", { precision: 18, scale: 2 }),
+    /** Paid ABOVE the bills ticked (an advance), set when the list is confirmed. */
+    extraPaid: numeric("extra_paid", { precision: 18, scale: 2 }),
     lineNumber: integer("line_number").notNull(),
   },
   (table) => [
@@ -87,6 +98,8 @@ export const payoutListInvoices = pgTable(
     siteName: text("site_name"),
     /** What is to be paid of this bill. May be less than what is pending (a part payment). */
     amount: numeric("amount", { precision: 18, scale: 2 }).notNull(),
+    /** What was ACTUALLY paid of this bill, set when the list is confirmed; may differ from `amount`. */
+    paidAmount: numeric("paid_amount", { precision: 18, scale: 2 }),
     pendingAtSave: numeric("pending_at_save", { precision: 18, scale: 2 }),
     lineNumber: integer("line_number").notNull(),
   },

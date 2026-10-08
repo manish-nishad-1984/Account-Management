@@ -312,6 +312,16 @@ export class ReportsRepository extends BaseRepository {
    * pending while that is below the outstanding amount. What is left once the
    * newer invoices are counted is how much of this one is unpaid, capped at its
    * own total.
+   *
+   * PAYMENTS TIED TO BILLS (7 Oct 2026). A payment may name the bills it paid, in
+   * `payment_allocations`. What it names is taken off those bills FIRST, and only
+   * what is left of a bill takes part in the oldest-first walk above, against only
+   * the part of the payments nobody named. A payment with no rows is exactly what
+   * it was. The outstanding amount of a site and party does not change, because
+   * the same figure comes off the bills and off the payments; only WHICH bills
+   * stay open does. An allocation counts only when its payment and its bill are
+   * BOTH inside the filtered set: a From date that leaves out the payment but not
+   * the bill, or the reverse, must not take money off one side only.
    */
   async pendingLedger(
     filter: ReportFilter,
@@ -335,18 +345,30 @@ export class ReportsRepository extends BaseRepository {
         group by f.party_id, f.site_id
         having sum(f.credit) - sum(f.debit) > 0
       ),
-      newest_first as (
-        select f.*,
-          sum(f.credit) over (
-            partition by f.party_id, f.site_id
-            order by f.document_date desc nulls last, f.created_at desc, f.document_id desc
-            rows between unbounded preceding and current row
-          ) - f.credit as newer_credit
+      doc_alloc as (
+        select a.document_kind, a.document_id, sum(a.amount) as allocated
+        from payment_allocations a
+        join filtered fp on fp.document_id = a.payment_id and fp.source_kind = 'payment'
+        join filtered fd on fd.document_id = a.document_id and fd.source_kind = a.document_kind
+        group by a.document_kind, a.document_id
+      ),
+      open_bills as (
+        select f.*, f.credit - coalesce(da.allocated, 0) as remaining
         from filtered f
-        where f.effect = 'credit' and f.credit > 0
+        left join doc_alloc da on da.document_id = f.document_id and da.document_kind = f.source_kind
+        where f.effect = 'credit' and f.credit - coalesce(da.allocated, 0) > 0
+      ),
+      newest_first as (
+        select b.*,
+          sum(b.remaining) over (
+            partition by b.party_id, b.site_id
+            order by b.document_date desc nulls last, b.created_at desc, b.document_id desc
+            rows between unbounded preceding and current row
+          ) - b.remaining as newer_credit
+        from open_bills b
       ),
       pending as (
-        select n.*, least(n.credit, o.outstanding - n.newer_credit) as pending
+        select n.*, least(n.remaining, o.outstanding - n.newer_credit) as pending
         from newest_first n
         join owed o
           on o.party_id = n.party_id

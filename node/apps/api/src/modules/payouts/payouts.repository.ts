@@ -1,6 +1,7 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type {
+  ConfirmPayoutList,
   CreatePayoutList,
   ListQuery,
   PayoutListDetail,
@@ -11,7 +12,15 @@ import type {
   UpdatePayoutList,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
-import { payoutListInvoices, payoutListLines, payoutLists, suppliers, users } from "../../db/schema";
+import {
+  paymentAllocations,
+  payments,
+  payoutListInvoices,
+  payoutListLines,
+  payoutLists,
+  suppliers,
+  users,
+} from "../../db/schema";
 import { decodeCursor, encodeCursor } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
@@ -43,6 +52,9 @@ interface Owed {
 
 interface HeaderRow {
   id: string;
+  status: "draft" | "confirmed";
+  confirmed_at: string | null;
+  confirmed_by_name: string | null;
   list_date: string;
   title: string | null;
   budget: string | null;
@@ -65,6 +77,8 @@ interface HeaderRow {
 const HEADER = sql`
   select
     l.id, l.list_date::text as list_date, l.title, l.budget::text as budget, l.note,
+    l.status, l.confirmed_at::text as confirmed_at,
+    nullif(trim(concat_ws(' ', cf.first_name, cf.last_name)), '') as confirmed_by_name,
     coalesce(t.total, 0)::text as total, coalesce(t.party_count, 0)::int as party_count,
     nullif(trim(concat_ws(' ', cu.first_name, cu.last_name)), '') as created_by_name,
     l.created_at::text as created_at, l.updated_at::text as updated_at,
@@ -77,6 +91,7 @@ const HEADER = sql`
   ) t on t.payout_list_id = l.id
   left join ${users} cu on cu.id = l.created_by
   left join ${users} uu on uu.id = l.updated_by
+  left join ${users} cf on cf.id = l.confirmed_by
 `;
 
 const iso = (value: string | null): string | null => (value === null ? null : new Date(value).toISOString());
@@ -249,6 +264,8 @@ export class PayoutsRepository extends BaseRepository {
   private toRow(row: HeaderRow): Omit<PayoutListRow, "capabilities"> {
     return {
       id: row.id,
+      status: row.status,
+      confirmedAt: iso(row.confirmed_at),
       listDate: row.list_date,
       title: row.title,
       budget: row.budget,
@@ -276,6 +293,7 @@ export class PayoutsRepository extends BaseRepository {
         partyName: suppliers.name,
         amount: sql<string>`${payoutListLines.amount}::text`,
         outstandingAtSave: sql<string | null>`${payoutListLines.outstandingAtSave}::text`,
+        extraPaid: sql<string | null>`${payoutListLines.extraPaid}::text`,
       })
       .from(payoutListLines)
       .innerJoin(suppliers, eq(suppliers.id, payoutListLines.partyId))
@@ -292,6 +310,7 @@ export class PayoutsRepository extends BaseRepository {
             documentDate: sql<string | null>`${payoutListInvoices.documentDate}::text`,
             siteName: payoutListInvoices.siteName,
             amount: sql<string>`${payoutListInvoices.amount}::text`,
+            paidAmount: sql<string | null>`${payoutListInvoices.paidAmount}::text`,
             pendingAtSave: sql<string | null>`${payoutListInvoices.pendingAtSave}::text`,
           })
           .from(payoutListInvoices)
@@ -302,6 +321,7 @@ export class PayoutsRepository extends BaseRepository {
     const owed = await this.owedByParty();
     return {
       ...this.toRow(header),
+      confirmedByName: header.confirmed_by_name,
       note: header.note,
       lines: lines.map((line) => ({
         ...line,
@@ -336,6 +356,7 @@ export class PayoutsRepository extends BaseRepository {
 
   /** Replaces the lines as a whole, in one transaction with the header. */
   async update(id: string, input: UpdatePayoutList, actorId: string): Promise<PayoutListDetail> {
+    await this.refuseIfConfirmed(id);
     const lines = await this.priced(input);
     await writing(() =>
       this.db.transaction(async (tx) => {
@@ -361,6 +382,7 @@ export class PayoutsRepository extends BaseRepository {
 
   /** Soft delete: a list somebody sent on WhatsApp stays on record. */
   async remove(id: string, actorId: string): Promise<void> {
+    await this.refuseIfConfirmed(id);
     const [row] = await this.db
       .update(payoutLists)
       .set({ isDeleted: true, ...updatedBy(actorId) })
@@ -369,6 +391,272 @@ export class PayoutsRepository extends BaseRepository {
     if (!row) {
       throw new NotFoundException("Payout list not found");
     }
+  }
+
+  /** A confirmed list is locked: it has payments behind it. */
+  private async refuseIfConfirmed(id: string): Promise<void> {
+    const [row] = await this.db
+      .select({ status: payoutLists.status })
+      .from(payoutLists)
+      .where(and(eq(payoutLists.id, id), eq(payoutLists.isDeleted, false)))
+      .limit(1);
+    if (row?.status === "confirmed") {
+      throw new ConflictException("This list is confirmed and its payments are recorded. Reverse the confirmation to change it.");
+    }
+  }
+
+  /**
+   * What is pending on each of one party's bills RIGHT NOW, with the site and
+   * company each belongs to: the Pending Outstanding report's own rows, so the
+   * amount a bill may be paid up to is the amount that report shows.
+   */
+  private async pendingBills(partyId: string) {
+    const bills = new Map<
+      string,
+      { pending: bigint; siteId: string | null; companyId: string; siteLocationId: string | null }
+    >();
+    for (let offset = 0; ; offset += BALANCES_PAGE) {
+      const page = await this.reports.pendingLedger({ direction: "out", partyId }, { limit: BALANCES_PAGE, offset });
+      for (const row of page.rows) {
+        bills.set(`${row.source}:${row.documentId}`, {
+          pending: toPaise(row.pending),
+          siteId: row.siteId,
+          companyId: row.companyId,
+          siteLocationId: row.siteLocationId,
+        });
+      }
+      if (page.nextCursor === null) break;
+    }
+    return bills;
+  }
+
+  /**
+   * CONFIRM: the owner has paid, and a user with the right records it
+   * (7 Oct 2026). One transaction does all of it or none:
+   *
+   *  - a payment is made for each party and each (company, site) its bills belong
+   *    to, because a payment carries one of each and the ledger is kept by party
+   *    and site;
+   *  - each payment names the bills it settles, in `payment_allocations`, so those
+   *    bills read as paid whatever order they were in;
+   *  - the list is stamped confirmed and locked.
+   *
+   * Refused, with the reason, when a bill is not on the list, has less pending
+   * than is being paid, or when a party has nothing ticked to settle. A line kept
+   * party by party (no bills) cannot be confirmed: a payment needs a site and the
+   * only place to get one is a bill.
+   */
+  async confirm(id: string, input: ConfirmPayoutList, actorId: string): Promise<PayoutListDetail> {
+    const detail = await this.findById(id);
+    if (detail.status === "confirmed") {
+      throw new ConflictException("This list is already confirmed");
+    }
+
+    const issues: { path: string; message: string }[] = [];
+    const fail = (path: string, message: string) => issues.push({ path, message });
+
+    type Planned = {
+      lineId: string;
+      partyId: string;
+      bill: { source: "invoice" | "opening_balance"; documentId: string };
+      paid: bigint;
+    };
+    type Group = {
+      partyId: string;
+      companyId: string;
+      siteId: string | null;
+      siteLocationId: string | null;
+      paid: bigint;
+      bills: Planned[];
+    };
+    const planned: Planned[] = [];
+    const groups = new Map<string, Group>();
+    const extraByParty = new Map<string, bigint>();
+
+    for (const [lineIndex, line] of input.lines.entries()) {
+      const listed = detail.lines.find((candidate) => candidate.partyId === line.partyId);
+      if (!listed) {
+        fail(`lines.${lineIndex}.partyId`, "This party is not on the list");
+        continue;
+      }
+      if (listed.invoices.length === 0) {
+        fail(
+          `lines.${lineIndex}.partyId`,
+          `${listed.partyName} has no bills ticked, so there is nothing to settle. Open the list, tick the bills paid, save it, then confirm.`,
+        );
+        continue;
+      }
+      const pendingOf = await this.pendingBills(line.partyId);
+      for (const [billIndex, bill] of line.bills.entries()) {
+        const onList = listed.invoices.find(
+          (candidate) => candidate.source === bill.source && candidate.documentId === bill.documentId,
+        );
+        const path = `lines.${lineIndex}.bills.${billIndex}.paid`;
+        if (!onList) {
+          fail(path, "This bill is not on the list");
+          continue;
+        }
+        const paid = toPaise(bill.paid);
+        if (paid === 0n) continue;
+        const open = pendingOf.get(`${bill.source}:${bill.documentId}`);
+        if (!open) {
+          fail(path, `${onList.displayNo} has nothing pending, it is already settled`);
+          continue;
+        }
+        if (paid > open.pending) {
+          fail(path, `Only ${fromPaise(open.pending)} is pending on ${onList.displayNo}`);
+          continue;
+        }
+        const entry: Planned = {
+          lineId: listed.id,
+          partyId: line.partyId,
+          bill: { source: bill.source, documentId: bill.documentId },
+          paid,
+        };
+        planned.push(entry);
+        const key = `${line.partyId}|${open.companyId}|${open.siteId ?? "none"}`;
+        const group: Group = groups.get(key) ?? {
+          partyId: line.partyId,
+          companyId: open.companyId,
+          siteId: open.siteId,
+          siteLocationId: null,
+          paid: 0n,
+          bills: [],
+        };
+        group.paid += paid;
+        group.bills.push(entry);
+        groups.set(key, group);
+      }
+      const extra = line.extra ? toPaise(line.extra) : 0n;
+      if (extra > 0n) extraByParty.set(line.partyId, extra);
+    }
+
+    for (const [partyId, extra] of extraByParty) {
+      if (extra > 0n && ![...groups.values()].some((group) => group.partyId === partyId)) {
+        const lineIndex = input.lines.findIndex((line) => line.partyId === partyId);
+        fail(`lines.${lineIndex}.extra`, "An extra amount needs at least one bill paid for this party, which gives the payment its site");
+      }
+    }
+    if (issues.length === 0 && planned.length === 0) {
+      fail("lines", "Nothing was paid, so there is nothing to confirm");
+    }
+    if (issues.length > 0) {
+      throw new BadRequestException({ message: issues[0]!.message, issues });
+    }
+
+    // The extra rides on the party's largest payment, so it adds to one payment, not several.
+    const biggest = new Map<string, string>();
+    for (const [key, group] of groups) {
+      const current = biggest.get(group.partyId);
+      if (current === undefined || group.paid > groups.get(current)!.paid) biggest.set(group.partyId, key);
+    }
+
+    const description = `Payout list ${detail.listDate}${detail.title ? ` - ${detail.title}` : ""}`;
+    const paymentDate = new Date(`${input.paymentDate}T00:00:00.000Z`);
+
+    await writing(() =>
+      this.db.transaction(async (tx) => {
+        for (const [key, group] of groups) {
+          const extra = biggest.get(group.partyId) === key ? (extraByParty.get(group.partyId) ?? 0n) : 0n;
+          const [made] = await tx
+            .insert(payments)
+            .values({
+              direction: "out",
+              kind: "payment",
+              partyId: group.partyId,
+              companyId: group.companyId,
+              siteId: group.siteId,
+              siteLocationId: group.siteLocationId,
+              paymentDate,
+              amount: fromPaise(group.paid + extra),
+              description,
+              method: input.method,
+              referenceNo: input.referenceNo,
+              sourcePayoutListId: id,
+              ...createdBy(actorId),
+            })
+            .returning({ id: payments.id });
+          await tx.insert(paymentAllocations).values(
+            group.bills.map((entry) => ({
+              paymentId: made!.id,
+              documentKind: entry.bill.source,
+              documentId: entry.bill.documentId,
+              amount: fromPaise(entry.paid),
+            })),
+          );
+        }
+
+        // What was paid of EVERY bill on the list, 0 for the ones left out.
+        for (const line of detail.lines) {
+          for (const bill of line.invoices) {
+            const done = planned.find(
+              (entry) =>
+                entry.lineId === line.id && entry.bill.source === bill.source && entry.bill.documentId === bill.documentId,
+            );
+            await tx
+              .update(payoutListInvoices)
+              .set({ paidAmount: fromPaise(done?.paid ?? 0n) })
+              .where(
+                and(
+                  eq(payoutListInvoices.payoutLineId, line.id),
+                  eq(payoutListInvoices.source, bill.source),
+                  eq(payoutListInvoices.documentId, bill.documentId),
+                ),
+              );
+          }
+          const extra = extraByParty.get(line.partyId);
+          await tx
+            .update(payoutListLines)
+            .set({ extraPaid: extra && extra > 0n ? fromPaise(extra) : null })
+            .where(eq(payoutListLines.id, line.id));
+        }
+
+        await tx
+          .update(payoutLists)
+          .set({ status: "confirmed", confirmedAt: new Date(), confirmedBy: actorId, ...updatedBy(actorId) })
+          .where(eq(payoutLists.id, id));
+      }),
+    );
+    return this.findById(id);
+  }
+
+  /**
+   * REVERSE a confirmation: the payments it made are removed (soft-deleted, so the
+   * record of them stays), the bills it settled are open again, and the list is a
+   * draft that can be changed and confirmed again. Only the payments THIS list
+   * made are touched.
+   */
+  async reverse(id: string, actorId: string): Promise<PayoutListDetail> {
+    const detail = await this.findById(id);
+    if (detail.status !== "confirmed") {
+      throw new ConflictException("This list is not confirmed");
+    }
+    await writing(() =>
+      this.db.transaction(async (tx) => {
+        const made = await tx
+          .select({ id: payments.id })
+          .from(payments)
+          .where(and(eq(payments.sourcePayoutListId, id), eq(payments.isDeleted, false)));
+        const ids = made.map((row) => row.id);
+        if (ids.length > 0) {
+          await tx.delete(paymentAllocations).where(inArray(paymentAllocations.paymentId, ids));
+          await tx.update(payments).set({ isDeleted: true, ...updatedBy(actorId) }).where(inArray(payments.id, ids));
+        }
+        const lineIds = detail.lines.map((line) => line.id);
+        if (lineIds.length > 0) {
+          await tx
+            .update(payoutListInvoices)
+            .set({ paidAmount: null })
+            .where(inArray(payoutListInvoices.payoutLineId, lineIds));
+          await tx.update(payoutListLines).set({ extraPaid: null }).where(inArray(payoutListLines.id, lineIds));
+        }
+        await tx
+          .update(payoutLists)
+          .set({ status: "draft", confirmedAt: null, confirmedBy: null, ...updatedBy(actorId) })
+          .where(eq(payoutLists.id, id));
+      }),
+    );
+    return this.findById(id);
   }
 
   /**
