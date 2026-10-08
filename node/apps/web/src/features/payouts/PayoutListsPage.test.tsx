@@ -144,28 +144,11 @@ describe("PayoutListsPage", () => {
     expect(await screen.findByText("No payout lists match this search")).toBeInTheDocument();
   });
 
-  /** No number in the URL: the client chooses the contact in WhatsApp. */
-  it("opens WhatsApp with the list's text and no phone number", async () => {
-    const open = vi.spyOn(window, "open").mockReturnValue(null);
-    const user = userEvent.setup();
+  it("has an image button and no WhatsApp button", async () => {
     renderWithAuth(<PayoutListsPage />, { permissions: ["payout.view"] });
-
     const first = (await screen.findByText("05 Oct 2026")).closest("tr")!;
-    await user.click(within(first).getByRole("button", { name: /on WhatsApp/ }));
-
-    await waitFor(() => expect(open).toHaveBeenCalledTimes(1));
-    const [url, target, features] = open.mock.calls[0]!;
-    const expected = [
-      "Payout list - 05 Oct 2026",
-      "Weekly payout",
-      "1. Ambica Steel Traders - Rs 1,25,000.00",
-      "2. Shree Cement - Rs 5,15,000.00",
-      "Total: Rs 6,40,000.00",
-    ].join("\n");
-    expect(url).toBe(`https://wa.me/?text=${encodeURIComponent(expected)}`);
-    expect(String(url)).not.toMatch(/wa\.me\/\d/);
-    expect(target).toBe("_blank");
-    expect(features).toBe("noopener");
+    expect(within(first).getByRole("button", { name: /as image/ })).toBeInTheDocument();
+    expect(within(first).queryByRole("button", { name: /whatsapp/i })).not.toBeInTheDocument();
   });
 
   it("copies the list's text and says so", async () => {

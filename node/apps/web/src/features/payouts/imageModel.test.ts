@@ -29,15 +29,15 @@ const list = {
 };
 
 describe("the payout list picture", () => {
-  it("says the party and its amount, the bills under it, and the total last", () => {
+  it("says each party and its amount, then the total last - and nothing else", () => {
     const rows = buildImageRows(list);
-    expect(rows.map((row) => row.kind)).toEqual(["title", "subtitle", "party", "bill", "bill", "party", "total"]);
-    expect(rows[2]).toMatchObject({ left: "AL BURHAN", right: "Rs 75,000.00" });
-    expect(rows[3]).toMatchObject({ left: "BE-1  ·  12 Sep 2026 · SURAT", right: "Rs 50,000.00" });
+    expect(rows.map((row) => row.kind)).toEqual(["title", "party", "party", "total"]);
+    expect(rows[1]).toMatchObject({ left: "AL BURHAN", right: "Rs 75,000.00" });
     expect(rows[rows.length - 1]).toMatchObject({ kind: "total", left: "Total (2 parties)", right: "Rs 75,700.00" });
+    expect(JSON.stringify(rows)).not.toMatch(/BE-1|SURAT|Friday/);
   });
 
-  it("is the same list the text message carries, bills included", () => {
+  it("the text message still carries the bills", () => {
     const text = buildPayoutMessage(list).split("\n");
     expect(text).toEqual([
       "Payout list - 05 Oct 2026",

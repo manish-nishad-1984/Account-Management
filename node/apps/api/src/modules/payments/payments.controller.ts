@@ -1,5 +1,6 @@
 import {
   Body,
+  BadRequestException,
   Controller,
   Delete,
   Get,
@@ -25,6 +26,7 @@ import {
   type UpdatePayment,
 } from "@accountmanagement/contracts";
 import { PaymentsRepository } from "./payments.repository";
+import { ReportsRepository } from "../reports/reports.repository";
 import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
@@ -66,7 +68,10 @@ const listRequestSchema = listQuerySchema.and(filterSchema);
 
 @Controller("payments")
 export class PaymentsController {
-  constructor(private readonly payments: PaymentsRepository) {}
+  constructor(
+    private readonly payments: PaymentsRepository,
+    private readonly reports: ReportsRepository,
+  ) {}
 
   @Get()
   @Permissions("reports-payments.view")
@@ -121,8 +126,43 @@ export class PaymentsController {
     @Body(new ZodValidationPipe(createPaymentBatchSchema)) body: CreatePaymentBatch,
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<PaymentBatchResult> {
+    await this.checkNamedBills(body.payments);
     const created = await this.payments.createMany(body.payments, actorId(caller));
     return { created };
+  }
+
+  /**
+   * A payment may name the bills it pays. Each must be a bill of THIS party,
+   * company and site that still has that much to pay - the same pending the
+   * Pending Outstanding report shows - or the whole batch is refused, with the
+   * row and bill in the message.
+   */
+  private async checkNamedBills(batch: CreatePaymentBatch["payments"]): Promise<void> {
+    const toPaise = (value: string) => Math.round(Number.parseFloat(value) * 100);
+    for (const [index, payment] of batch.entries()) {
+      if (payment.allocations.length === 0) continue;
+      if (payment.direction !== "out" || payment.kind !== "payment") {
+        throw new BadRequestException(`Row ${index + 1}: only a payment to a supplier can name bills`);
+      }
+      const open = new Map<string, { pending: number; displayNo: string }>();
+      for (let offset = 0; ; offset += 200) {
+        const page = await this.reports.pendingLedger(
+          { direction: "out", partyId: payment.partyId, companyId: payment.companyId, siteId: payment.siteId ?? undefined },
+          { limit: 200, offset },
+        );
+        for (const row of page.rows) open.set(`${row.source}:${row.documentId}`, { pending: toPaise(row.pending), displayNo: row.displayNo });
+        if (page.nextCursor === null) break;
+      }
+      for (const named of payment.allocations) {
+        const bill = open.get(`${named.source}:${named.documentId}`);
+        if (!bill) {
+          throw new BadRequestException(`Row ${index + 1}: a bill named is not owed to this supplier at this site and company`);
+        }
+        if (toPaise(named.amount) > bill.pending) {
+          throw new BadRequestException(`Row ${index + 1}: only ${(bill.pending / 100).toFixed(2)} is pending on ${bill.displayNo}`);
+        }
+      }
+    }
   }
 
   @Patch(":id")

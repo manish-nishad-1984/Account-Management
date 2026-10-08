@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { CheckCircle2, ChevronDown, ChevronRight, Copy, MessageCircle, Search, Undo2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Copy, Image as ImageIcon, Search, Undo2 } from "lucide-react";
 import {
   createPayoutListSchema,
   type CreatePayoutList,
@@ -27,7 +27,7 @@ import { ConfirmPayoutDialog } from "./ConfirmPayoutDialog";
 import { AmountField } from "./AmountField";
 import { fromPaise, sumAmounts, toPaise } from "./decimal";
 import { formatListDate } from "./message";
-import { ShareNotice, usePayoutSharing } from "./share";
+import { PayoutImageDialog, ShareNotice, usePayoutSharing } from "./share";
 
 /**
  * Build, edit or read a payout list: the header (date, title, budget, note) and
@@ -540,8 +540,8 @@ export function PayoutListFormDialog({
           {saved && (
           <>
             {/* From the SAVED list: unsaved ticks are not in the message. */}
-            <Button variant="outline" icon={MessageCircle} onClick={() => void share.whatsApp(saved)}>
-              WhatsApp
+            <Button variant="outline" icon={ImageIcon} onClick={() => void share.showImage(saved)}>
+              View image
             </Button>
             <Button variant="outline" icon={Copy} onClick={() => void share.copy(saved)}>
               Copy text
@@ -556,6 +556,7 @@ export function PayoutListFormDialog({
       ) : (
         <>
           <ShareNotice notice={share.notice} />
+          <PayoutImageDialog share={share} />
           {confirmed && saved ? (
             <ConfirmedView list={saved} />
           ) : (

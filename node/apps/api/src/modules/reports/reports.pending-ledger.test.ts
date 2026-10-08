@@ -145,6 +145,35 @@ describe("ReportsRepository.pendingLedger (real PostgreSQL)", () => {
     ]);
   });
 
+  it("says, per invoice, what is still owed - the same answer as the pending list", async () => {
+    const a = await invoice("A", "1000.00", "2026-01-01");
+    const b = await invoice("B", "500.00", "2026-02-01");
+    const cc = await invoice("C", "700.00", "2026-03-01");
+    await pay("1200.00", "2026-03-10");
+
+    const owed = await reports.pendingByDocument([supplierId]);
+    expect(owed.get(a.id)).toBeUndefined(); // paid off: not in the map
+    expect(owed.get(b.id)).toBe("300.00");
+    expect(owed.get(cc.id)).toBe("700.00");
+    expect(await reports.pendingByDocument([])).toEqual(new Map());
+  });
+
+  it("keeps the bills a payment names closed, whatever their age", async () => {
+    await invoice("A", "1000.00", "2026-01-01");
+    await invoice("B", "500.00", "2026-02-01");
+    const newest = await invoice("C", "700.00", "2026-03-01");
+    await pay("700.00", "2026-03-10", {
+      allocations: [{ source: "invoice", documentId: newest.id, amount: "700.00" }],
+    });
+
+    expect(await listed()).toEqual([
+      ["A", "1000.00", "1000.00", "1000.00"],
+      ["B", "500.00", "500.00", "1500.00"],
+    ]);
+    const owed = await reports.pendingByDocument([supplierId]);
+    expect(owed.get(newest.id)).toBeUndefined();
+  });
+
   it("hides every entry once the balance is zero", async () => {
     await invoice("A", "1000.00", "2026-01-01");
     await invoice("B", "500.00", "2026-02-01");

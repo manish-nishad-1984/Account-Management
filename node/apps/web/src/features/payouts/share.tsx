@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PayoutListDetail } from "@accountmanagement/contracts";
-import { Alert } from "../../components/ui";
+import { Copy } from "lucide-react";
+import { Alert, Button, Modal } from "../../components/ui";
 import { ApiError } from "../../lib/api-client";
 import { usePayoutDetailLoader } from "./api";
 import { renderPayoutImage } from "./image";
-import { buildPayoutMessage, whatsAppUrl } from "./message";
+import { buildPayoutMessage } from "./message";
 
 /**
  * Send / copy a saved list. Both need only `payout.view`: they read a list and
@@ -53,16 +54,6 @@ async function writeClipboardImage(blob: Blob): Promise<boolean> {
   }
 }
 
-/**
- * A phone or tablet, where the share sheet lists WhatsApp and the chat. On a
- * desktop the browser hands over to the operating system's share panel, which on
- * Windows often says "Try that again - we could not show you all the ways you
- * could share" and offers nothing; the clipboard route below works there.
- */
-const isTouchDevice = () =>
-  (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData?.mobile === true ||
-  /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
 function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -104,58 +95,52 @@ export function usePayoutSharing() {
   );
 
   /**
-   * THE LIST GOES OUT AS A PICTURE (client request, 6 Oct 2026).
+   * THE LIST GOES OUT AS A PICTURE (client request, 6 and 8 Oct 2026).
    *
-   * A `wa.me` link can carry text and nothing else, so an image cannot be
-   * attached by link. Three routes, best first:
+   * The owner forwards it to his boss, so the screen shows the picture and a
+   * "Copy image" button: copied, it pastes into any chat. WhatsApp is not opened
+   * from here - the person pastes where they like. Where the browser will not
+   * put an image on the clipboard the picture is saved as a file instead.
    *
-   *  1. The share sheet with the image as a file - on a phone or tablet only -
-   *     where the person picks WhatsApp and then the chat, the image already in it.
-   *  2. Otherwise the image is put on the clipboard and WhatsApp is opened: the
-   *     person picks the chat and presses paste.
-   *  3. Failing that it is saved as a file to attach by hand.
-   *
-   * The picture is drawn here from the saved list and is not kept anywhere; if it
-   * cannot be drawn at all, the text of the list is sent as it used to be.
+   * The picture is drawn here from the saved list and is not kept anywhere.
    */
-  const whatsApp = useCallback(
+  const [image, setImage] = useState<{ url: string; blob: Blob; name: string } | null>(null);
+
+  const showImage = useCallback(
     async (source: string | PayoutListDetail) => {
       const detail = await resolve(source);
       if (!detail) return;
-      const name = `payout-list-${detail.listDate}.png`;
-
-      let blob: Blob;
       try {
-        blob = await renderPayoutImage(detail);
+        const blob = await renderPayoutImage(detail);
+        setImage({ url: URL.createObjectURL(blob), blob, name: `payout-list-${detail.listDate}.png` });
       } catch {
-        window.open(whatsAppUrl(buildPayoutMessage(detail)), "_blank", "noopener");
-        setNotice({ tone: "danger", text: "Could not make the image here, so the list was sent as text." });
-        return;
+        setNotice({ tone: "danger", text: "Could not make the image in this browser. Use Copy text instead." });
       }
-
-      const file = new File([blob], name, { type: "image/png" });
-      if (isTouchDevice() && navigator.canShare?.({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: "Payout list" });
-          return;
-        } catch (error) {
-          // Closing the sheet is a choice, not a failure.
-          if (error instanceof DOMException && error.name === "AbortError") return;
-        }
-      }
-
-      const copied = await writeClipboardImage(blob);
-      if (!copied) download(blob, name);
-      window.open("https://wa.me/", "_blank", "noopener");
-      setNotice({
-        tone: "success",
-        text: copied
-          ? "The list image is copied. Open the chat in WhatsApp and paste it (Ctrl+V)."
-          : "The list image is saved to your downloads. Attach it in WhatsApp.",
-      });
     },
     [resolve],
   );
+
+  const closeImage = useCallback(() => setImage(null), []);
+
+  useEffect(() => {
+    const url = image?.url;
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [image]);
+
+  const copyImage = useCallback(async () => {
+    if (!image) return;
+    const copied = await writeClipboardImage(image.blob);
+    if (!copied) download(image.blob, image.name);
+    setNotice({
+      tone: "success",
+      text: copied
+        ? "Image copied - paste it into the chat (Ctrl+V)."
+        : "This browser would not copy the image, so it was saved to your downloads.",
+    });
+    if (copied) setImage(null);
+  }, [image]);
 
   const copy = useCallback(
     async (source: string | PayoutListDetail) => {
@@ -165,13 +150,13 @@ export function usePayoutSharing() {
       setNotice(
         done
           ? { tone: "success", text: "List copied - paste it into WhatsApp or a message." }
-          : { tone: "danger", text: "Could not copy automatically. Use the WhatsApp button instead." },
+          : { tone: "danger", text: "Could not copy automatically. Use the image button instead." },
       );
     },
     [resolve],
   );
 
-  return { whatsApp, copy, prefetch: loader.prefetch, notice };
+  return { showImage, closeImage, copyImage, image, copy, prefetch: loader.prefetch, notice };
 }
 
 export function ShareNotice({ notice }: { notice: Notice | null }) {
@@ -180,5 +165,30 @@ export function ShareNotice({ notice }: { notice: Notice | null }) {
     <div role="status" className="mb-3">
       <Alert tone={notice.tone === "success" ? "success" : "danger"}>{notice.text}</Alert>
     </div>
+  );
+}
+
+/** The list's picture, large enough to read, with the one button that matters. */
+export function PayoutImageDialog({ share }: { share: ReturnType<typeof usePayoutSharing> }) {
+  const { image, closeImage, copyImage } = share;
+  return (
+    <Modal
+      open={image !== null}
+      onClose={closeImage}
+      title="Payout list image"
+      size="lg"
+      footer={
+        <>
+          <Button variant="outline" onClick={closeImage}>
+            Close
+          </Button>
+          <Button icon={Copy} onClick={() => void copyImage()}>
+            Copy image
+          </Button>
+        </>
+      }
+    >
+      {image && <img src={image.url} alt="Payout list" className="mx-auto max-h-[70vh] w-full max-w-[560px] rounded border border-slate-200 object-contain" />}
+    </Modal>
   );
 }

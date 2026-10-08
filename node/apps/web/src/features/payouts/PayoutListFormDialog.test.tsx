@@ -347,29 +347,11 @@ describe("PayoutListFormDialog", () => {
       expect(String(patch[0])).toMatch(new RegExp(`/payout-lists/${LIST_ID}$`));
     });
 
-    it("sends the saved list on WhatsApp from inside the form, with no number", async () => {
-      const open = vi.spyOn(window, "open").mockReturnValue(null);
-      const user = userEvent.setup();
+    it("offers the saved list as an image, and no WhatsApp button", async () => {
       openEdit();
       await waitFor(() => expect(amountBox("Ambica Steel Traders")).toBeInTheDocument());
-
-      await user.click(screen.getByRole("button", { name: "WhatsApp" }));
-
-      await waitFor(() => expect(open).toHaveBeenCalledTimes(1));
-      const [url, target, features] = open.mock.calls[0]!;
-      expect(String(url).startsWith("https://wa.me/?text=")).toBe(true);
-      expect(decodeURIComponent(String(url).slice("https://wa.me/?text=".length))).toBe(
-        [
-          "Payout list - 01 Oct 2026",
-          "Weekly payout",
-          "1. Ambica Steel Traders - Rs 1,25,000.00",
-          "2. Shree Cement - Rs 80,000.00",
-          "3. Settled Supplies - Rs 60,000.00",
-          "Total: Rs 2,65,000.00",
-        ].join("\n"),
-      );
-      expect(target).toBe("_blank");
-      expect(features).toBe("noopener");
+      expect(screen.getByRole("button", { name: "View image" })).toBeEnabled();
+      expect(screen.queryByRole("button", { name: /whatsapp/i })).not.toBeInTheDocument();
     });
 
     it("opens read-only for someone who may not edit: disabled fields, no Save, still sendable", async () => {
@@ -379,7 +361,7 @@ describe("PayoutListFormDialog", () => {
       expect(screen.getByLabelText("Pay Ambica Steel Traders")).toBeDisabled();
       expect(screen.getByLabelText(/^title/i)).toBeDisabled();
       expect(screen.queryByRole("button", { name: /save list/i })).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "WhatsApp" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "View image" })).toBeEnabled();
       expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
       expect(screen.getAllByRole("button", { name: "Close" }).length).toBeGreaterThan(0);
     });

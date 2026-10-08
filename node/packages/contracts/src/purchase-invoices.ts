@@ -120,6 +120,15 @@ export const purchaseInvoiceRowSchema = z.object({
   isApproved: z.boolean(),
   createdAt: z.string(),
 
+  /**
+   * How much of this bill has been paid (8 Oct 2026), worked out by the same rule
+   * as the Pending Outstanding report: `unpaid` / `part` / `paid`. Null for a
+   * return or credit note, which is not a bill to pay. Server-computed, list only.
+   */
+  settlement: z.enum(["unpaid", "part", "paid"]).nullable(),
+  /** What is still to pay on it; null when `settlement` is. */
+  pendingAmount: z.string().nullable(),
+
   capabilities: rowCapabilitiesSchema,
 });
 export type PurchaseInvoiceRow = z.infer<typeof purchaseInvoiceRowSchema>;
@@ -127,6 +136,8 @@ export type PurchaseInvoiceRow = z.infer<typeof purchaseInvoiceRowSchema>;
 export const purchaseInvoiceDetailSchema = purchaseInvoiceRowSchema
   .omit({
     capabilities: true,
+    settlement: true,
+    pendingAmount: true,
     siteName: true,
     supplierName: true,
     companyName: true,

@@ -45,6 +45,8 @@ const row = (overrides: Record<string, unknown> = {}) => ({
   totalAmount: "17673.00",
   lineCount: 2,
   paymentStatus: null,
+  settlement: "unpaid" as const,
+  pendingAmount: "1000.00",
   isPaidOut: false,
   isApproved: false,
   createdAt: "2026-08-07T10:00:00.000Z",

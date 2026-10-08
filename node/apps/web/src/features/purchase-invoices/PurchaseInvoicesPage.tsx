@@ -163,6 +163,23 @@ export function PurchaseInvoicesPage() {
         ),
       },
       {
+        id: "settlement",
+        header: "Payment",
+        cell: ({ row }) => {
+          const { settlement, pendingAmount } = row.original;
+          if (!settlement) return <span className="text-slate-300">—</span>;
+          if (settlement === "paid") return <Badge dot tone="success">Paid</Badge>;
+          return (
+            <div className="flex flex-col items-start gap-0.5">
+              <Badge dot tone={settlement === "part" ? "warning" : "danger"}>
+                {settlement === "part" ? "Part paid" : "Unpaid"}
+              </Badge>
+              <span className="tabular text-xs text-slate-500">{formatMoney(pendingAmount ?? "0")} to pay</span>
+            </div>
+          );
+        },
+      },
+      {
         id: "invoiceType",
         header: "Status",
         cell: ({ row }) => (

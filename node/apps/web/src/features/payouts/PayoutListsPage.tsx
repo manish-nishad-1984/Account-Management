@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { PayoutListRow } from "@accountmanagement/contracts";
-import { Copy, Eye, MessageCircle, Plus } from "lucide-react";
+import { Copy, Eye, Image as ImageIcon, Plus } from "lucide-react";
 import { DataGrid, RowActions } from "../../components/DataGrid";
 import { Badge, Button, ConfirmDialog, IconButton, PageHeader } from "../../components/ui";
 import { formatDateTime, formatMoney } from "../../lib/format";
@@ -10,7 +10,7 @@ import { useMasterScreen } from "../../lib/use-master-screen";
 import { useDeletePayoutList, usePayoutLists } from "./api";
 import { PayoutListFormDialog } from "./PayoutListFormDialog";
 import { formatListDate } from "./message";
-import { ShareNotice, usePayoutSharing } from "./share";
+import { PayoutImageDialog, ShareNotice, usePayoutSharing } from "./share";
 
 /**
  * Payout Lists - what the owner decided to pay out, kept so it can be asked for
@@ -35,7 +35,7 @@ export function PayoutListsPage() {
   const share = usePayoutSharing();
 
   const { openEdit, askDelete } = screen;
-  const { whatsApp, copy, prefetch } = share;
+  const { showImage, copy, prefetch } = share;
 
   const columns = useMemo<ColumnDef<PayoutListRow, unknown>[]>(
     () => [
@@ -127,7 +127,7 @@ export function PayoutListsPage() {
           const label = row.original.title ?? formatListDate(row.original.listDate);
           return (
             // Warming the list's detail as the pointer or focus arrives keeps the
-            // WhatsApp click inside its user gesture; see `usePayoutDetailLoader`.
+            // image click inside its user gesture; see `usePayoutDetailLoader`.
             <div
               className="flex items-center justify-end gap-2 lg:gap-1"
               onPointerEnter={() => prefetch(id)}
@@ -136,17 +136,13 @@ export function PayoutListsPage() {
               {(!capabilities.canEdit || row.original.status === "confirmed") && (
                 <IconButton label={`Open ${label}`} icon={Eye} tone="operation" onClick={() => openEdit(id)} className="size-9 lg:size-7" />
               )}
-              {/* Named, not just an icon: it is the thing this screen is for. */}
-              <Button
-                variant="outline"
-                size="sm"
-                icon={MessageCircle}
-                aria-label={`Send ${label} on WhatsApp`}
-                onClick={() => void whatsApp(id)}
-                className="text-emerald-700"
-              >
-                WhatsApp
-              </Button>
+              <IconButton
+                label={`View ${label} as image`}
+                icon={ImageIcon}
+                tone="operation"
+                onClick={() => void showImage(id)}
+                className="size-9 lg:size-7"
+              />
               <IconButton label={`Copy ${label} text`} icon={Copy} onClick={() => void copy(id)} className="size-9 lg:size-7" />
               <RowActions
                 capabilities={
@@ -163,7 +159,7 @@ export function PayoutListsPage() {
         },
       },
     ],
-    [openEdit, askDelete, whatsApp, copy, prefetch],
+    [openEdit, askDelete, showImage, copy, prefetch],
   );
 
   // Whether the OPEN list may be changed comes from its row; a row that has
@@ -178,6 +174,7 @@ export function PayoutListsPage() {
     <>
       <PageHeader title="Payout Lists" description="Who to pay, and how much of each" />
       <ShareNotice notice={share.notice} />
+      <PayoutImageDialog share={share} />
 
       <DataGrid<PayoutListRow>
         actions={

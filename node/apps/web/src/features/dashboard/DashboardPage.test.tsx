@@ -280,6 +280,8 @@ describe("DashboardPage", () => {
           totalAmount: "17673.00",
           lineCount: 2,
           paymentStatus: null,
+          settlement: "unpaid",
+          pendingAmount: "1000.00",
           isPaidOut: false,
           isApproved: false,
           createdAt: "2026-08-07T00:00:00.000Z",

@@ -762,9 +762,9 @@ only to users who hold a new permission for it:
    the owner is not asked to tick anything twice.
 3. **Paid less than planned:** the bill stays open for the difference
    (*part paid*).
-4. **Paid more than planned:** the extra is shown as an **advance** on that
-   supplier, and the person confirming may put it against another of the same
-   supplier's open bills.
+4. **Paid more than planned** (rare, per the client on 8 Oct 2026): the extra is
+   kept as a **minus balance** on that supplier. It is not forced against a
+   bill; it simply reduces the next bill the supplier raises.
 5. The confirmed list is locked. A mistake is corrected by **reversing** the
    confirmation — which removes the payments it made and reopens the bills, and
    is recorded with who did it — and confirming again. It is never edited quietly.

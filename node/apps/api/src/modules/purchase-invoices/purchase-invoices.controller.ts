@@ -28,6 +28,7 @@ import {
   type UpdatePurchaseInvoice,
 } from "@accountmanagement/contracts";
 import { PurchaseInvoicesRepository } from "./purchase-invoices.repository";
+import { ReportsRepository } from "../reports/reports.repository";
 import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
@@ -76,11 +77,17 @@ const filterSchema = z.object({
     .transform((value) => (value === undefined ? undefined : value === "true")),
 });
 
+/** A return or a credit note reduces what is owed; it is not a bill with a paid state. */
+const NOT_A_BILL = new Set(["Purchase Return", "Credit Note"]);
+
 const listRequestSchema = listQuerySchema.and(filterSchema);
 
 @Controller("purchase-invoices")
 export class PurchaseInvoicesController {
-  constructor(private readonly invoices: PurchaseInvoicesRepository) {}
+  constructor(
+    private readonly invoices: PurchaseInvoicesRepository,
+    private readonly reports: ReportsRepository,
+  ) {}
 
   @Get()
   @Permissions("purchase-invoice.view")
@@ -109,8 +116,19 @@ export class PurchaseInvoicesController {
       this.invoices.total(query.search, filters),
     ]);
 
+    // Paid / part / unpaid, by the Pending Outstanding report's own rule.
+    const owed = await this.reports.pendingByDocument(page.rows.map((row) => row.supplierId));
+
     return {
-      rows: page.rows.map((row) => ({ ...row, capabilities })),
+      rows: page.rows.map((row) => {
+        if (NOT_A_BILL.has(row.invoiceType ?? "")) {
+          return { ...row, settlement: null, pendingAmount: null, capabilities };
+        }
+        const pending = owed.get(row.id) ?? "0.00";
+        const settlement =
+          Number(pending) <= 0 ? ("paid" as const) : Number(pending) < Number(row.totalAmount) ? ("part" as const) : ("unpaid" as const);
+        return { ...row, settlement, pendingAmount: pending, capabilities };
+      }),
       nextCursor: page.nextCursor,
       total,
     };

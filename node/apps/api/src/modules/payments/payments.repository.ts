@@ -9,7 +9,7 @@ import type {
   UpdatePayment,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
-import { companies, payments, siteLocations, sites, suppliers } from "../../db/schema";
+import { companies, paymentAllocations, payments, siteLocations, sites, suppliers } from "../../db/schema";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
@@ -37,6 +37,9 @@ const SORTABLE = {
 } as const;
 
 export type PaymentSortKey = keyof typeof SORTABLE;
+
+/** A payment to record; `allocations` (the bills it names) may be left off. */
+export type NewPayment = Omit<CreatePayment, "allocations"> & Partial<Pick<CreatePayment, "allocations">>;
 
 export interface PaymentFilters {
   direction?: PaymentDirection;
@@ -198,13 +201,14 @@ export class PaymentsRepository extends BaseRepository {
    * blank amount is caught in the browser and nowhere else, so a direct post
    * writes it. The contract refuses it here before the transaction opens.
    */
-  async createMany(input: CreatePayment[], actorId: string): Promise<number> {
+  async createMany(input: NewPayment[], actorId: string): Promise<number> {
     if (input.length === 0) {
       return 0;
     }
 
     const rows = await writing(() =>
-      this.db
+      this.db.transaction(async (tx) => {
+        const made = await tx
         .insert(payments)
         .values(
           input.map((one) => ({
@@ -224,7 +228,20 @@ export class PaymentsRepository extends BaseRepository {
             ...createdBy(actorId),
           })),
         )
-        .returning({ id: payments.id }),
+        .returning({ id: payments.id });
+
+        // Inserted in input order and returned in it, so row N is payment N.
+        const named = made.flatMap((payment, index) =>
+          (input[index]?.allocations ?? []).map((one) => ({
+            paymentId: payment.id,
+            documentKind: one.source,
+            documentId: one.documentId,
+            amount: one.amount,
+          })),
+        );
+        if (named.length > 0) await tx.insert(paymentAllocations).values(named);
+        return made;
+      }),
     );
 
     return rows.length;

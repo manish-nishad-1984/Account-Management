@@ -2,15 +2,15 @@ import type { PayoutListDetail } from "@accountmanagement/contracts";
 import { buildImageRows, type ImageRow } from "./imageModel";
 
 /**
- * Draws a payout list as a PNG, in the browser (client request, 6 Oct 2026).
+ * Draws a payout list as a PNG, in the browser (client request, 6 and 8 Oct 2026).
  *
  * A canvas, not a screenshot library: the picture is a table of names and
  * figures, which a few `fillText` calls draw exactly, and nothing has to be
  * installed or shipped to draw it. Nothing is stored on the server - the image
- * is made when it is sent, from the saved list, and handed to WhatsApp.
+ * is made when it is viewed, from the saved list, and copied from there.
  *
  * The font stack is the system's, so the picture looks like the rest of the app
- * on the machine that makes it; WhatsApp only ever sees pixels.
+ * on the machine that makes it; the chat it is pasted into only ever sees pixels.
  */
 
 const WIDTH = 900;
@@ -20,14 +20,12 @@ const FONT = '-apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
 
 const HEIGHTS: Record<ImageRow["kind"], number> = {
   title: 56,
-  subtitle: 30,
   party: 40,
-  bill: 28,
   total: 60,
 };
 
 export function renderPayoutImage(
-  detail: Pick<PayoutListDetail, "listDate" | "title" | "lines">,
+  detail: Pick<PayoutListDetail, "listDate" | "lines">,
 ): Promise<Blob> {
   const rows = buildImageRows(detail);
   const height = PAD * 2 + rows.reduce((sum, row) => sum + HEIGHTS[row.kind], 0);
@@ -71,9 +69,6 @@ export function renderPayoutImage(
         context.fillStyle = "#cbd5e1";
         context.fillRect(left, y + h - 8, right - left, 2);
         break;
-      case "subtitle":
-        text(row.left, left, y + 20, `500 17px ${FONT}`, "#475569", "left");
-        break;
       case "party": {
         const font = `600 19px ${FONT}`;
         const label = `${row.index}.  ${row.left}`;
@@ -82,14 +77,6 @@ export function renderPayoutImage(
         const room = right - left - context.measureText(row.right).width - 24;
         text(fit(label, font, room), left, y + 28, font, "#0f172a", "left");
         text(row.right, right, y + 28, amountFont, "#0f172a", "right");
-        break;
-      }
-      case "bill": {
-        const font = `400 15px ${FONT}`;
-        context.font = font;
-        const room = right - left - 28 - context.measureText(row.right).width - 24;
-        text(fit(row.left, font, room), left + 28, y + 19, font, "#64748b", "left");
-        text(row.right, right, y + 19, font, "#64748b", "right");
         break;
       }
       case "total":

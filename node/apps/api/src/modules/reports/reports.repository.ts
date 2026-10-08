@@ -291,46 +291,23 @@ export class ReportsRepository extends BaseRepository {
     };
   }
 
-  /**
-   * THE PENDING LEDGER: the invoices still to be paid, and how much of each.
-   *
-   * See `pendingLedgerRowSchema` for the rule. In short, payments settle the
-   * oldest invoices first. The outstanding amount for a site and party is walked
-   * back from the newest invoice until it is used up.
-   *
-   * GROUPED BY SITE AND PARTY, not by party alone as the full ledger's running
-   * balance is. The summary above it on the screen is keyed by site and party,
-   * so the pending invoices under a summary row add up to that row's Net. Every
-   * live payment carries a site (576 of 576 on 14 Sep 2026), so a payment does
-   * not end up in a group of its own with nothing to settle.
-   *
-   * It works on the filtered set, as the summary does. A From date therefore
-   * leaves out earlier payments as well as earlier invoices, and the two
-   * screens still agree for the same filters.
-   *
-   * `newer_credit` is everything invoiced after this row. An invoice is still
-   * pending while that is below the outstanding amount. What is left once the
-   * newer invoices are counted is how much of this one is unpaid, capped at its
-   * own total.
-   *
-   * PAYMENTS TIED TO BILLS (7 Oct 2026). A payment may name the bills it paid, in
-   * `payment_allocations`. What it names is taken off those bills FIRST, and only
-   * what is left of a bill takes part in the oldest-first walk above, against only
-   * the part of the payments nobody named. A payment with no rows is exactly what
-   * it was. The outstanding amount of a site and party does not change, because
-   * the same figure comes off the bills and off the payments; only WHICH bills
-   * stay open does. An allocation counts only when its payment and its bill are
-   * BOTH inside the filtered set: a From date that leaves out the payment but not
-   * the bill, or the reverse, must not take money off one side only.
-   */
-  async pendingLedger(
-    filter: ReportFilter,
-    page: { limit: number; offset: number },
-  ): Promise<PendingLedgerResponse> {
+  /** The CTEs both the pending report and a bill's own status are read from. */
+  private pendingBase(filter: ReportFilter, partyIds?: string[]): SQL {
     const entries = this.entries(filter);
-    const where = this.where(filter);
+    const clauses: SQL[] = [this.where(filter)];
+    if (partyIds) {
+      clauses.push(
+        partyIds.length === 0
+          ? sql`false`
+          : sql`e.party_id in (${sql.join(
+              partyIds.map((id) => sql`${id}::uuid`),
+              sql`, `,
+            )})`,
+      );
+    }
+    const where = sql.join(clauses, sql` and `);
 
-    const base = sql`
+    return sql`
       with entries as (${entries}),
       filtered as (
         select e.*,
@@ -376,6 +353,69 @@ export class ReportsRepository extends BaseRepository {
         where n.newer_credit < o.outstanding
       )
     `;
+  }
+
+  /**
+   * WHAT IS STILL OWED ON THE INVOICES IN VIEW (8 Oct 2026): for a page of the
+   * purchase invoice list, how much of each is unpaid, by the SAME rule the Pending
+   * Outstanding report uses - bills a payment names first, then oldest first - so
+   * the list's Paid / Part paid / Unpaid and that report cannot disagree.
+   *
+   * No date or site filter: a bill is judged against everything its party has
+   * paid. An invoice that is not in the map is fully paid.
+   */
+  async pendingByDocument(partyIds: string[]): Promise<Map<string, string>> {
+    const unique = [...new Set(partyIds)];
+    if (unique.length === 0) return new Map();
+    const rows = rawRows<{ document_id: string; pending: string }>(
+      await this.db.execute(sql`
+        ${this.pendingBase({ direction: "out" }, unique)}
+        select p.document_id, sum(p.pending)::text as pending
+        from pending p
+        where p.source_kind = 'invoice'
+        group by p.document_id
+      `),
+    );
+    return new Map(rows.map((row) => [String(row.document_id), this.money(row.pending)]));
+  }
+
+  /**
+   * THE PENDING LEDGER: the invoices still to be paid, and how much of each.
+   *
+   * See `pendingLedgerRowSchema` for the rule. In short, payments settle the
+   * oldest invoices first. The outstanding amount for a site and party is walked
+   * back from the newest invoice until it is used up.
+   *
+   * GROUPED BY SITE AND PARTY, not by party alone as the full ledger's running
+   * balance is. The summary above it on the screen is keyed by site and party,
+   * so the pending invoices under a summary row add up to that row's Net. Every
+   * live payment carries a site (576 of 576 on 14 Sep 2026), so a payment does
+   * not end up in a group of its own with nothing to settle.
+   *
+   * It works on the filtered set, as the summary does. A From date therefore
+   * leaves out earlier payments as well as earlier invoices, and the two
+   * screens still agree for the same filters.
+   *
+   * `newer_credit` is everything invoiced after this row. An invoice is still
+   * pending while that is below the outstanding amount. What is left once the
+   * newer invoices are counted is how much of this one is unpaid, capped at its
+   * own total.
+   *
+   * PAYMENTS TIED TO BILLS (7 Oct 2026). A payment may name the bills it paid, in
+   * `payment_allocations`. What it names is taken off those bills FIRST, and only
+   * what is left of a bill takes part in the oldest-first walk above, against only
+   * the part of the payments nobody named. A payment with no rows is exactly what
+   * it was. The outstanding amount of a site and party does not change, because
+   * the same figure comes off the bills and off the payments; only WHICH bills
+   * stay open does. An allocation counts only when its payment and its bill are
+   * BOTH inside the filtered set: a From date that leaves out the payment but not
+   * the bill, or the reverse, must not take money off one side only.
+   */
+  async pendingLedger(
+    filter: ReportFilter,
+    page: { limit: number; offset: number },
+  ): Promise<PendingLedgerResponse> {
+    const base = this.pendingBase(filter);
 
     const totals = rawRow<{ total: string; total_amount: string; total_pending: string }>(
       await this.db.execute(sql`

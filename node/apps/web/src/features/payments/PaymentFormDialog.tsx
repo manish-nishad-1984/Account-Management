@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
-import { Building2, Plus, Trash2, Wallet } from "lucide-react";
+import { Fragment, useEffect, useState } from "react";
+import { Building2, ListChecks, Plus, Trash2, Wallet } from "lucide-react";
 import type { CreatePayment } from "@accountmanagement/contracts";
 import {
   Alert,
   Button,
+  CheckboxField,
   FormSection,
   IconButton,
   Modal,
@@ -15,7 +16,9 @@ import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { useCompanyOptions, useSupplierOptions } from "../purchase-orders/api";
 import { useCreatePayments } from "./api";
 import { todayInput } from "../../lib/dates";
-import { formatMoney } from "../../lib/format";
+import { formatDate, formatMoney } from "../../lib/format";
+import { usePendingLedger } from "../reports/api";
+import { AmountField } from "../payouts/AmountField";
 
 /**
  * The Payment Actions repeater, from `/Report/ReportDetails` panel 3.
@@ -39,6 +42,9 @@ interface Row {
   method: string;
   referenceNo: string;
   description: string;
+  /** The bills this payment names, as "source:documentId" -> the amount put on that bill. */
+  bills: Record<string, string>;
+  billsOpen: boolean;
 }
 
 const METHODS = ["Cash", "Cheque", "NEFT", "RTGS", "UPI", "Adjustment"];
@@ -54,7 +60,77 @@ const blankRow = (): Row => ({
   method: "",
   referenceNo: "",
   description: "",
+  bills: {},
+  billsOpen: false,
 });
+
+const toPaise = (value: string) => Math.round((Number.parseFloat(value) || 0) * 100);
+const sumBills = (bills: Record<string, string>) =>
+  (Object.values(bills).reduce((sum, amount) => sum + toPaise(amount), 0) / 100).toFixed(2);
+
+/**
+ * Which bills a payment pays (8 Oct 2026). Optional: left alone, the payment
+ * settles the oldest bills as it always did. Ticking a bill puts what is pending
+ * on it in a box that can be lowered for a part payment, and the payment's
+ * amount follows the total.
+ */
+function NamedBills({
+  partyId,
+  companyId,
+  siteId,
+  bills,
+  onChange,
+}: {
+  partyId: string;
+  companyId: string;
+  siteId: string;
+  bills: Record<string, string>;
+  onChange: (bills: Record<string, string>) => void;
+}) {
+  const pending = usePendingLedger({ direction: "out", partyId, companyId, siteId, limit: 200 });
+  const rows = pending.data?.rows ?? [];
+
+  if (pending.isLoading) return <p className="text-xs text-slate-500">Loading this supplier's unpaid bills…</p>;
+  if (rows.length === 0) {
+    return <p className="text-xs text-slate-500">No unpaid bills for this supplier at this site and company.</p>;
+  }
+  return (
+    <ul className="divide-y divide-slate-100">
+      {rows.map((bill) => {
+        const key = `${bill.source}:${bill.documentId}`;
+        const ticked = key in bills;
+        return (
+          <li key={key} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-1.5">
+            <CheckboxField
+              label={`Pay bill ${bill.displayNo}`}
+              checked={ticked}
+              onChange={(event) => {
+                const next = { ...bills };
+                if (event.target.checked) next[key] = bill.pending;
+                else delete next[key];
+                onChange(next);
+              }}
+              className="min-w-40"
+            />
+            <span className="text-xs text-slate-500">
+              {bill.documentDate ? formatDate(bill.documentDate) : "No date"} · {formatMoney(bill.pending)} pending
+            </span>
+            {ticked && (
+              <AmountField
+                label={`Paid on bill ${bill.displayNo}`}
+                labelHidden
+                inputMode="decimal"
+                value={bills[key]!}
+                onValue={(raw) => onChange({ ...bills, [key]: raw })}
+                className="ml-auto w-36"
+              />
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 export function PaymentFormDialog({
   open,
@@ -111,6 +187,15 @@ export function PaymentFormDialog({
       description: row.description || null,
       method: row.method || null,
       referenceNo: row.referenceNo || null,
+      allocations:
+        row.kind === "payment"
+          ? Object.entries(row.bills)
+              .filter(([, amount]) => toPaise(amount) > 0)
+              .map(([key, amount]) => {
+                const [source, documentId] = key.split(":") as ["invoice" | "opening_balance", string];
+                return { source, documentId, amount };
+              })
+          : [],
     }));
 
     const missing = payload.findIndex(
@@ -166,7 +251,10 @@ export function PaymentFormDialog({
           label={direction === "out" ? "Supplier" : "Customer"}
           placeholder="Choose…"
           value={partyId}
-          onChange={(event) => setPartyId(event.target.value)}
+          onChange={(event) => {
+            setPartyId(event.target.value);
+            setRows((current) => current.map((row) => ({ ...row, bills: {} })));
+          }}
           options={(suppliers.data?.rows ?? []).map((supplier) => ({
             value: supplier.id,
             label: supplier.name,
@@ -177,7 +265,10 @@ export function PaymentFormDialog({
           label="Company"
           placeholder="Choose…"
           value={companyId}
-          onChange={(event) => setCompanyId(event.target.value)}
+          onChange={(event) => {
+            setCompanyId(event.target.value);
+            setRows((current) => current.map((row) => ({ ...row, bills: {} })));
+          }}
           options={(companies.data?.rows ?? []).map((company) => ({
             value: company.id,
             label: company.name,
@@ -218,7 +309,8 @@ export function PaymentFormDialog({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {rows.map((row, index) => (
-              <tr key={row.key} className="align-top">
+              <Fragment key={row.key}>
+              <tr className="align-top">
                 <td className="px-2 py-2 text-xs text-slate-400">{index + 1}</td>
                 <td className="px-2 py-2">
                   <SelectField
@@ -245,7 +337,7 @@ export function PaymentFormDialog({
                     value={row.siteId}
                     disabled={row.kind === "opening_balance"}
                     placeholder={row.kind === "opening_balance" ? "Not applicable" : "Choose…"}
-                    onChange={(event) => patch(row.key, { siteId: event.target.value })}
+                    onChange={(event) => patch(row.key, { siteId: event.target.value, bills: {} })}
                     options={scope.sites.map((site) => ({ value: site.id, label: site.name }))}
                   />
                 </td>
@@ -300,7 +392,21 @@ export function PaymentFormDialog({
                     onChange={(event) => patch(row.key, { description: event.target.value })}
                   />
                 </td>
-                <td className="px-2 py-2">
+                <td className="whitespace-nowrap px-2 py-2">
+                  {direction === "out" && row.kind === "payment" && (
+                    <IconButton
+                      label={`Choose bills on row ${index + 1}`}
+                      icon={ListChecks}
+                      size="sm"
+                      disabled={!partyId || !companyId || !row.siteId}
+                      title={
+                        !partyId || !companyId || !row.siteId
+                          ? "Choose the supplier, company and site first"
+                          : "Say which bills this pays"
+                      }
+                      onClick={() => patch(row.key, { billsOpen: !row.billsOpen })}
+                    />
+                  )}
                   {rows.length > 1 && (
                     <IconButton
                       label={`Remove row ${index + 1}`}
@@ -314,6 +420,29 @@ export function PaymentFormDialog({
                   )}
                 </td>
               </tr>
+              {row.billsOpen && partyId && companyId && row.siteId && (
+                <tr className="bg-slate-50/60">
+                  <td />
+                  <td colSpan={8} className="px-2 py-2">
+                    <p className="mb-1 text-xs font-medium text-slate-600">
+                      Bills this payment pays (leave empty to settle the oldest first)
+                    </p>
+                    <NamedBills
+                      partyId={partyId}
+                      companyId={companyId}
+                      siteId={row.siteId}
+                      bills={row.bills}
+                      onChange={(bills) =>
+                        patch(row.key, {
+                          bills,
+                          amount: Object.keys(bills).length > 0 ? sumBills(bills) : row.amount,
+                        })
+                      }
+                    />
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             ))}
           </tbody>
         </table>

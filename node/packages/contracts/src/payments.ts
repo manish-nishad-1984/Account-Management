@@ -103,6 +103,24 @@ export const createPaymentSchema = z
     description: optionalText(500),
     method: optionalText(100),
     referenceNo: optionalText(100),
+
+    /**
+     * THE BILLS THIS PAYMENT PAYS (8 Oct 2026), optional. Named bills are taken off
+     * first and the rest of the payment settles the oldest bills, as before. A
+     * payment that names nothing behaves exactly as it always did. The server
+     * checks each bill belongs to this party, company and site and has that much
+     * pending.
+     */
+    allocations: z
+      .array(
+        z.object({
+          source: z.enum(["invoice", "opening_balance"]),
+          documentId: uuidId,
+          amount: money("Amount"),
+        }),
+      )
+      .max(200)
+      .default([]),
   })
   .superRefine((value, ctx) => {
     // The source's own rule, read off the two branches of its validation: a
@@ -114,6 +132,14 @@ export const createPaymentSchema = z
         code: z.ZodIssueCode.custom,
         path: ["siteId"],
         message: "Choose the site this payment is for",
+      });
+    }
+    const named = value.allocations.reduce((sum, one) => sum + Math.round(Number.parseFloat(one.amount) * 100), 0);
+    if (named > Math.round(Number.parseFloat(value.amount) * 100)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["allocations"],
+        message: "The bills named add up to more than the payment",
       });
     }
     if (Number.parseFloat(value.amount) <= 0) {
