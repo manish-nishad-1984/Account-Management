@@ -1,8 +1,9 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   payoutListDetailSchema,
   payoutListRowSchema,
   payoutOutstandingResponseSchema,
+  type ConfirmPayoutList,
   type CreatePayoutList,
   type PayoutListDetail,
   type PayoutListRow,
@@ -71,3 +72,24 @@ export const useCreatePayoutList = () =>
 export const useUpdatePayoutList = () =>
   useUpdateResource<UpdatePayoutList, PayoutListDetail>(RESOURCE, payoutListDetailSchema);
 export const useDeletePayoutList = () => useDeleteResource(RESOURCE);
+
+/**
+ * CONFIRM and REVERSE a list. Both change the ledger, so besides the payout lists
+ * they refresh the payments and every report: the bills a list settled are open or
+ * closed in the Pending Outstanding report the moment this returns.
+ */
+const useLedgerWrite = (path: (id: string) => string) => {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body?: ConfirmPayoutList }) =>
+      apiRequest<PayoutListDetail>(path(id), { method: "POST", body, schema: payoutListDetailSchema }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: [RESOURCE] });
+      void client.invalidateQueries({ queryKey: ["payments"] });
+      void client.invalidateQueries({ queryKey: ["reports"] });
+    },
+  });
+};
+
+export const useConfirmPayoutList = () => useLedgerWrite((id) => `/${RESOURCE}/${id}/confirm`);
+export const useReversePayoutList = () => useLedgerWrite((id) => `/${RESOURCE}/${id}/reverse`);

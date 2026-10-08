@@ -10,6 +10,7 @@ const bill = (displayNo: string, amount: string) => ({
   siteName: "SURAT",
   amount,
   pendingAtSave: amount,
+  paidAmount: null,
 });
 const line = (partyName: string, amount: string, invoices = [] as ReturnType<typeof bill>[]) => ({
   id: partyName,
@@ -18,6 +19,7 @@ const line = (partyName: string, amount: string, invoices = [] as ReturnType<typ
   amount,
   outstandingAtSave: amount,
   outstandingNow: amount,
+  extraPaid: null,
   invoices,
 });
 const list = {

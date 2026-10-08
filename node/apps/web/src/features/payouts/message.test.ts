@@ -8,6 +8,7 @@ const line = (partyName: string, amount: string, n = 1) => ({
   amount,
   outstandingAtSave: null,
   outstandingNow: amount,
+  extraPaid: null,
   invoices: [] as never[],
 });
 

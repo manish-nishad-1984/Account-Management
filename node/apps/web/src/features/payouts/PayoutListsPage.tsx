@@ -3,7 +3,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { PayoutListRow } from "@accountmanagement/contracts";
 import { Copy, Eye, MessageCircle, Plus } from "lucide-react";
 import { DataGrid, RowActions } from "../../components/DataGrid";
-import { Button, ConfirmDialog, IconButton, PageHeader } from "../../components/ui";
+import { Badge, Button, ConfirmDialog, IconButton, PageHeader } from "../../components/ui";
 import { formatDateTime, formatMoney } from "../../lib/format";
 import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
@@ -50,6 +50,18 @@ export function PayoutListsPage() {
         id: "title",
         header: "Title",
         cell: ({ row }) => (row.original.title ? <span className="text-slate-700">{row.original.title}</span> : <Absent />),
+      },
+      {
+        id: "status",
+        header: "Status",
+        cell: ({ row }) =>
+          row.original.status === "confirmed" ? (
+            <Badge tone="success" dot>
+              Confirmed
+            </Badge>
+          ) : (
+            <Badge>Draft</Badge>
+          ),
       },
       {
         id: "partyCount",
@@ -121,7 +133,7 @@ export function PayoutListsPage() {
               onPointerEnter={() => prefetch(id)}
               onFocus={() => prefetch(id)}
             >
-              {!capabilities.canEdit && (
+              {(!capabilities.canEdit || row.original.status === "confirmed") && (
                 <IconButton label={`Open ${label}`} icon={Eye} tone="operation" onClick={() => openEdit(id)} className="size-9 lg:size-7" />
               )}
               {/* Named, not just an icon: it is the thing this screen is for. */}
@@ -137,7 +149,11 @@ export function PayoutListsPage() {
               </Button>
               <IconButton label={`Copy ${label} text`} icon={Copy} onClick={() => void copy(id)} className="size-9 lg:size-7" />
               <RowActions
-                capabilities={capabilities}
+                capabilities={
+                  row.original.status === "confirmed"
+                    ? { ...capabilities, canEdit: false, canDelete: false }
+                    : capabilities
+                }
                 label={label}
                 onEdit={() => openEdit(id)}
                 onDelete={() => askDelete(row.original)}

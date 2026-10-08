@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { ChevronDown, ChevronRight, Copy, MessageCircle, Search } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Copy, MessageCircle, Search, Undo2 } from "lucide-react";
 import {
   createPayoutListSchema,
   type CreatePayoutList,
@@ -8,13 +8,22 @@ import {
   type PayoutListDetail,
   type PayoutPendingInvoice,
 } from "@accountmanagement/contracts";
-import { Alert, Button, FormDialog, FormSection, TextField } from "../../components/ui";
+import { Alert, Button, ConfirmDialog, FormDialog, FormSection, TextField } from "../../components/ui";
+import { usePermission } from "../../lib/permissions";
 import { useRecordLayout } from "../../contexts/RecordLayoutContext";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { ApiError } from "../../lib/api-client";
 import { todayInput } from "../../lib/dates";
 import { formatMoney } from "../../lib/format";
-import { useCreatePayoutList, usePayoutList, usePayoutOutstanding, useUpdatePayoutList } from "./api";
+import {
+  useCreatePayoutList,
+  usePayoutList,
+  usePayoutOutstanding,
+  useReversePayoutList,
+  useUpdatePayoutList,
+} from "./api";
+import { ConfirmedView } from "./ConfirmedView";
+import { ConfirmPayoutDialog } from "./ConfirmPayoutDialog";
 import { AmountField } from "./AmountField";
 import { fromPaise, sumAmounts, toPaise } from "./decimal";
 import { formatListDate } from "./message";
@@ -118,11 +127,20 @@ export function PayoutListFormDialog({
 }) {
   const isEdit = listId !== null;
   const detail = usePayoutList(open && isEdit ? listId : null);
+  // A confirmed list has payments behind it and is read-only; it is changed only by
+  // reversing the confirmation. `locked` is that, or the caller's own read-only.
+  const confirmed = isEdit && detail.data?.status === "confirmed";
+  const locked = readOnly || confirmed;
+  const canConfirm = usePermission("payout", "approve");
+  const reverse = useReversePayoutList();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [reverseOpen, setReverseOpen] = useState(false);
+  const [reverseError, setReverseError] = useState<string | null>(null);
   // Only the site in the header's filter (client request, 7 Oct 2026); every site
   // when it is on "All sites". Not fetched before the scope is known, or an
   // assigned user would see every site's parties for a moment.
   const scope = useSiteScope();
-  const outstanding = usePayoutOutstanding(open && !readOnly && scope.isReady, scope.siteId);
+  const outstanding = usePayoutOutstanding(open && !locked && scope.isReady, scope.siteId);
   const create = useCreatePayoutList();
   const update = useUpdatePayoutList();
   const share = usePayoutSharing();
@@ -146,7 +164,7 @@ export function PayoutListFormDialog({
   const onPage = useRecordLayout().layout === "page";
   const stickyTop = onPage ? "1.1rem" : "0px";
   // Search row (2.75rem) plus the summary (3rem and its 0.5rem of space), when shown.
-  const headOffset = readOnly ? "2.75rem" : "6.25rem";
+  const headOffset = locked ? "2.75rem" : "6.25rem";
 
   const [listDate, setListDate] = useState(todayInput);
   const [title, setTitle] = useState("");
@@ -410,6 +428,40 @@ export function PayoutListFormDialog({
 
   const saved: PayoutListDetail | undefined = isEdit ? detail.data : undefined;
 
+  /**
+   * Whether what is ticked on screen differs from the SAVED list. Confirming works
+   * on the saved list, so it is offered only when the two are the same: confirming
+   * what the person has since changed and not saved would settle bills they can no
+   * longer see ticked.
+   */
+  const unsaved = (() => {
+    if (!saved) return false;
+    const now = tickedRows
+      .map((row) =>
+        hasBills(row)
+          ? `${row.partyId}:${row.bills
+              .filter((bill) => bill.key in (bills[row.partyId] ?? {}))
+              .map((bill) => `${bill.key}=${toPaise(bills[row.partyId]?.[bill.key] ?? "") ?? ""}`)
+              .sort()
+              .join(",")}`
+          : `${row.partyId}=${toPaise(picked[row.partyId] ?? "") ?? ""}`,
+      )
+      .sort()
+      .join("|");
+    const before = saved.lines
+      .map((line) =>
+        line.invoices.length > 0
+          ? `${line.partyId}:${line.invoices
+              .map((bill) => `${bill.source}:${bill.documentId}=${toPaise(bill.amount) ?? ""}`)
+              .sort()
+              .join(",")}`
+          : `${line.partyId}=${toPaise(line.amount) ?? ""}`,
+      )
+      .sort()
+      .join("|");
+    return now !== before;
+  })();
+
   /** Owed at the site (or at every site), what is ticked, and what is left of it. */
   const owedPaise = toPaise(outstanding.data?.total ?? "0") ?? 0n;
   const remainPaise = owedPaise - totalPaise;
@@ -426,10 +478,10 @@ export function PayoutListFormDialog({
       open={open}
       onClose={onClose}
       onSubmit={() => void submit()}
-      title={isEdit ? (readOnly ? "Payout list" : "Edit payout list") : "New payout list"}
+      title={isEdit ? (locked ? "Payout list" : "Edit payout list") : "New payout list"}
       formError={errors.banner}
       pending={pending}
-      readOnly={readOnly}
+      readOnly={locked}
       submitLabel="Save list"
       size="xl"
       footerStart={
@@ -443,6 +495,12 @@ export function PayoutListFormDialog({
             nothing to pin a bar to that works in all three record layouts, and
             the footer already is the one thing that never scrolls away.
           */}
+          {confirmed ? (
+            <div className="flex items-center gap-1.5 text-sm font-medium text-emerald-700">
+              <CheckCircle2 aria-hidden className="size-4" />
+              Confirmed
+            </div>
+          ) : (
           <div aria-live="polite" className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 text-sm text-slate-700">
             <span className="font-medium">
               {tickedRows.length} {tickedRows.length === 1 ? "party" : "parties"} ticked
@@ -456,6 +514,29 @@ export function PayoutListFormDialog({
               Total <span className="tabular ml-1 text-base font-semibold text-slate-900">{formatMoney(total)}</span>
             </span>
           </div>
+          )}
+          {saved && !readOnly && canConfirm && !confirmed && (
+            <Button
+              icon={CheckCircle2}
+              onClick={() => setConfirmOpen(true)}
+              disabled={unsaved}
+              title={unsaved ? "Save the list first, then confirm it" : "The owner has paid this list"}
+            >
+              Confirm payout
+            </Button>
+          )}
+          {saved && canConfirm && confirmed && (
+            <Button
+              variant="outline"
+              icon={Undo2}
+              onClick={() => {
+                setReverseError(null);
+                setReverseOpen(true);
+              }}
+            >
+              Reverse confirmation
+            </Button>
+          )}
           {saved && (
           <>
             {/* From the SAVED list: unsaved ticks are not in the message. */}
@@ -475,6 +556,10 @@ export function PayoutListFormDialog({
       ) : (
         <>
           <ShareNotice notice={share.notice} />
+          {confirmed && saved ? (
+            <ConfirmedView list={saved} />
+          ) : (
+          <>
           <FormSection title="List details" className="p-3!">
             <TextField
               label="List date"
@@ -552,7 +637,7 @@ export function PayoutListFormDialog({
                 Ticked only
               </label>
             </div>
-            {!readOnly && (
+            {!locked && (
               <div
                 aria-label="Payout summary"
                 className="mb-2 grid h-12 grid-cols-3 items-center gap-2 rounded-lg bg-slate-50 px-3 ring-1 ring-inset ring-slate-200"
@@ -585,13 +670,13 @@ export function PayoutListFormDialog({
             </div>
 
             {errors.noLines && <Alert tone="danger">{errors.noLines}</Alert>}
-            {outstanding.error && !readOnly && (
+            {outstanding.error && !locked && (
               <Alert tone="danger">
                 {outstanding.error instanceof ApiError ? outstanding.error.message : "Could not load the parties we owe"}
               </Alert>
             )}
 
-            {outstanding.isLoading && !readOnly ? (
+            {outstanding.isLoading && !locked ? (
               <p className="py-6 text-center text-sm text-slate-500">Loading parties…</p>
             ) : (
               <div className="rounded-lg ring-1 ring-inset ring-slate-200">
@@ -772,6 +857,34 @@ export function PayoutListFormDialog({
               </div>
             )}
           </FormSection>
+          </>
+          )}
+          {saved && (
+            <ConfirmPayoutDialog open={confirmOpen} list={saved} onClose={() => setConfirmOpen(false)} />
+          )}
+          <ConfirmDialog
+            open={reverseOpen}
+            onClose={() => setReverseOpen(false)}
+            onConfirm={() => {
+              if (!saved) return;
+              reverse
+                .mutateAsync({ id: saved.id })
+                .then(() => setReverseOpen(false))
+                .catch((error: unknown) =>
+                  setReverseError(error instanceof ApiError ? error.message : "Could not reverse this confirmation"),
+                );
+            }}
+            pending={reverse.isPending}
+            error={reverseError}
+            title="Reverse this confirmation"
+            confirmLabel="Reverse"
+            body={
+              <p>
+                The payments this list made will be removed and its bills will be open again. The list goes back to a
+                draft, and can be changed and confirmed again.
+              </p>
+            }
+          />
         </>
       )}
     </FormDialog>

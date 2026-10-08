@@ -29,17 +29,20 @@ const DETAIL = {
   budget: "300000.00",
   total: "265000.00",
   partyCount: 3,
+  status: "draft",
+  confirmedAt: null,
+  confirmedByName: null,
   createdByName: "Office",
   createdAt: "2026-10-01T10:00:00.000Z",
   updatedAt: null,
   updatedByName: null,
   note: "Call before paying",
   lines: [
-    { id: "l1", partyId: P1, partyName: "Ambica Steel Traders", amount: "125000.00", outstandingAtSave: "125000.00", outstandingNow: "125000.00", invoices: [] },
+    { id: "l1", partyId: P1, partyName: "Ambica Steel Traders", amount: "125000.00", outstandingAtSave: "125000.00", outstandingNow: "125000.00", extraPaid: null, invoices: [] },
     // Saved at 80,000 against 4,000,000 owed; since then the owed figure stands at 30,000 (paid since).
-    { id: "l2", partyId: P2, partyName: "Shree Cement", amount: "80000.00", outstandingAtSave: "4000000.00", outstandingNow: "30000.00", invoices: [] },
+    { id: "l2", partyId: P2, partyName: "Shree Cement", amount: "80000.00", outstandingAtSave: "4000000.00", outstandingNow: "30000.00", extraPaid: null, invoices: [] },
     // Paid in full since: no longer in the owed list at all.
-    { id: "l3", partyId: GONE, partyName: "Settled Supplies", amount: "60000.00", outstandingAtSave: "60000.00", outstandingNow: "0", invoices: [] },
+    { id: "l3", partyId: GONE, partyName: "Settled Supplies", amount: "60000.00", outstandingAtSave: "60000.00", outstandingNow: "0", extraPaid: null, invoices: [] },
   ],
 };
 
@@ -380,5 +383,62 @@ describe("PayoutListFormDialog", () => {
       expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
       expect(screen.getAllByRole("button", { name: "Close" }).length).toBeGreaterThan(0);
     });
+  });
+});
+
+describe("PayoutListFormDialog confirming", () => {
+  beforeEach(() => {
+    failure = null;
+    vi.stubGlobal("fetch", vi.fn());
+    serve();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const openAs = (permissions: string[]) =>
+    renderWithAuth(<PayoutListFormDialog open listId={LIST_ID} onClose={() => {}} />, { permissions });
+
+  it("offers Confirm payout only to someone who holds the right, on a saved list", async () => {
+    const { unmount } = openAs(["payout.view", "payout.edit", "payout.approve"]);
+    expect(await screen.findByRole("button", { name: /^confirm payout$/i })).toBeEnabled();
+    unmount();
+
+    openAs(["payout.view", "payout.edit"]);
+    await screen.findByLabelText("Pay Ambica Steel Traders");
+    expect(screen.queryByRole("button", { name: /confirm payout/i })).not.toBeInTheDocument();
+  });
+
+  it("will not confirm what has been changed and not saved", async () => {
+    const user = userEvent.setup();
+    openAs(["payout.view", "payout.edit", "payout.approve"]);
+
+    const confirmButton = await screen.findByRole("button", { name: /^confirm payout$/i });
+    await user.click(await screen.findByLabelText("Pay Ambica Steel Traders"));
+
+    expect(confirmButton).toBeDisabled();
+  });
+
+  it("shows a confirmed list as what was paid, with Reverse for someone who holds the right", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation((input) => {
+      const url = new URL(String(input), "http://localhost");
+      if (/\/payout-lists\/outstanding$/.test(url.pathname)) return Promise.resolve(json(OWED));
+      return Promise.resolve(
+        json({
+          ...DETAIL,
+          status: "confirmed",
+          confirmedAt: "2026-10-07T12:00:00.000Z",
+          confirmedByName: "Accounts",
+          lines: DETAIL.lines.map((line) => ({ ...line, extraPaid: null, invoices: [] })),
+        }),
+      );
+    });
+    openAs(["payout.view", "payout.edit", "payout.approve"]);
+
+    expect(await screen.findByText(/by Accounts/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Pay Ambica Steel Traders")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /save list/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /reverse confirmation/i })).toBeInTheDocument();
   });
 });

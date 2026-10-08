@@ -45,7 +45,7 @@ describe("PayoutListFormDialog - bills", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((input: RequestInfo | URL) =>
-        Promise.resolve(json(/outstanding$/.test(String(input)) ? OWED : { id: "x", listDate: "2026-10-06", title: null, budget: null, total: "0.00", partyCount: 0, createdByName: null, createdAt: "2026-10-06T00:00:00.000Z", updatedAt: null, updatedByName: null, note: null, lines: [] })),
+        Promise.resolve(json(/outstanding$/.test(String(input)) ? OWED : { id: "x", listDate: "2026-10-06", title: null, budget: null, total: "0.00", partyCount: 0, status: "draft", confirmedAt: null, confirmedByName: null, createdByName: null, createdAt: "2026-10-06T00:00:00.000Z", updatedAt: null, updatedByName: null, note: null, lines: [] })),
       ),
     );
   });
