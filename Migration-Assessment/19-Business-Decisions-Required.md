@@ -739,6 +739,71 @@ And four that shape the details:
 
 ---
 
+## Question 17 — When the owner pays several suppliers at once, which bills does each payment settle?
+
+**How it works today.** A payment is recorded against the supplier, and the
+reports ASSUME it pays that supplier's oldest bills first. The system does not
+record which bills were actually paid. That is fine while the owner pays the
+oldest bill first, and wrong when he does not: if he pays a newer bill and leaves
+an older, disputed one, the reports still show the older one as settled.
+A payment also carries one site, so a lump sum that covers bills of two sites
+cannot be shown as such.
+
+**What you described (7 Oct 2026).** The owner makes a Payout List. He then tells
+the office "I have paid" — and sometimes "I paid this supplier less" or "I paid
+this one more". An authorised user (an administrator) records it.
+
+**What we propose.** On the Payout List, a **Confirm payout** button, available
+only to users who hold a new permission for it:
+
+1. The list shows what was planned. The person confirming types what was
+   ACTUALLY paid to each supplier, and against each bill.
+2. On confirming, the system records the payments and marks those bills paid —
+   the owner is not asked to tick anything twice.
+3. **Paid less than planned:** the bill stays open for the difference
+   (*part paid*).
+4. **Paid more than planned:** the extra is shown as an **advance** on that
+   supplier, and the person confirming may put it against another of the same
+   supplier's open bills.
+5. The confirmed list is locked. A mistake is corrected by **reversing** the
+   confirmation — which removes the payments it made and reopens the bills, and
+   is recorded with who did it — and confirming again. It is never edited quietly.
+6. A payment made outside a list (a cheque handed over on the spot) is still
+   entered on the Payments screen as today, and may be tied to bills there.
+
+Payments that already exist (583 on 15 Sep 2026) stay exactly as they are and
+keep the oldest-first rule.
+
+**What we need to know.**
+
+1. **Does confirming mean the money has already left the bank**, or can the owner
+   decide first and the payment happen later? If later, there are two steps:
+   *Confirmed* (decided) and *Paid* (money gone). *We recommend one step, if the
+   owner only reports a payment after making it.*
+2. **Which users may confirm?** (A single permission we can give to the right
+   people.)
+3. **After confirming, may a list be changed, or only reversed and redone?**
+   *We recommend reverse and redo* — it leaves a record.
+4. **Paid MORE than planned — advance on the supplier, or put against the oldest
+   open bill automatically?** *We recommend advance, with the choice offered.*
+5. **Does one payment ever cover bills of more than one site, or more than one
+   company?** If yes, one confirmation will make a payment for each.
+6. **Do you need bill-by-bill status** (paid / part paid / unpaid) to settle
+   accounts with a supplier, or is the supplier's total enough? If the total is
+   enough, none of this is needed.
+7. **Is tax deducted at source (TDS), or any other deduction, taken off at the
+   time of payment?** It would have to be tied to the bill so the bill shows as
+   fully paid.
+8. **Are advances ever paid before a bill exists?**
+9. **Should receipts against sales invoices work the same way?**
+
+> **Decision:** 1 ☐ One step ☐ Decided, then paid — 2: ________________ —
+> 3 ☐ Reverse and redo ☐ Allow editing — 4 ☐ Advance ☐ Oldest open bill —
+> 5 ☐ Never ☐ More than one site ☐ More than one company —
+> 6 ☐ Bill by bill ☐ Total is enough — 7–9: ________________
+
+---
+
 # Summary sheet
 
 | # | Question | Blocks work? | Decision |
@@ -760,9 +825,16 @@ And four that shape the details:
 | 14 | **A purchase order can be sent out twice over** — should the two delivery lists be added together? | Changes what saves | |
 | 15 | ~~Three permission names guard one screen~~ — **answered from the source, 10 Sep 2026; nothing needed** | No | Answered |
 | 16 | **Stock: per site or central godown? From challan or invoice? Opening stock?** | **Yes — blocks stock issue and return** | |
+| 17 | **When the owner pays several suppliers at once, which bills does each payment settle?** — a "Confirm payout" step on the Payout List, paid less or more than planned, one site or several | **Yes — blocks the confirm step and bill-by-bill status** | |
 
 **Question 16 is new on 2 Oct 2026**, from your request for stock issue and
 return. Its first three parts must be answered before any stock work starts.
+
+**Question 17 is new on 8 Oct 2026**, from your description of how the owner
+pays: he pays several suppliers together, an authorised user records it, and
+some are paid less or more than planned. It is about which bills a payment
+settles. The system assumes the oldest first today. Changing that adds a table
+to the database, so it wants an answer before any work, and a backup first.
 
 **Updated 9 Sep 2026.** The invoicing rebuild is no longer waiting on these — the
 purchase invoice and sales invoice screens are both built, and both calculate
@@ -814,3 +886,4 @@ whatever the answer turns out to cover.
 | 14 | `SESSION-HANDOFF.md` §5s; `packages/domain/src/delivery-allocation.ts`; `PurchaseRequestScript.js:964-1006`; `legacy-screens/08-create-purchase-order.md` |
 | 15 | `SESSION-HANDOFF.md` §5u; finding C-6; `Views/Report/ReportDetails.cshtml` and its partials; `modules/payments/payments.controller.ts` |
 | 16 | `SESSION-HANDOFF.md` §5z; D26 (answers Q7); `inventory_inward`, `inward_challans`; `modules/agencies/` |
+| 17 | `SESSION-HANDOFF.md` §5ab (the Payout List is a plan and must not turn into payments quietly); `modules/reports/reports.repository.ts` `pendingLedger` (oldest first); `modules/payments/`; `modules/payouts/`; `payout_list_invoices` keeps the site NAME only, not its id; `purchase_invoices.payment_status` and `is_paid_out` exist but nothing updates them |
