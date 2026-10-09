@@ -89,6 +89,13 @@ export interface InvoiceTotal {
   totalGst: string;
   tds: string;
   roundOff: string;
+  /**
+   * What the whole-rupee rounding itself moved the total by: `grandTotal` minus
+   * the exact figure, so −0.30 for 1,000.30 and +0.40 for 1,000.60. Separate
+   * from `roundOff`, which is the typed adjustment. Zero when the exact figure
+   * is already a whole rupee, or when rounding is switched off.
+   */
+  autoRoundOff: string;
   /** What the customer is charged. */
   grandTotal: string;
 }
@@ -166,6 +173,7 @@ export function corrected(
     totalGst: format(totalGst),
     tds: format(tds),
     roundOff: format(roundOff),
+    autoRoundOff: format(grandTotal - beforeRounding),
     grandTotal: format(grandTotal),
   };
 }
@@ -254,6 +262,7 @@ export function asProduced(
   const roundOff = readsCharges ? num(charges.roundOff) : 0;
 
   let grandTotal = subtotal + totalGst - tds + roundOff;
+  const exactTotal = grandTotal;
 
   // And only the invoice and sales calculators round to a whole rupee.
   if (readsCharges) {
@@ -268,6 +277,7 @@ export function asProduced(
     totalGst: fixed(totalGst),
     tds: fixed(tds),
     roundOff: fixed(roundOff),
+    autoRoundOff: fixed(grandTotal - exactTotal),
     grandTotal: fixed(grandTotal),
   };
 }

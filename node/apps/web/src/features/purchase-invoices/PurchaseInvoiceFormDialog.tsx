@@ -609,6 +609,7 @@ export function PurchaseInvoiceFormDialog({
                     { label: "Total GST", value: formatMoney(totals.totalGst) },
                     { label: "TDS", value: `− ${formatMoney(totals.tds)}` },
                     { label: "Adjustment", value: formatMoney(totals.roundOff) },
+                    { label: "Round off", value: formatMoney(totals.autoRoundOff) },
                     { label: "Total amount", value: formatMoney(totals.grandTotal), strong: true },
                   ]}
                 />

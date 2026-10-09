@@ -8,7 +8,7 @@ import {
   MESSAGE_BASE,
   ringFor,
 } from "../../components/ui/fields";
-import { useItemOptions } from "./api";
+import { useItem, useItemOptions } from "./api";
 
 /**
  * Pick an item by typing part of its name.
@@ -97,6 +97,18 @@ export function ItemCombobox({
   const chosen = items.find((item) => item.id === itemId) ?? null;
 
   /**
+   * THE CHOSEN ITEM MAY NOT BE IN THE LIST AT ALL.
+   *
+   * With nothing typed the list is the first 200 items by name, and the catalogue
+   * is larger (876 on the live copy). An invoice saved with an item further down
+   * the alphabet opened for edit with a BLANK box — the id was stored and sent,
+   * but the name was looked up only among the search results. So when the id is
+   * not among them, ask for that one item directly.
+   */
+  const missingFromList = itemId !== "" && !options.isPending && chosen === null;
+  const fetched = useItem(missingFromList ? itemId : null);
+
+  /**
    * THE CHOSEN ITEM'S NAME HAS TO SURVIVE A SEARCH THAT NO LONGER RETURNS IT.
    *
    * `items` is whatever the current term matched. Pick "White Cement", then type
@@ -106,7 +118,7 @@ export function ItemCombobox({
    */
   const lastLabel = useRef("");
   if (chosen) lastLabel.current = chosen.name;
-  const chosenLabel = chosen?.name ?? (itemId ? lastLabel.current : "");
+  const chosenLabel = chosen?.name ?? (itemId ? (fetched.data?.name ?? lastLabel.current) : "");
 
   const text = query ?? chosenLabel ?? "";
   const typed = (query ?? "").trim();

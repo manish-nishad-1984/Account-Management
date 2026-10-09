@@ -66,6 +66,33 @@ describe("money", () => {
   });
 });
 
+describe("the automatic round-off amount", () => {
+  const one = (unitPrice: string) => [{ unitPrice, quantity: "1", gstPercent: "0" }];
+
+  it.each([
+    ["1000.30", "-0.30", "1000.00"],
+    ["1000.50", "-0.50", "1000.00"], // exactly .50 goes DOWN
+    ["1000.51", "0.49", "1001.00"],
+    ["1000.60", "0.40", "1001.00"],
+    ["1000.00", "0.00", "1000.00"],
+  ])("%s rounds by %s to %s", (price, auto, total) => {
+    const result = corrected(one(price));
+    expect(result.autoRoundOff).toBe(auto);
+    expect(result.grandTotal).toBe(total);
+  });
+
+  it("is separate from the typed adjustment", () => {
+    const result = corrected(one("1000.30"), { roundOff: "0.10" });
+    expect(result.roundOff).toBe("0.10");
+    expect(result.autoRoundOff).toBe("-0.40");
+    expect(result.grandTotal).toBe("1000.00");
+  });
+
+  it("is zero when whole-rupee rounding is switched off", () => {
+    expect(corrected(one("1000.30"), {}, { roundGrandTotalToRupee: false }).autoRoundOff).toBe("0.00");
+  });
+});
+
 describe("corrected invoice totals", () => {
   const LINES = [
     { unitPrice: "100.00", quantity: "10", gstPercent: "18" },

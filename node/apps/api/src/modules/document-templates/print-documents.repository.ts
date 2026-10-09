@@ -286,7 +286,15 @@ export class PrintDocumentsRepository extends BaseRepository {
         totalDiscount: charges.totalDiscount,
         totalGstAmount: charges.totalGstAmount,
         tds: charges.tds,
-        roundOff: charges.roundOff,
+        // The typed adjustment AND the whole-rupee rounding as one figure, so the
+        // printed rows add up to the printed total. `charges.roundOff` alone is
+        // only the typed part and would leave the paise unexplained.
+        roundOff: money.format(
+          money.decimal(charges.totalAmount) -
+            (money.decimal(charges.subtotal) +
+              money.decimal(charges.totalGstAmount) -
+              money.decimal(charges.tds)),
+        ),
         totalAmount: charges.totalAmount,
       },
       taxSummary,
