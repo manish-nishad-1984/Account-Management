@@ -17,6 +17,7 @@ import { SiteLocationsPage } from "./features/site-locations/SiteLocationsPage";
 import { SuppliersPage } from "./features/suppliers/SuppliersPage";
 import { AgenciesPage } from "./features/agencies/AgenciesPage";
 import { PayoutListsPage } from "./features/payouts/PayoutListsPage";
+import { BalanceSheetPage } from "./features/balance-sheet/BalanceSheetPage";
 import { ClientsPage } from "./features/clients/ClientsPage";
 import { ClientIncomesPage } from "./features/client-incomes/ClientIncomesPage";
 import { ItemsPage } from "./features/items/ItemsPage";
@@ -66,6 +67,7 @@ const IMPLEMENTED: Record<string, React.ComponentType> = {
   "/payouts": PayoutListsPage,
   "/clients": ClientsPage,
   "/income": ClientIncomesPage,
+  "/reports/balance-sheet": BalanceSheetPage,
   "/reports/ledger": LedgerPage,
   "/reports/pending-ledger": PendingLedgerPage,
   "/reports/sales": SalesReportPage,

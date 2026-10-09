@@ -155,6 +155,58 @@ export class ClientIncomesRepository extends BaseRepository {
     return fromPaise(toPaise(row?.value ?? "0"));
   }
 
+  /** The conditions the Balance Sheet puts on income: project, company and a date range. */
+  private balanceWhere(filter: { siteId?: string; companyId?: string; fromDate?: string; toDate?: string }) {
+    const where = [eq(clientIncomes.isDeleted, false)];
+    if (filter.siteId) where.push(eq(clientIncomes.siteId, filter.siteId));
+    if (filter.companyId) where.push(eq(clientIncomes.companyId, filter.companyId));
+    if (filter.fromDate) where.push(sql`${clientIncomes.incomeDate} >= ${filter.fromDate}::date`);
+    if (filter.toDate) where.push(sql`${clientIncomes.incomeDate} <= ${filter.toDate}::date`);
+    return and(...where);
+  }
+
+  /** Income per project - the Final Totals added up - for the site-wise Balance Sheet. */
+  async incomeBySite(filter: {
+    siteId?: string;
+    companyId?: string;
+    fromDate?: string;
+    toDate?: string;
+  }): Promise<{ siteId: string; siteName: string; income: string }[]> {
+    const rows = await this.db
+      .select({
+        siteId: clientIncomes.siteId,
+        siteName: sites.name,
+        income: sql<string>`coalesce(sum(${clientIncomes.total}), 0)::text`,
+      })
+      .from(clientIncomes)
+      .innerJoin(sites, eq(sites.id, clientIncomes.siteId))
+      .where(this.balanceWhere(filter))
+      .groupBy(clientIncomes.siteId, sites.name);
+    return rows.map((row) => ({ ...row, income: fromPaise(toPaise(row.income)) }));
+  }
+
+  /** The entries behind one project's income, newest first. */
+  async incomeEntries(filter: {
+    siteId?: string;
+    companyId?: string;
+    fromDate?: string;
+    toDate?: string;
+  }): Promise<{ id: string; incomeDate: string; clientName: string; companyName: string; total: string }[]> {
+    return this.db
+      .select({
+        id: clientIncomes.id,
+        incomeDate: sql<string>`${clientIncomes.incomeDate}::text`,
+        clientName: clients.name,
+        companyName: companies.name,
+        total: sql<string>`${clientIncomes.total}::text`,
+      })
+      .from(clientIncomes)
+      .innerJoin(clients, eq(clients.id, clientIncomes.clientId))
+      .innerJoin(companies, eq(companies.id, clientIncomes.companyId))
+      .where(this.balanceWhere(filter))
+      .orderBy(sql`${clientIncomes.incomeDate} desc`, clientIncomes.id);
+  }
+
   async findById(id: string): Promise<ClientIncomeDetail> {
     const [row] = await this.db
       .select({

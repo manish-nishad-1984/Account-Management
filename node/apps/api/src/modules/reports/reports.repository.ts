@@ -356,6 +356,71 @@ export class ReportsRepository extends BaseRepository {
   }
 
   /**
+   * WHAT EACH PROJECT HAS COST, for the site-wise Balance Sheet (9 Oct 2026).
+   *
+   * BILLED is purchase invoices less returns and credit notes; PAID is the payments
+   * made. Both come from the same union the ledger reads, so this and the ledger
+   * cannot disagree. Opening balances are left out: money owed from before is not
+   * what a project has cost. One row per site; invoices saved with no site come
+   * back as a row of their own with a null site.
+   */
+  async expenseBySite(
+    filter: Omit<ReportFilter, "direction">,
+  ): Promise<{ siteId: string | null; siteName: string | null; billed: string; paid: string }[]> {
+    const full: ReportFilter = { ...filter, direction: "out" };
+    const rows = rawRows<{ site_id: string | null; site_name: string | null; billed: string; paid: string }>(
+      await this.db.execute(sql`
+        with entries as (${this.entries(full)})
+        select e.site_id, st.name as site_name,
+          coalesce(sum(case
+            when e.source_kind = 'invoice' and e.effect = 'credit' then e.amount
+            when e.source_kind = 'invoice' and e.effect = 'debit' then -e.amount
+            else 0 end), 0)::text as billed,
+          coalesce(sum(case when e.source_kind = 'payment' then e.amount else 0 end), 0)::text as paid
+        from entries e
+        left join sites st on st.id = e.site_id
+        where ${this.where(full)} and e.source_kind in ('invoice', 'payment')
+        group by e.site_id, st.name
+      `),
+    );
+    return rows.map((row) => ({
+      siteId: row.site_id,
+      siteName: row.site_name,
+      billed: this.money(row.billed),
+      paid: this.money(row.paid),
+    }));
+  }
+
+  /** The same figures for ONE project, split by supplier: what is behind its row. */
+  async expenseBySupplier(
+    filter: Omit<ReportFilter, "direction">,
+  ): Promise<{ partyId: string; partyName: string; billed: string; paid: string }[]> {
+    const full: ReportFilter = { ...filter, direction: "out" };
+    const rows = rawRows<{ party_id: string; party_name: string; billed: string; paid: string }>(
+      await this.db.execute(sql`
+        with entries as (${this.entries(full)})
+        select e.party_id, s.name as party_name,
+          coalesce(sum(case
+            when e.source_kind = 'invoice' and e.effect = 'credit' then e.amount
+            when e.source_kind = 'invoice' and e.effect = 'debit' then -e.amount
+            else 0 end), 0)::text as billed,
+          coalesce(sum(case when e.source_kind = 'payment' then e.amount else 0 end), 0)::text as paid
+        from entries e
+        join suppliers s on s.id = e.party_id
+        where ${this.where(full)} and e.source_kind in ('invoice', 'payment')
+        group by e.party_id, s.name
+        order by s.name
+      `),
+    );
+    return rows.map((row) => ({
+      partyId: String(row.party_id),
+      partyName: String(row.party_name),
+      billed: this.money(row.billed),
+      paid: this.money(row.paid),
+    }));
+  }
+
+  /**
    * WHAT IS STILL OWED ON THE INVOICES IN VIEW (8 Oct 2026): for a page of the
    * purchase invoice list, how much of each is unpaid, by the SAME rule the Pending
    * Outstanding report uses - bills a payment names first, then oldest first - so

@@ -30,6 +30,7 @@ import { GeographyModule } from "./modules/geography/geography.module";
 import { PayoutsModule } from "./modules/payouts/payouts.module";
 import { ClientsModule } from "./modules/clients/clients.module";
 import { ClientIncomesModule } from "./modules/client-incomes/client-incomes.module";
+import { BalanceSheetModule } from "./modules/balance-sheet/balance-sheet.module";
 
 const env = loadEnv();
 
@@ -71,6 +72,7 @@ const env = loadEnv();
     PayoutsModule,
     ClientsModule,
     ClientIncomesModule,
+    BalanceSheetModule,
   ],
   providers: [
     // Order matters: authenticate, then authorise.

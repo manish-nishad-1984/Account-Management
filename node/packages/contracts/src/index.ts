@@ -8,6 +8,7 @@ export * from "./user-permissions";
 export * from "./companies";
 export * from "./clients";
 export * from "./client-incomes";
+export * from "./balance-sheet";
 export * from "./sites";
 export * from "./site-locations";
 export * from "./site-addresses";

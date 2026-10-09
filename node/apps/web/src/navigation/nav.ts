@@ -19,6 +19,7 @@ import {
   FileText,
   HandCoins,
   Banknote,
+  Scale,
   Handshake,
   HardHat,
   Hourglass,
@@ -133,6 +134,8 @@ export const NAV: NavSection[] = [
       { label: "Ledger", to: "/reports/ledger", icon: BookOpen, permission: "reports-payments", status: "ready", legacy: "/InvoiceMaster/PayOutInvoice" },
       // Began as the "Pending Ledger", a copy of the ledger for the client to try out (14 Sep 2026).
       // Since 1 Oct 2026 it is only the outstanding summary: site, supplier and net.
+      // New (9 Oct 2026): per project, income against what has been billed and paid.
+      { label: "Balance Sheet", to: "/reports/balance-sheet", icon: Scale, permission: "income", status: "ready" },
       { label: "Pending Outstanding", to: "/reports/pending-ledger", icon: Hourglass, permission: "reports-payments", status: "ready" },
     ],
   },
