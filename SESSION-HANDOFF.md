@@ -4728,7 +4728,7 @@ Tests: **1841** Node (157 contracts + 90 domain + 941 API + 653 web), one full
 
 ## 5ac. Confirm payout, payments tied to bills, the Client Master, Income and the site-wise Balance Sheet (7–9 Oct 2026)
 
-Commit `<COMMIT>` (the handoff; the code is `3b805cec` and earlier). Fifteen code commits (listed in §4),
+Commit `6e2a62e7` (the handoff; the code is `3b805cec` and earlier). Fifteen code commits (listed in §4),
 **two migrations (0024 and 0025)**, five releases, all pushed and live. A client-driven week again: each
 request came from the client, relayed in Hinglish, and most followed a screenshot. Order of the work:
 
