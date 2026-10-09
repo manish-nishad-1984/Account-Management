@@ -18,6 +18,8 @@ import {
   FileInput,
   FileText,
   HandCoins,
+  Banknote,
+  Handshake,
   HardHat,
   Hourglass,
   LayoutDashboard,
@@ -80,6 +82,8 @@ export const NAV: NavSection[] = [
       { label: "Site Location", to: "/site-locations", icon: Layers, permission: "group", status: "ready", legacy: "/SiteMaster/CreateGroup" },
       { label: "Suppliers", to: "/suppliers", icon: Truck, permission: "supplier", status: "ready", legacy: "/Supplier/SupplierList" },
       // New, no legacy screen: the contractors who work on a site (1 Oct 2026).
+      // New, no legacy screen: who pays us for a project (9 Oct 2026).
+      { label: "Clients", to: "/clients", icon: Handshake, permission: "client", status: "ready" },
       { label: "Agency Master", to: "/agencies", icon: HardHat, permission: "agency", status: "ready" },
       { label: "Items", to: "/items", icon: Package, permission: "item", status: "ready", legacy: "/ItemMaster/ItemListView" },
       { label: "Users", to: "/users", icon: Users, permission: "user", status: "ready", legacy: "/User/UserListView" },
@@ -102,6 +106,8 @@ export const NAV: NavSection[] = [
     items: [
       { label: "Purchase Invoices", to: "/purchase-invoices", icon: Receipt, permission: "purchase-invoice", status: "ready", legacy: "/InvoiceMaster/SupplierInvoiceListView" },
       { label: "Sales Invoices", to: "/sales-invoices", icon: FileText, permission: "sales-invoice", status: "ready", legacy: "/Sales/SalesList" },
+      // New, no legacy screen: money the project's client has paid us (9 Oct 2026).
+      { label: "Income", to: "/income", icon: Banknote, permission: "income", status: "ready" },
       { label: "Payments", to: "/payments", icon: Wallet, permission: "reports-payments", status: "ready", legacy: "/Report/ReportDetails (Payment Actions)" },
     ],
   },

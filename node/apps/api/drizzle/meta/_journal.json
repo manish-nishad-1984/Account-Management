@@ -176,6 +176,13 @@
       "when": 1791447987086,
       "tag": "0024_payout_confirm_and_payment_allocations",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791538730193,
+      "tag": "0025_client_master_and_income",
+      "breakpoints": true
     }
   ]
 }

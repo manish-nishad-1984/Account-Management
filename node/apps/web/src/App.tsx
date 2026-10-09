@@ -17,6 +17,8 @@ import { SiteLocationsPage } from "./features/site-locations/SiteLocationsPage";
 import { SuppliersPage } from "./features/suppliers/SuppliersPage";
 import { AgenciesPage } from "./features/agencies/AgenciesPage";
 import { PayoutListsPage } from "./features/payouts/PayoutListsPage";
+import { ClientsPage } from "./features/clients/ClientsPage";
+import { ClientIncomesPage } from "./features/client-incomes/ClientIncomesPage";
 import { ItemsPage } from "./features/items/ItemsPage";
 import { PurchaseRequestsPage } from "./features/purchase-requests/PurchaseRequestsPage";
 import { PurchaseOrdersPage } from "./features/purchase-orders/PurchaseOrdersPage";
@@ -62,6 +64,8 @@ const IMPLEMENTED: Record<string, React.ComponentType> = {
   "/inward": InwardChallansPage,
   "/payments": PaymentsPage,
   "/payouts": PayoutListsPage,
+  "/clients": ClientsPage,
+  "/income": ClientIncomesPage,
   "/reports/ledger": LedgerPage,
   "/reports/pending-ledger": PendingLedgerPage,
   "/reports/sales": SalesReportPage,

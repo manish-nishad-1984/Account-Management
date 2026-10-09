@@ -28,6 +28,8 @@ import { DocumentTemplatesModule } from "./modules/document-templates/document-t
 import { AgenciesModule } from "./modules/agencies/agencies.module";
 import { GeographyModule } from "./modules/geography/geography.module";
 import { PayoutsModule } from "./modules/payouts/payouts.module";
+import { ClientsModule } from "./modules/clients/clients.module";
+import { ClientIncomesModule } from "./modules/client-incomes/client-incomes.module";
 
 const env = loadEnv();
 
@@ -67,6 +69,8 @@ const env = loadEnv();
     AgenciesModule,
     GeographyModule,
     PayoutsModule,
+    ClientsModule,
+    ClientIncomesModule,
   ],
   providers: [
     // Order matters: authenticate, then authorise.

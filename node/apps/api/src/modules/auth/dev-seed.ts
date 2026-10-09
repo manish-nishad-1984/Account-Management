@@ -584,6 +584,9 @@ export class DevSeed implements OnModuleInit {
       { userId: admin.id, formId: 101, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
       // Payout — form 102, inserted by migration 0022, same reason as 100.
       { userId: admin.id, formId: 102, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true, isApproved: true },
+      // Client and Income - forms 103 and 104, inserted by migration 0025, same reason as 100.
+      { userId: admin.id, formId: 103, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
+      { userId: admin.id, formId: 104, isViewAllow: true, isAddAllow: true, isEditAllow: true, isDeleteAllow: true },
     ]);
 
     /**

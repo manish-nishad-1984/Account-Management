@@ -14,3 +14,4 @@ export * from "./preferences";
 export * from "./document-templates";
 export * from "./agencies";
 export * from "./payouts";
+export * from "./clients";
