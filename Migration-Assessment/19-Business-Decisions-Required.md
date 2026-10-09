@@ -804,6 +804,65 @@ keep the oldest-first rule.
 
 ---
 
+## Question 18 — Project income and the site-wise Balance Sheet: what counts as an expense, and what else is needed?
+
+**How it works today.** The system knew what we OWE suppliers and what customers owe on
+sales invoices. It had no place for the money a project's client pays US, and no
+page that sets a project's income against its costs.
+
+**What you described (9 Oct 2026).** The client pays the boss, part by part, for a
+project. The boss tells the office "this much has come in for this project". The
+office wants a **Client Master**, an **Income** entry for each receipt (project,
+the company it came into, the client, the amount, plus additional amounts and
+deductions, each with a remark, and a final total), and later a **balance sheet**,
+in and out, project by project.
+
+**What is built and live (9 Oct 2026).**
+
+- **Clients** (Masters): who pays us, and which projects each one pays for.
+- **Income** (Invoicing): project from the header, company chosen (a company is not
+  tied to a site anywhere in the system), client from those linked to the project,
+  date, amount, any number of **Additional** lines and **Deduction** lines (amount
+  and remark each), and the **Final Total** = amount + additional − deductions.
+- **Balance Sheet** (Reports): per project — Income, Billed (supplier bills less
+  returns), Paid, Still to pay, **Cash balance** (income − paid) and **Project
+  result** (income − billed). A row opens to its income entries and its suppliers.
+
+We showed both balances because "expense" can mean two things, and we could not
+tell which the boss wants first. These are the points we still need.
+
+**What we need to know.**
+
+1. **Which is "the" expense: what has been PAID to suppliers, or what has been
+   BILLED?** Both are shown today. *We recommend keeping both and naming one as
+   the headline.*
+2. **Other costs.** Labour, salaries, transport, site petty cash — costs that are
+   not supplier bills. Should they be recorded too? If yes, the balance sheet
+   shows them as a third kind of cost and a new entry screen is needed. *It is the
+   largest piece still to build, so it is worth deciding early.*
+3. **Is a project always paid into one company?** If yes, the company can be set
+   once per project and filled in for the user. Today it is chosen on every entry.
+4. **Additional and deduction: free remark, or a fixed list?** (TDS, retention,
+   GST withheld, discount, extra work…) A fixed list makes the balance sheet able
+   to total each kind separately. *We recommend a free remark now and a list later,
+   once the real wording is known.*
+5. **Is income tied to anything we issued?** Does a receipt belong to one of OUR
+   bills to the client (a sales invoice or running bill), or only to the project?
+   Today it is only to the project.
+6. **Who may see income and the balance sheet?** Today: anyone holding both
+   Reports & Payments and Income. Is that the boss alone?
+7. **GST on the income.** Is the amount received inclusive of GST, and should the
+   balance sheet separate it?
+8. **How should the balance sheet be shared?** On screen only, or also a download
+   (Excel or PDF) or a picture to forward, as the Payout List has?
+9. **The period.** Whole life of a project (today), or by financial year by default?
+
+> **Decision:** 1 ☐ Paid ☐ Billed ☐ Both, headline: ______ — 2 ☐ Yes, record them
+> ☐ No — 3 ☐ One company per project ☐ Chosen each time — 4 ☐ Free remark
+> ☐ Fixed list — 5 ☐ Project only ☐ Tied to our bills — 6–9: ________________
+
+---
+
 # Summary sheet
 
 | # | Question | Blocks work? | Decision |
@@ -826,6 +885,12 @@ keep the oldest-first rule.
 | 15 | ~~Three permission names guard one screen~~ — **answered from the source, 10 Sep 2026; nothing needed** | No | Answered |
 | 16 | **Stock: per site or central godown? From challan or invoice? Opening stock?** | **Yes — blocks stock issue and return** | |
 | 17 | **When the owner pays several suppliers at once, which bills does each payment settle?** — a "Confirm payout" step on the Payout List, paid less or more than planned, one site or several | **Yes — blocks the confirm step and bill-by-bill status** | |
+| 18 | **Project income and the Balance Sheet** — is the expense what is paid or what is billed, are other costs (labour, salaries) recorded, one company per project, how is it shared | No — built and live; the answers shape what comes next | |
+
+**Question 18 is new on 9 Oct 2026**, from the client's description of project income.
+The Client Master, the Income screen and the site-wise Balance Sheet are built and
+live; nothing is waiting on you to keep them working. The answers decide what is
+called the expense, whether other costs are recorded, and how the sheet is shared.
 
 **Question 16 is new on 2 Oct 2026**, from your request for stock issue and
 return. Its first three parts must be answered before any stock work starts.
@@ -887,3 +952,4 @@ whatever the answer turns out to cover.
 | 15 | `SESSION-HANDOFF.md` §5u; finding C-6; `Views/Report/ReportDetails.cshtml` and its partials; `modules/payments/payments.controller.ts` |
 | 16 | `SESSION-HANDOFF.md` §5z; D26 (answers Q7); `inventory_inward`, `inward_challans`; `modules/agencies/` |
 | 17 | `SESSION-HANDOFF.md` §5ab (the Payout List is a plan and must not turn into payments quietly); `modules/reports/reports.repository.ts` `pendingLedger` (oldest first); `modules/payments/`; `modules/payouts/`; `payout_list_invoices` keeps the site NAME only, not its id; `purchase_invoices.payment_status` and `is_paid_out` exist but nothing updates them |
+| 18 | `modules/clients/`; `modules/client-incomes/`; `modules/balance-sheet/`; `reports.repository.ts` `expenseBySite` and `expenseBySupplier`; migration `0025_client_master_and_income.sql`; forms 103 (Client) and 104 (Income); the application has never tied a company to a site (`db/schema/users.ts`, the note on `sites`) |
