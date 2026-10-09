@@ -1,9 +1,9 @@
 # Session handoff — AccountManagement → Node.js/React migration
 
 **Written:** 2 September 2026, after the unblocking session. **Last extended
-6 October 2026** (§5ab). Supersedes all earlier handoffs of the same name.
+9 October 2026** (§5ac). Supersedes all earlier handoffs of the same name.
 
-> **This file is current as of `2465de97`.** If `git log` shows commits after
+> **This file is current as of `<CURRENT>`.** If `git log` shows commits after
 > that hash, they happened later than this document and they win. `/handoff`
 > checks exactly this on the way in, so a stale file announces itself instead of
 > being believed.
@@ -49,8 +49,8 @@ at the user's instruction.** Nothing in this repository records the commands; it
 was done over ssh. nginx now redirects `www.avfast.in` and `api.avfast.in` to
 `https://avfast.in`, and serves `/` with `Cache-Control: no-cache` and `/assets/`
 with long caching (a stale bundle was making fixed screens look unfixed). §5e, §5ab
-and the `/deploy` skill still describe the old app and its "leave alone" list of
-ports 8080 / 7251 / 1433; **treat those as history**, and update the skill.
+describe the old app and its "leave alone" list of ports 8080 / 7251 / 1433; **treat those as
+history**. The `/deploy` skill was rewritten on 9 Oct 2026 to match the server as it is.
 
 **The lesson of the six-day gap (18–21 Sep, closed by `9a11f463`) held again
 on 1–2 Oct.** Both features were committed, gated (tests, typecheck, build)
@@ -137,8 +137,8 @@ AC/
     ├── tools/import-masters/      the ETL: masters, geography, transactions, apply-snapshot
     ├── tools/deploy/
     └── apps/
-        ├── api/                   NestJS + Fastify + Drizzle (941 tests)
-        └── web/                   React 19 + Vite + Tailwind (653 tests)
+        ├── api/                   NestJS + Fastify + Drizzle (974 tests)
+        └── web/                   React 19 + Vite + Tailwind (687 tests)
 ```
 
 **The legacy .NET solution is no longer in this repository** (5 Oct 2026, §5aa):
@@ -219,15 +219,15 @@ code. `Get-NetTCPConnection -LocalPort 3000 -State Listen` finds the owner.
 
 ## 4. Repository state
 
-Branch **`main`**. All **1841 Node tests pass** (157 contracts + 90 domain +
-941 API + 653 web) — see §3 for exactly what was run. There is no .NET suite in
+Branch **`main`**. All **1908 Node tests pass** (157 contracts + 90 domain +
+974 API + 687 web) — see §3 for exactly what was run. There is no .NET suite in
 this tree any more (§3).
 
-The Node suite was measured on the `8838be2b` code commit (6 Oct 2026). Anything
+The Node suite was measured on the `3b805cec` code commit (9 Oct 2026). Anything
 after it on `main` is documentation — a handoff always commits after its own
 measurement, so the newest hash is never the one the numbers were taken at, and
 naming it here would be a lie that looks precise. **Push state:** `origin/main`
-was `8838be2b` at the end of the 6 Oct session (pushed, then deployed);
+was a documentation commit at the end of the 9 Oct session, with `3b805cec` pushed and deployed;
 `git rev-parse HEAD origin/main` says whether that has since changed.
 
 - `b8d03922` completed the broken commit `6cefc164` (see §5).
@@ -300,6 +300,14 @@ was `8838be2b` at the end of the 6 Oct session (pushed, then deployed);
   bills and the image (**migration 0023**); `ff748958`, `7fd8135b`, `14cff4d8`
   the Purchase Invoice location / billing / shipping layout; `8838be2b` the
   desktop WhatsApp route. All pushed and live.
+- **7–9 Oct 2026, fifteen code commits (§5ac):** `66ab9a40` Purchase Order location row; `c6703ec2` Modal
+  focus (Units lag); `30c23037` the second scrollbar; `5287d810`, `12a031cf`, `80a30d22`,
+  `04c586eb` the Item form's matching-items template; `d9c7b5e4` shipping read from the
+  location; `4726d0a4` payout list held to the header's site; `22054a6e` calendar popup,
+  sticky payout summary, report grid; `9464247b` form buttons into the title bar;
+  `3b182071` + `a0b50261` Confirm payout (**migration 0024**); `97c5de0c` image copy, invoice
+  Paid/Part/Unpaid, bills on Payments; `f94826f7` Client Master and Income (**migration
+  0025**); `3b805cec` the Balance Sheet. Documentation: `f0932edc` doc 19 Q17, `a310b543` Q18.
 - The tree is clean after the handoff commit; see the push note above.
 - `gitleaks` in CI will fail on the push, correctly — see §8. The `sa`
   credential is in the HISTORY, not the working tree. Rotation is the fix.
@@ -1666,13 +1674,16 @@ the screens whose UI is gated on `usePermission`.
 |---|---|
 | **`Migration-Assessment/db-extract/` is empty** | The 3 read-only scripts have never been run. Until then the orphan volume across ~62 unconstrained FK columns is unknown, and no schema can be *finalised*. **This is the binding constraint.** No longer a day in SSMS — it is now one command, `tools/run-db-extract.ps1` (§5c). It still needs the rotated credential. **As of §5o this blocker now stops ordinary feature work, not just schema work:** Supplier's Excel import resolves State and City by NAME against tables that have never been extracted, so it cannot be written until the census runs. **Update, 15 Sep 2026 (§5v): PARTLY CLEARED.** A geography census HAS run against the client's live database — all thirteen geography references, ZERO orphans — and `Countries`, `States`, `Cities` and `SiteAddress` are ported and populated, so the Supplier Excel import is no longer blocked on this. The transactional import also ran and reported zero dangling references. **What still stands:** `db-extract/` holds only its README, so the three-script extract (schema, DMV performance, full census) has never been run and its output is not in the repository. |
 | **14 business-rule questions unanswered** | 2-4 week lead time — the longest pole. The money calculator cannot start without them. They are now written to be sent: `Migration-Assessment/19-Business-Decisions-Required.md` (§5c). **The clock does not start until someone sends it.** |
-| **Credentials not rotated** | The `sa` account on `srv1925876.hstgr.cloud` is still live, and its password is still in git history in earlier commits of `appsettings.json`. Removing it from the file did not remove it from history. `gitleaks` in CI will fail on the first push, correctly. **Rotation is the fix, not a history rewrite.** |
+| **Credentials not rotated** | **Update, 8 Oct 2026: the SQL Server this account belonged to was removed from the VPS, so the `sa` password protects nothing there now; it is still in git history, and the VPS root password (pasted into a transcript earlier) is still worth rotating.** The original note: the `sa` account on `srv1925876.hstgr.cloud` was live, and its password is still in git history in earlier commits of `appsettings.json`. Removing it from the file did not remove it from history. `gitleaks` in CI will fail on the first push, correctly. **Rotation is the fix, not a history rewrite.** |
 | **Which of 3 jQuery money calculators is correct** | **No longer blocks building — it now decides what happens to invoices ALREADY ISSUED.** Doc 19 Question 2. All three screens are built (§5r) and only the purchase invoice was ever genuinely behind B-2; the arithmetic they use is `invoice-total.ts`, derived by running the source rather than reading it. What is unanswered is historical remediation. The Items screen still stores the GST amount as entered rather than deriving it, precisely so this stays an open question rather than being answered by implication. |
 | **Is the whole-rupee rounding deliberate?** | **New — doc 19 Question 1a** (§5r). Every invoice total the system has ever produced is a whole rupee, and exactly 50 paise rounds **DOWN**, in the counterparty's favour. It was in no specification and no assessment; it was found by running the calculator. Reproduced deliberately and defaulted on, because matching history is the safer default — but it should be a choice, and it affects issued documents. |
 | **Record over the list, or beside it** | Doc 19 **Question 12**. Both layouts are built and switchable (§5m), so this is answerable on the real screens in two minutes — it needs a person, not a session. It gets dearer every week: today the answer is one shared change, and every new screen built against the wrong one is another to re-check. **When it comes back, delete the loser and the `RecordLayoutPicker`.** |
 | **Delivery quantities are now checked ACROSS both address panels** | **New — §5s.** The legacy screen keeps one accumulator per panel and compares each to the ordered quantity on its own, so an order for 100 saves with 100 allocated to site addresses and 100 more to group addresses — 200 units of deliveries against 100 ordered, no warning. The port sums them and refuses. It is the rule the source's own error message states, applied to the number it was always about, but it **refuses saves the old screen accepted** and only ever bites when both panels are used on one order. It cannot change an existing order, because nothing recomputes an order that is not being edited. Needs a decision, not code. |
 | **Supplier edit/delete/APPROVE permission change** | The port guards `supplier.edit` and `supplier.delete`; the source guards neither (§5b decision 1). Whoever edits suppliers today needs those boxes ticked before cutover, or they lose the ability. **§5p adds a third right to the same question: `supplier.approve` exists in the port and NO production user holds it**, because supplier approval only ever happened through the source’s single `Dashboard` permission. Until an administrator grants it, the Suppliers queue is read-only on the live database. All three are doc 19 Question 11. Needs a decision, not code. |
 | **How stock is counted** | **New — doc 19 Question 16** (§5z). The client asked on 1 Oct 2026 for stock in, issue to an agency at a site, and return. Three answers decide the design and must come first: stock per site or a central godown; stock in from the Inward Challan or the Purchase Invoice (never both — that counts goods twice); start from an opening-stock entry or from the 180 old challans. The Agency Master it issues to is built and live. |
+| **Confirm payout: the client's answers** | **New — doc 19 Question 17** (§5ac). Built and live on the owner's description: one step, an administrator with `payout.approve` confirms, a confirmed list is reversed rather than edited, an overpayment stays as a MINUS balance (the client said so on 8 Oct). Still unanswered: TDS at payment, advances before a bill exists, whether one payment spans companies, and whether receipts should work the same way. |
+| **Income and the Balance Sheet: the client's answers** | **New — doc 19 Question 18** (§5ac). Built and live. What decides what comes next: is the expense what was PAID or what was BILLED (both are shown); are labour, salary and petty cash recorded (the biggest piece not built); one company per project; a fixed list of deduction types; whether a receipt is tied to one of OUR bills; who may see it; GST; a download or picture of the sheet. |
+| **Who holds the new rights** | **New — §5ac.** Migration 0025 gave `client` to every Supplier editor and `income` to everyone holding Reports & Payments (flag for flag). `payout.approve` (Confirm / Reverse) is copied only to people who could already EDIT payout lists. Anyone else is granted them on the Permissions screen. The Balance Sheet needs BOTH `reports-payments.view` and `income.view`. |
 
 ---
 
@@ -1761,6 +1772,17 @@ the screens whose UI is gated on `usePermission`.
   extract, `npm install --omit=dev`, copy the two workspace packages over their
   symlinks, `write-env.mjs`, migrate, switch, restart, health poll, chmod walk,
   PID check, prune. The `/deploy` skill is still the authority.
+- **There is no Python on this machine** (9 Oct 2026): `python -` in a heredoc fails with the
+  Microsoft Store stub. Use `node` scripts, written with the Write tool (see above).
+- **The deploy is run from a script file** (`deploy.sh` in the session scratchpad, not in
+  the repo): push, test, build, stage, scp, install, migrate, switch, verify. **It once
+  carried on after two failing tests** and shipped; it now exits when `npm test` does
+  (`TEST_EXIT`), and the `/deploy` skill (rewritten 9 Oct) says to do the same.
+- **Run ONE test suite at a time.** Two at once (a full `npm test` beside a vitest run)
+  made six API tests time out at 60 s and killed a vitest worker outright.
+- **Browser checks:** `node ~/.claude/skills/browser-automation/browser.mjs <url> --script x.mjs`
+  from `C:/Users/PC-8/AppData/Roaming/npm`; screenshots land there. When the dev API
+  restarts the data is reseeded.
 - Node v24.15.0 locally; CI pins 22 LTS.
 - `git clone` of this repo needs `-c core.longpaths=true` — some
   `AccountManegments.Web/wwwroot` paths exceed MAX_PATH.
@@ -1806,8 +1828,12 @@ DONE     … per-site address list, site group CRUD, Pending Ledger,
          "Ledger" / "Pending Outstanding" reports; Agency Master (1-2 Oct, §5z)
          Narrow-rail sidebar; Payout List with bills and a WhatsApp image;
          compact forms and report tabs; Purchase Invoice location row (5-6 Oct, §5ab)
+         Confirm payout / Reverse; payments tied to bills; Paid/Part/Unpaid on the
+         invoice list; Payout image copy                  (7-9 Oct, §5ac)
+         Client Master, Income, site-wise Balance Sheet   (9 Oct, §5ac)
 NOW      master-detail ANSWER                <- with the business, doc 19 Q12
 BLOCKED  Stock: in, issue to agency, return  <- doc 19 Q16 parts 1-3 (§5z plan)
+WAITING  Other costs on the Balance Sheet    <- doc 19 Q18 part 2 (labour, salary, petty cash)
 NEXT     Document Layouts block editor       <- step 3 of the layout master
 NEXT     the OTHER 4 exports                 <- purchase invoice list, item history
 NEXT     Supplier Excel import               <- UNBLOCKED: States/Cities are ported
@@ -1822,7 +1848,15 @@ exists to keep.
 
 **What is left, in rough order:**
 
-00. **Payout List follow-ups, none of them asked for yet** (§5ab): the same
+000. **Balance Sheet follow-ups, waiting on doc 19 Q18 (§5ac):** other costs (labour, salaries)
+    as a third kind of expense with an entry screen; an Excel / PDF / image of the sheet; a
+    company default per project. Do not start the first before the client answers part 2.
+    **The invoice list's Paid / Part / Unpaid and the Payments screen's bill picker have no
+    answer to wait for** — both are built; the legacy `purchase_invoices.payment_status` and
+    `is_paid_out` columns are still never written and the list does not read them.
+
+00. **(The Purchase Order's Location / Billing / Shipping row was done on 7 Oct, §5ac.)**
+    **Payout List follow-ups, none of them asked for yet** (§5ab): the same
     compact Location / Billing / Shipping row on the **Purchase Order** (it still
     has the card and the shipping dropdown), and a real phone test of the share
     sheet, which no headless browser can do. A third: the Payout List is a PLAN —
@@ -4815,7 +4849,7 @@ The WhatsApp button went; `message.ts`' `whatsAppUrl` and its tests were left in
 - **The deploy block shipped after two failing tests.** The script printed `test exit 1` and carried on
   because nothing checked it. The failures were the known Purchase Order `itemFill` load flake (3/3 alone, and
   that code was untouched), so nothing wrong went out — but it was luck. The script now exits on a non-zero
-  test result; the repo's `/deploy` skill still has no such gate (§10).
+  test result; the `/deploy` skill now says to exit on a failing test (§10).
 - **A mock that does not match the schema fails silently.** A test's `/suppliers` fixture lacked fields of
   `supplierRowSchema`, the response failed to parse, the option list stayed empty and the test timed out on
   "unable to find option" — nothing said "schema". Fixtures for a list the app parses need every field.

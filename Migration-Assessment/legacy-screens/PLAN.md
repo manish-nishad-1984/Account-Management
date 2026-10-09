@@ -521,8 +521,12 @@ DONE     PO delivery addresses + T&C editor              (9 Sep 2026, §5s)
          Agency Master: agencies, work types, contacts    (2 Oct 2026, §5z)
          Narrow-rail sidebar; Payout List (bills, WhatsApp image);
          compact forms/reports; Purchase Invoice location row (5-6 Oct 2026, §5ab)
+         Confirm payout / Reverse, payments tied to bills, Paid/Part/Unpaid on the
+         invoice list, Payout image copy (7-9 Oct 2026, §5ac)
+         Client Master, Income, site-wise Balance Sheet      (9 Oct 2026, §5ac)
 NOW      master-detail ANSWER                            <- with the business now, doc 19 Q12
 BLOCKED  Stock: in, issue to agency, return              <- doc 19 Q16 parts 1-3 first (§5z has the plan)
+WAITING  Other costs on the Balance Sheet (labour, salary) <- doc 19 Q18 part 2: does the client want them
 NEXT     Document Layouts block editor                   <- step 3 of the layout master, §5v
 NEXT     the OTHER 4 exports                             <- see below; purchase invoice list, item history
 NEXT     Supplier Excel import                           <- UNBLOCKED: States/Cities are ported (§5v)

@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: Deploy the Node/React app to the Hostinger VPS (srv1925876.hstgr.cloud), which serves it at https://avfast.in with the live ASP.NET app kept on https://www.avfast.in and a spare preview on port 8090. Builds, ships, migrates, restarts and health-checks. Also rolls back to the previous release, seeds real master data, and reports status. Use whenever the user asks to deploy, ship, release, push to the server, roll back, seed the server database, or check what is deployed.
+description: Deploy the Node/React app to the Hostinger VPS (srv1925876.hstgr.cloud), which serves it at https://avfast.in (www.avfast.in and api.avfast.in redirect there) with a spare preview on port 8090. Builds, ships, migrates, restarts and health-checks. Also rolls back to the previous release, seeds real master data, and reports status. Use whenever the user asks to deploy, ship, release, push to the server, roll back, seed the server database, or check what is deployed.
 ---
 
 # Deploy Account Book to the VPS
@@ -10,39 +10,37 @@ Ships the Node/React app to **89.116.122.175**, which serves it at
 
 ## Read this before doing anything
 
-**This server also runs the live business.** Nothing in this procedure may touch:
+**The old ASP.NET app and its SQL Server were removed from this server on 8 Oct
+2026, at the user's instruction.** Ports 8080, 7251 and 1433 are gone (checked
+9 Oct: only nginx on 80 / 443 / 8090 and the API on 127.0.0.1:3101 listen), the
+`avfast-web` unit is inactive, and `/opt` holds `accountbook-next` and
+`microsoft`. Older sections of `SESSION-HANDOFF.md` (§5e and others) still describe
+the old app and its "leave alone" ports; **they are history.** Do not go looking for
+8080 / 7251 / 1433 and do not report their absence as a fault.
 
-| Leave alone | What it is |
-|---|---|
-| `127.0.0.1:8080` | `dotnet /opt/avfast/web` — the live MVC app |
-| `127.0.0.1:7251` | `dotnet /opt/avfast/api` — the live API |
-| `0.0.0.0:1433` | SQL Server, the production database |
-| `/etc/letsencrypt/live/avfast.in/` | the certificate all three hostnames share |
+**The live data is a test copy** (user, 8 Oct 2026) until cutover, so a deploy is
+not putting a real business at risk. That is not a reason to be careless: the same
+procedure will be used on the real data.
 
-The app is **masters only**. Purchase orders, invoices, inward and payments are
-not migrated. Anyone who needs those wants **www.avfast.in**.
+Still shared and still not yours to touch: `/etc/letsencrypt/live/avfast.in/`, the
+certificate the hostnames share.
 
 ## How the hostnames map
 
-One nginx file, `/etc/nginx/sites-enabled/avfast.conf`, owns all three:
+One nginx file, `/etc/nginx/sites-enabled/avfast.conf`, owns them:
 
 | Hostname | Goes to |
 |---|---|
-| `avfast.in` | **the new React app** — static build + `/api/` → `127.0.0.1:3101` |
-| `www.avfast.in` | the live ASP.NET MVC app → `127.0.0.1:8080`. `default_server`, so any other hostname pointing here lands where it always did. |
-| `api.avfast.in` | the live ASP.NET API → `127.0.0.1:7251` |
-
-The user asked for the root to be the new app (2026-09-03) knowing it is masters
-only. The live system was given `www` because that hostname was **already in DNS
-and already on the certificate** — no record to add, nothing to re-issue.
+| `avfast.in` | **the React app** — static build + `/api/` → `127.0.0.1:3101`. `/` is sent with `Cache-Control: no-cache` and `/assets/` with long caching, so a new release is seen on the next load (a stale bundle once made fixed screens look unfixed). |
+| `www.avfast.in`, `api.avfast.in` | **301 → https://avfast.in/** |
 
 There is **no wildcard DNS** and no DNS tool on the MCP connection, so a brand
-new hostname (`next.avfast.in`, say) needs the user to add an A record in hPanel
-by hand. Prefer a name that already resolves.
+new hostname needs the user to add an A record in hPanel by hand. Prefer a name
+that already resolves.
 
 Every edit to `avfast.conf` is backed up first to `/root/avfast.conf.bak.<stamp>`,
 and `nginx -t` must pass before `reload`. If it fails, restore the backup — never
-leave that file invalid, it is the live business's front door.
+leave that file invalid, it is the site's front door.
 
 **`client_max_body_size` must be at least `12m` on the `/api/` location.** nginx
 defaults to **1m**, and it rejects a larger body itself, with its own 413 HTML —
@@ -123,6 +121,25 @@ cd node && npm test && npm run build
 ```
 
 If anything fails, stop and report. Do not deploy over a failing suite.
+
+**Make the script stop, do not rely on reading the output.** On 9 Oct 2026 a deploy
+script printed `test exit 1` and carried on to ship, because nothing tested the
+exit code. Capture it and exit:
+
+```bash
+npm test > "$SP/npmtest.txt" 2>&1; TEST_EXIT=$?
+sed 's/\x1b\[[0-9;]*m//g' "$SP/npmtest.txt" | grep -E "Tests +[0-9]+|FAIL"
+if [ "$TEST_EXIT" -ne 0 ]; then echo "TESTS FAILED - NOT DEPLOYING"; exit 1; fi
+```
+
+Two load flakes are known (Purchase Order `PurchaseOrderFormDialog.itemFill` in web,
+and API repository tests that time out at 60 s when another suite is running). If one
+fails, re-run THAT file alone; if it passes alone and nothing near it changed, run the
+whole suite again before shipping. **Run one suite at a time.**
+
+**Write the deploy as a script file** (Write tool, run with `bash file.sh` in the
+background) rather than a long `node -e '...'` or heredoc: apostrophes in the body
+break bash with an `unexpected EOF` error that names the wrong line.
 
 ### 2. Stage the release
 
@@ -342,12 +359,12 @@ sudo -u www-data test -r /opt/accountbook-next/current/web/index.html   # must p
 sudo -u www-data test -r /opt/accountbook-next/.dbpass                  # must FAIL
 ```
 
-### 8. Verify from outside, and that production survived
+### 8. Verify from outside
 
 ```bash
 curl -o /dev/null -w '%{http_code}\n' https://avfast.in/
 curl https://avfast.in/api/v1/health
-curl -o /dev/null -w '%{http_code}\n' https://www.avfast.in/
+curl -o /dev/null -w '%{http_code} %{redirect_url}\n' https://www.avfast.in/   # 301 -> https://avfast.in/
 curl -o /dev/null -w '%{http_code}\n' http://89.116.122.175:8090/
 ```
 
@@ -361,19 +378,6 @@ curl -s https://avfast.in/ | grep -oE 'assets/index-[A-Za-z0-9_-]+\.(js|css)'
 
 Compare it to `apps/web/dist/assets/`. If they differ, the switch did not take
 and everything below is measuring the old build.
-
-**`https://api.avfast.in/` answers 404 at its root, and always has.** That is the
-dotnet API's own behaviour, not a symptom — `curl http://127.0.0.1:7251/` gives
-the same 404 with this procedure nowhere near it. Do not report it as breakage
-and do not "fix" it.
-
-Check 8080, 7251 and 1433 are all still listening — **and that their PIDs are the
-ones they had before the deploy**, which is what actually proves nothing was
-restarted:
-
-```bash
-ss -lntp | awk '/:8080|:7251|:1433/ {print $4, $6}'
-```
 
 3101 must **not** be reachable from outside. Report the URL:
 **https://avfast.in/**
@@ -421,15 +425,15 @@ The point of the run is the report, and these are the lines that have mattered:
 - **The migration summary** verbatim — `N applied, N adopted, N skipped`.
   `0 applied` is correct for a UI-only release and wrong after shipping a new
   migration; say which case this was.
-- **That the live business survived**: `www.avfast.in` 200, and 8080 / 7251 /
-  1433 on the same PIDs as before
+- **That the site is whole**: `avfast.in` 200 with the new bundle hash, `www.avfast.in` redirecting, `.env` at 600, uploads not readable by `www-data`
 - **What was actually seen in the browser**, not just what was deployed
 - **Anything that went wrong on the way**, including anything self-inflicted.
   A deploy report that hides a needless rollback is worse than no report: the
   next person repeats it.
 
-**Raise the SQL Server exposure every single time** (see below). It is not part
-of the deploy and it outranks the deploy.
+Raise anything still open on the server (the VPS root password, `ufw` still inactive
+unless that has changed) only if it is relevant; the SQL Server exposure that used to
+be raised every time is gone with the server.
 
 ---
 
@@ -451,8 +455,7 @@ way, so check before relying on it.
 
 Report, changing nothing: `systemctl is-active accountbook-next`,
 `readlink /opt/accountbook-next/current`, what is listening on 3101/8090, the
-health endpoint, a real login, row counts in `accountbook_next`, and that
-8080/7251/1433 are still up.
+health endpoint, a real login, and row counts in `accountbook_next`.
 
 ---
 
@@ -487,18 +490,14 @@ refuses orphans and reports them; see `node/tools/import-masters/README.md`.
 
 ## Known outstanding problems
 
-**The live MVC app is broken, and has been since 28 Aug 2026.** Every Razor view
-throws `System.BadImageFormatException: Could not load file or assembly
-'<Unknown>'. Index not found.`, so every page 302-loops to
-`/Authentication/UserLogin?ReturnUrl=%2FHome%2FError`. Static files still serve.
-Cause: 70 files in `/opt/avfast/web` have an mtime of **26 Aug 14:51** while the
-process started at **26 Aug 12:47** — a deployment replaced the assemblies under
-the running process. `systemctl restart avfast-web` is very likely the whole fix,
-but it is the user's production service: **ask before restarting it.** This is
-not caused by anything in this procedure — it reproduces against
-`127.0.0.1:8080` directly, with the original `Host: avfast.in`.
+**The old MVC app and SQL Server no longer exist on this server** (removed 8 Oct
+2026), so the earlier notes about the broken MVC app and the exposed port 1433 are
+closed. What is still open: the VPS root password was pasted into a session
+transcript earlier and is worth rotating (the deploy key makes it unnecessary),
+and `ufw` was inactive when last checked. The `sa` password is still in git
+history, for a server that is gone.
 
-**SQL Server listens on `0.0.0.0:1433`** — reachable from the whole internet,
-while its sibling ports 1431 and 1434 are correctly on loopback. The `sa`
-password is also in public git history. `ufw` is inactive. Raise this every
-time; it is more urgent than any deployment.
+**Do not run the master importer against the live database without reading
+`SESSION-HANDOFF.md` §5w first.** It truncates and reloads the tables it manages,
+and the live database now holds data the importer knows nothing about (payout
+lists, payments tied to bills, clients, income).
