@@ -59,6 +59,9 @@ export class ItemSheetService {
       ITEM_SHEET_SHEET_NAME,
       ITEM_SHEET_COLUMNS.map((column) => ({ header: column.header, width: column.width })),
       cells,
+      // Price, GST % and GST amount are figures; the HSN code (column 5) stays
+      // text, because a code can start with a zero.
+      { 2: "#,##0.00", 3: "0.00", 4: "#,##0.00" },
     );
   }
 

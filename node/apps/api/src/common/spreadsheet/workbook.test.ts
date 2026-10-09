@@ -129,4 +129,43 @@ describe("writeWorkbook", () => {
 
     expect(sheet.rows[0]!.cells[1]).toBe("395.00");
   });
+
+  /**
+   * A column named in `numeric` is written as a NUMBER (client, 9 Oct 2026), so
+   * Excel can sum and sort it. Round-tripping still works: `readWorkbook` reads
+   * a number back with `String`, which gives the same decimal that was written.
+   */
+  describe("with a numeric column", () => {
+    const COLS = [
+      { header: "Item", width: 20 },
+      { header: "Price", width: 12 },
+      { header: "HSN", width: 12 },
+    ];
+
+    it("writes the figure as a number with the format asked for", async () => {
+      const bytes = await writeWorkbook("Items", COLS, [["Item", "1,234.56", "0123"]], { 1: "#,##0.00" });
+
+      const ExcelJS = (await import("exceljs")).default;
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(bytes as never);
+      const price = workbook.worksheets[0]!.getRow(2).getCell(2);
+      expect(price.value).toBe(1234.56);
+      expect(price.numFmt).toBe("#,##0.00");
+
+      // The unlisted column stays text, so a leading zero survives.
+      expect(workbook.worksheets[0]!.getRow(2).getCell(3).value).toBe("0123");
+    });
+
+    it("leaves an empty cell in a numeric column empty", async () => {
+      const bytes = await writeWorkbook("Items", COLS, [["Item", "", ""]], { 1: "0.00" });
+      const sheet = await readWorkbook(bytes, 100);
+      expect(sheet.rows[0]?.cells[1] ?? "").toBe("");
+    });
+
+    it("reads back the same decimal, so download-edit-upload still works", async () => {
+      const bytes = await writeWorkbook("Items", COLS, [["Item", "1234.56", ""]], { 1: "#,##0.00" });
+      const sheet = await readWorkbook(bytes, 100);
+      expect(sheet.rows[0]!.cells[1]).toBe("1234.56");
+    });
+  });
 });

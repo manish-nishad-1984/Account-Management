@@ -27,17 +27,23 @@ const balancesFilter = (overrides: Partial<BalancesQuery> = {}): BalancesQuery =
   ...overrides,
 });
 
-/** The sheet read back as a grid of strings, which is how a person reads it. */
-async function readBack(bytes: Buffer): Promise<string[][]> {
+/** The sheet read back as a grid. Amounts are real numbers in the file, so they stay numbers here. */
+async function readBack(bytes: Buffer): Promise<(string | number)[][]> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(bytes as never);
   const sheet = workbook.worksheets[0]!;
 
-  const grid: string[][] = [];
+  const grid: (string | number)[][] = [];
   for (let rowNumber = 1; rowNumber <= sheet.rowCount; rowNumber += 1) {
-    const cells: string[] = [];
+    const cells: (string | number)[] = [];
     sheet.getRow(rowNumber).eachCell({ includeEmpty: true }, (cell) => {
-      cells.push(cell.value === null || cell.value === undefined ? "" : String(cell.value));
+      cells.push(
+        typeof cell.value === "number"
+          ? cell.value
+          : cell.value === null || cell.value === undefined
+            ? ""
+            : String(cell.value),
+      );
     });
     grid.push(cells);
   }
@@ -128,9 +134,9 @@ describe("ReportExportService (real PostgreSQL)", () => {
 
       expect(first[2]).toBe("AL BURHAN PIPES");
       expect(first[3]).toBe("Akwada Lake Front");
-      expect(first[5]).toBe("1,00,000.00"); // Credit
+      expect(first[5]).toBe(100000); // Credit
       expect(first[6]).toBe(""); // Debit
-      expect(first[7]).toBe("1,00,000.00"); // Balance
+      expect(first[7]).toBe(100000); // Balance
     });
 
     /**
@@ -148,12 +154,12 @@ describe("ReportExportService (real PostgreSQL)", () => {
       const grid = await readBack(await exports.ledgerWorkbook(filter()));
       const total = grid.find((row) => row[0] === "Total")!;
 
-      expect(total[5]).toBe("1,00,000.00");
-      expect(total[6]).toBe("10,000.00");
-      expect(total[7]).toBe("90,000.00");
+      expect(total[5]).toBe(100000);
+      expect(total[6]).toBe(10000);
+      expect(total[7]).toBe(90000);
 
       // What the legacy footer would have written: the return ADDED.
-      expect(total[7]).not.toBe("1,10,000.00");
+      expect(total[7]).not.toBe(110000);
     });
 
     it("names the filters in a caption block, resolved from the ids rather than the request", async () => {
@@ -187,7 +193,7 @@ describe("ReportExportService (real PostgreSQL)", () => {
 
       const grid = await readBack(await exports.ledgerWorkbook(filter()));
       const total = grid.find((row) => row[0] === "Total")!;
-      expect(total[7]).toBe("60,000.00");
+      expect(total[7]).toBe(60000);
     });
   });
 
@@ -210,7 +216,7 @@ describe("ReportExportService (real PostgreSQL)", () => {
       expect(grid.filter((row) => row[0] === "Document")).toHaveLength(2);
 
       const totals = grid.filter((row) => row[0] === "Total").map((row) => row[7]);
-      expect(totals).toEqual(["1,00,000.00", "50,000.00"]);
+      expect(totals).toEqual([100000, 50000]);
     });
 
     it("orders the sections by party name", async () => {
@@ -248,7 +254,7 @@ describe("ReportExportService (real PostgreSQL)", () => {
       const total = grid.find((row) => row[0] === "Total")!;
 
       expect(total[7]).toBe(lastRowBalance);
-      expect(total[7]).toBe("90,000.00");
+      expect(total[7]).toBe(90000);
     });
   });
 
@@ -261,7 +267,7 @@ describe("ReportExportService (real PostgreSQL)", () => {
       expect(grid[header]).toEqual(["Site", "Supplier", "Credit", "Debit", "Net"]);
 
       const total = grid.find((row) => row[0] === "Total")!;
-      expect(total[4]).toBe("1,00,000.00");
+      expect(total[4]).toBe(100000);
     });
 
     it("heads the sales direction with the words the sales screen uses", async () => {

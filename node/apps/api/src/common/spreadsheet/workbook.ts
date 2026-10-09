@@ -178,26 +178,28 @@ export interface SheetColumnSpec {
 }
 
 /**
- * Writes one sheet of strings.
+ * Writes one sheet of strings, with the columns named in `numeric` as NUMBERS.
  *
- * Every cell is written as TEXT, including the prices.
+ * Cells are text unless their column is listed. `numeric` maps a zero-based
+ * column index to the Excel number format for it, e.g. `{ 2: "#,##0.00" }`.
+ * A listed cell holding a figure is written as a number, so Excel can sum, sort
+ * and filter it; an empty cell or anything that is not a figure stays as it was.
  *
- * That is deliberate and it is the whole reason this function exists rather
- * than passing numbers through. Money in this system is a decimal string from
- * the database to the browser and back; handing a price to a spreadsheet as a
- * number converts it to a binary double, and the file then holds the double.
- * For a catalogue that is round-tripped — download, edit, upload — that turns a
- * stored `1234.56` into whatever the double renders as, on a value the business
- * reconciles against invoices.
+ * Text used to be the rule for every column, including the prices, so that a
+ * stored `1234.56` could not turn into whatever a double renders as on a
+ * download-edit-upload round trip. The client asked for real numbers
+ * (9 Oct 2026). The risk is small: prices have two decimals, nowhere near the 15
+ * digits a double holds exactly, and `readWorkbook` reads a number back with
+ * `String`, which gives the same `1234.56` that was written.
  *
- * The visible cost is that Excel shows a green "number stored as text" marker
- * and will not sum the column. The column is a price list, not a total, and the
- * legacy sheet has no totals row either.
+ * Columns that merely LOOK numeric — an HSN code with a leading zero, a phone
+ * number — are not listed and stay text.
  */
 export async function writeWorkbook(
   sheetName: string,
   columns: SheetColumnSpec[],
   rows: string[][],
+  numeric: Record<number, string> = {},
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Account Book";
@@ -213,8 +215,18 @@ export async function writeWorkbook(
   // So the headers stay visible while someone scrolls 758 items.
   sheet.views = [{ state: "frozen", ySplit: 1 }];
 
-  for (const row of rows) {
-    sheet.addRow(row);
+  for (const cells of rows) {
+    const row = sheet.addRow(
+      cells.map((text, index) => {
+        if (numeric[index] === undefined || text.trim() === "") return text;
+        const value = Number(text.replace(/,/g, ""));
+        return Number.isFinite(value) ? value : text;
+      }),
+    );
+    for (const [index, format] of Object.entries(numeric)) {
+      const cell = row.getCell(Number(index) + 1);
+      if (typeof cell.value === "number") cell.numFmt = format;
+    }
   }
 
   const buffer = await workbook.xlsx.writeBuffer();

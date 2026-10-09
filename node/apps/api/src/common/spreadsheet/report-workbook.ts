@@ -12,13 +12,12 @@ import type { ReportSheetColumn } from "@accountmanagement/contracts";
  * have made the item export harder to read for the sake of reuse, so this is a
  * second writer over the same library rather than a more general first one.
  *
- * EVERY CELL IS STILL TEXT, for the reason `workbook.ts` gives at length: money
- * here is a decimal string from PostgreSQL to the browser and back, and handing
- * it to a spreadsheet as a number converts it to a binary double which the file
- * then holds. The legacy report sheets write real numbers, so their Total row
- * is a live SUM that Excel recalculates; ours is a value. That is a real
- * difference and it is the safe direction — a recalculated total that disagrees
- * with the API is the defect this port keeps finding, not a feature.
+ * FIGURES ARE NUMBERS (client, 9 Oct 2026). Every amount used to be written as
+ * text, which Excel flagged with a green "number stored as text" marker and
+ * would not sum, sort or filter. A cell in a right-aligned column that is a
+ * figure is now a real number with a two-decimal format; see `figureOrText`.
+ * The Total row is still the API's own value, not a live SUM: a recalculated
+ * total that disagrees with the API is the defect this port keeps finding.
  */
 
 export type ReportSheetBlock =
@@ -38,6 +37,42 @@ export type ReportSheetBlock =
 
 const DARK = "FF1F2937";
 const LIGHT = "FFE2E8F0";
+
+/** What a money cell looks like once `formatMoney` has grouped it: `-12,34,567.89`. */
+const MONEY_TEXT = /^-?\d[\d,]*(\.\d+)?$/;
+
+/** Two decimals and a thousands separator; Excel shows the grouping its locale uses. */
+const MONEY_FORMAT = "#,##0.00";
+
+/**
+ * A figure in a right-aligned column is written as a NUMBER, so Excel can sum,
+ * sort and filter it. Everything else stays text.
+ *
+ * The rows are shared with the PDF, which wants them grouped (`12,34,567.89`),
+ * so the grouping is stripped here rather than rows being built twice. Amounts
+ * have two decimals and stay far inside the 15 digits a double holds exactly, so
+ * nothing is lost. A cell that is not a figure — a label, a date, an empty
+ * cell — is returned unchanged.
+ */
+export function figureOrText(text: string, align: "left" | "right"): string | number {
+  if (align !== "right" || !MONEY_TEXT.test(text)) return text;
+  const value = Number(text.replace(/,/g, ""));
+  return Number.isFinite(value) ? value : text;
+}
+
+function writeCells(
+  sheet: ExcelJS.Worksheet,
+  columns: ReportSheetColumn[],
+  cells: string[],
+): ExcelJS.Row {
+  const row = sheet.addRow(cells.map((text, index) => figureOrText(text, columns[index]?.align ?? "left")));
+  columns.forEach((column, index) => {
+    const cell = row.getCell(index + 1);
+    cell.alignment = { horizontal: column.align };
+    if (typeof cell.value === "number") cell.numFmt = MONEY_FORMAT;
+  });
+  return row;
+}
 
 export async function writeReportWorkbook(
   sheetName: string,
@@ -77,19 +112,13 @@ export async function writeReportWorkbook(
     header.alignment = { horizontal: "center" };
 
     for (const cells of block.rows) {
-      const row = sheet.addRow(cells);
-      block.columns.forEach((column, index) => {
-        row.getCell(index + 1).alignment = { horizontal: column.align };
-      });
+      writeCells(sheet, block.columns, cells);
     }
 
     if (block.footer) {
-      const footer = sheet.addRow(block.footer);
+      const footer = writeCells(sheet, block.columns, block.footer);
       footer.font = { bold: true };
       footer.fill = { type: "pattern", pattern: "solid", fgColor: { argb: LIGHT } };
-      block.columns.forEach((column, index) => {
-        footer.getCell(index + 1).alignment = { horizontal: column.align };
-      });
     }
 
     sheet.addRow([]);
