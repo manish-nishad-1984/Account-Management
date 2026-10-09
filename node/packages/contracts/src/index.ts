@@ -29,6 +29,7 @@ export * from "./reports";
 export * from "./format";
 export * from "./report-sheets";
 export * from "./grid-preferences";
+export * from "./grid-export";
 export * from "./document-templates";
 export * from "./geography";
 export * from "./agencies";

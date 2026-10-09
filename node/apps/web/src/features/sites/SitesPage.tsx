@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { SITE_SORT_FIELDS, type SiteRow } from "@accountmanagement/contracts";
 import { Plus } from "lucide-react";
-import { DataGrid, RowActions } from "../../components/DataGrid";
+import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
+import { exportYesNo, type ExportColumn } from "../../lib/grid-export";
 import { Badge, Button, ConfirmDialog, PageHeader } from "../../components/ui";
 import { useDeleteSite, useSiteList } from "./api";
 import { SiteFormDialog } from "./SiteFormDialog";
@@ -10,6 +11,18 @@ import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
 
 const Absent = () => <span className="text-slate-300">—</span>;
+
+/** What the sheet holds, column for column — the screen's own columns, as text. */
+const EXPORT_COLUMNS: ExportColumn<SiteRow>[] = [
+  { header: "Site", width: 30, value: (row) => row.name },
+  { header: "Contact person", width: 26, value: (row) => row.contactPersonName },
+  { header: "Contact phone", width: 26, value: (row) => row.contactPersonPhoneNo },
+  { header: "Area", width: 20, value: (row) => row.area },
+  { header: "Pincode", width: 10, value: (row) => row.pincode },
+  { header: "Users", width: 8, align: "right", value: (row) => row.userCount },
+  { header: "Locations", width: 10, align: "right", value: (row) => row.locationCount },
+  { header: "Active", width: 10, value: (row) => exportYesNo(row.isActive) },
+];
 
 export function SitesPage() {
   const canAdd = usePermission("site", "add");
@@ -139,11 +152,22 @@ export function SitesPage() {
       <DataGrid<SiteRow>
         // One row above the grid (client request, 18 Sep 2026): the screen's
         // filters beside the search box and its actions at the right-hand end.
-        actions={canAdd ? (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              Add site
-            </Button>
-          ) : undefined}
+        actions={
+          <>
+            <ExportExcelButton<SiteRow>
+              resource="sites"
+              params={screen.listParams}
+              columns={EXPORT_COLUMNS}
+              sheetName="Sites"
+              fileName="Sites"
+            />
+            {canAdd && (
+              <Button icon={Plus} onClick={screen.openCreate}>
+                Add site
+              </Button>
+            )}
+          </>
+        }
         gridKey="sites"
         columns={columns}
         searchPlaceholder="Search site, area or contact"

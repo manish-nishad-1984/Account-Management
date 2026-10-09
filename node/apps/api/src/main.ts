@@ -11,7 +11,11 @@ async function bootstrap() {
 
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter(),
+    // 8 MB rather than Fastify's 1 MB, for the list screens' "Export to Excel":
+    // the browser sends up to GRID_EXPORT_MAX_ROWS rows to be turned into a
+    // file. Every other JSON body is a few KB, and attachments are multipart,
+    // which has its own limit.
+    new FastifyAdapter({ bodyLimit: 8 * 1024 * 1024 }),
     { bufferLogs: true },
   );
 

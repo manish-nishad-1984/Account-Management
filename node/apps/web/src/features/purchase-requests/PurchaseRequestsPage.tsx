@@ -5,7 +5,12 @@ import {
   type PurchaseRequestRow,
 } from "@accountmanagement/contracts";
 import { Check, Plus, Undo2 } from "lucide-react";
-import { DataGrid, RowActions } from "../../components/DataGrid";
+import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
+import {
+  exportDate,
+  exportYesNo,
+  type ExportColumn,
+} from "../../lib/grid-export";
 import {
   Badge,
   Button,
@@ -34,6 +39,20 @@ const APPROVAL_OPTIONS = [
   { value: "approved", label: "Approved" },
 ];
 
+/** What the sheet holds, column for column — the screen's own columns, as text. */
+const EXPORT_COLUMNS: ExportColumn<PurchaseRequestRow>[] = [
+  { header: "Request", width: 18, value: (row) => row.prNo },
+  { header: "Date", width: 12, value: (row) => exportDate(row.documentDate) },
+  { header: "Item", width: 32, value: (row) => row.itemLabel },
+  { header: "Description", width: 34, value: (row) => row.itemDescription },
+  { header: "Quantity", width: 12, align: "right", value: (row) => row.quantity },
+  { header: "Unit", width: 10, value: (row) => row.unitName },
+  { header: "Site", width: 22, value: (row) => row.siteName },
+  { header: "Site address", width: 34, value: (row) => row.siteAddress },
+  { header: "Approved", width: 10, value: (row) => exportYesNo(row.isApproved) },
+  { header: "Created", width: 12, value: (row) => exportDate(row.createdAt) },
+];
+
 export function PurchaseRequestsPage() {
   const canAdd = usePermission("purchase-request", "add");
   const screen = useMasterScreen<PurchaseRequestRow>({
@@ -46,9 +65,12 @@ export function PurchaseRequestsPage() {
   // The site is chosen once, in the shell header, and applies to every scoped
   // screen. This one reads the choice only to say so in its empty state.
   const scope = useSiteScope();
-  const query = usePurchaseRequestList(screen.listParams, {
+  const filterValues = {
     isApproved: approval === "all" ? undefined : approval === "approved",
-  });
+  };
+  const query = usePurchaseRequestList(screen.listParams, filterValues);
+  // The list hook adds the header's site; the export must carry it too.
+  const exportFilters = { ...filterValues, siteId: scope.siteId ?? undefined };
   const remove = useDeletePurchaseRequest();
   const setApprovalMutation = useSetApproval();
 
@@ -204,11 +226,21 @@ export function PurchaseRequestsPage() {
           />
         }
         actions={
-          canAdd && (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              New request
-            </Button>
-          )
+          <>
+            <ExportExcelButton<PurchaseRequestRow>
+              resource="purchase-requests"
+              params={screen.listParams}
+              filters={exportFilters}
+              columns={EXPORT_COLUMNS}
+              sheetName="Purchase Requests"
+              fileName="Purchase-Requests"
+            />
+            {canAdd && (
+              <Button icon={Plus} onClick={screen.openCreate}>
+                New request
+              </Button>
+            )}
+          </>
         }
         gridKey="purchase-requests"
         columns={columns}

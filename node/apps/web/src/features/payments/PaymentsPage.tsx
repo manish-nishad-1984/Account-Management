@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { PAYMENT_SORT_FIELDS, type PaymentRow } from "@accountmanagement/contracts";
 import { Plus } from "lucide-react";
-import { DataGrid, RowActions } from "../../components/DataGrid";
+import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
+import { exportAmount, exportDate, type ExportColumn } from "../../lib/grid-export";
 import { Badge, Button, ConfirmDialog, PageHeader } from "../../components/ui";
 import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
@@ -20,13 +21,29 @@ import { useDeletePayment, usePaymentList } from "./api";
 
 const Absent = () => <span className="text-slate-300">—</span>;
 
+/** What the sheet holds, column for column — the screen's own columns, as text. */
+const EXPORT_COLUMNS: ExportColumn<PaymentRow>[] = [
+  { header: "Date", width: 12, value: (row) => exportDate(row.paymentDate) },
+  { header: "Type", width: 16, value: (row) => (row.kind === "opening_balance" ? "Opening balance" : "Payment") },
+  { header: "Party", width: 30, value: (row) => row.partyName },
+  { header: "Company", width: 26, value: (row) => row.companyName },
+  { header: "Site", width: 26, value: (row) => row.siteName },
+  { header: "Location", width: 24, value: (row) => row.siteLocationName },
+  { header: "Method", width: 16, value: (row) => row.method },
+  { header: "Reference no.", width: 18, value: (row) => row.referenceNo },
+  { header: "Description", width: 36, value: (row) => row.description },
+  { header: "Amount", width: 16, align: "right", value: (row) => exportAmount(row.amount) },
+  { header: "Created", width: 12, value: (row) => exportDate(row.createdAt) },
+];
+
 export function PaymentsPage() {
   const canAdd = usePermission("reports-payments", "add");
   const [direction, setDirection] = useState<"out" | "in">("out");
   const [formOpen, setFormOpen] = useState(false);
 
   const screen = useMasterScreen<PaymentRow>({ defaultSortBy: "createdAt", defaultSortDir: "desc" });
-  const query = usePaymentList(screen.listParams, { direction });
+  const filters = { direction };
+  const query = usePaymentList(screen.listParams, filters);
   const remove = useDeletePayment();
 
   const { askDelete } = screen;
@@ -148,6 +165,14 @@ export function PaymentsPage() {
         // One row above the grid (client request, 18 Sep 2026): the screen's
         // filters beside the search box and its actions at the right-hand end.
         actions={<>
+            <ExportExcelButton<PaymentRow>
+              resource="payments"
+              params={screen.listParams}
+              filters={filters}
+              columns={EXPORT_COLUMNS}
+              sheetName={direction === "out" ? "Payments paid out" : "Payments received"}
+              fileName={direction === "out" ? "Payments-paid-out" : "Payments-received"}
+            />
             {/*
               The legacy screen has one direction per screen — PayOut on the
               report and PayIn on the sales side — with the same repeater built

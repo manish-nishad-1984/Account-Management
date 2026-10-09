@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { COMPANY_SORT_FIELDS, type CompanyRow } from "@accountmanagement/contracts";
 import { Plus } from "lucide-react";
-import { DataGrid, RowActions } from "../../components/DataGrid";
+import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
+import type { ExportColumn } from "../../lib/grid-export";
 import { Button, ConfirmDialog, PageHeader } from "../../components/ui";
 import { useCompanyList, useDeleteCompany } from "./api";
 import { CompanyFormDialog } from "./CompanyFormDialog";
@@ -11,6 +12,18 @@ import { useMasterScreen } from "../../lib/use-master-screen";
 
 /** Renders a value that the source data is allowed to be missing, without lying. */
 const Absent = () => <span className="text-slate-300">—</span>;
+
+/** What the sheet holds, column for column — the screen's own columns, as text. */
+const EXPORT_COLUMNS: ExportColumn<CompanyRow>[] = [
+  { header: "Company", width: 34, value: (row) => row.name },
+  { header: "PAN", width: 14, value: (row) => row.panNo },
+  { header: "GST number", width: 18, value: (row) => row.gstNo },
+  { header: "Invoice prefix", width: 14, value: (row) => row.invoicePrefix },
+  { header: "Area", width: 20, value: (row) => row.area },
+  { header: "Pincode", width: 10, value: (row) => row.pincode },
+  { header: "Bank", width: 24, value: (row) => row.bankName },
+  { header: "Users", width: 8, align: "right", value: (row) => row.userCount },
+];
 
 export function CompaniesPage() {
   const canAdd = usePermission("company", "add");
@@ -117,11 +130,22 @@ export function CompaniesPage() {
       <DataGrid<CompanyRow>
         // One row above the grid (client request, 18 Sep 2026): the screen's
         // filters beside the search box and its actions at the right-hand end.
-        actions={canAdd ? (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              Add company
-            </Button>
-          ) : undefined}
+        actions={
+          <>
+            <ExportExcelButton<CompanyRow>
+              resource="companies"
+              params={screen.listParams}
+              columns={EXPORT_COLUMNS}
+              sheetName="Companies"
+              fileName="Companies"
+            />
+            {canAdd && (
+              <Button icon={Plus} onClick={screen.openCreate}>
+                Add company
+              </Button>
+            )}
+          </>
+        }
         gridKey="companies"
         columns={columns}
         searchPlaceholder="Search name, GST or PAN"

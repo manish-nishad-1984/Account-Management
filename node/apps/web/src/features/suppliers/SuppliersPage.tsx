@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { SUPPLIER_SORT_FIELDS, type SupplierRow } from "@accountmanagement/contracts";
 import { Plus } from "lucide-react";
-import { DataGrid, RowActions } from "../../components/DataGrid";
+import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
+import { exportAmount, exportYesNo, type ExportColumn } from "../../lib/grid-export";
 import { Badge, Button, ConfirmDialog, PageHeader } from "../../components/ui";
 import { useDeleteSupplier, useSupplierList } from "./api";
 import { SupplierFormDialog } from "./SupplierFormDialog";
@@ -11,6 +12,18 @@ import { useMasterScreen } from "../../lib/use-master-screen";
 import { formatMoney } from "../../lib/format";
 
 const Absent = () => <span className="text-slate-300">—</span>;
+
+/** What the sheet holds, column for column — the screen's own columns, as text. */
+const EXPORT_COLUMNS: ExportColumn<SupplierRow>[] = [
+  { header: "Supplier", width: 34, value: (row) => row.name },
+  { header: "Email", width: 30, value: (row) => row.email },
+  { header: "Mobile", width: 14, value: (row) => row.mobile },
+  { header: "GST number", width: 18, value: (row) => row.gstNo },
+  { header: "Area", width: 20, value: (row) => row.area },
+  { header: "Pincode", width: 10, value: (row) => row.pincode },
+  { header: "Opening balance", width: 16, align: "right", value: (row) => exportAmount(row.openingBalance) },
+  { header: "Approved", width: 10, value: (row) => exportYesNo(row.isApproved) },
+];
 
 export function SuppliersPage() {
   const canAdd = usePermission("supplier", "add");
@@ -123,11 +136,22 @@ export function SuppliersPage() {
       <DataGrid<SupplierRow>
         // One row above the grid (client request, 18 Sep 2026): the screen's
         // filters beside the search box and its actions at the right-hand end.
-        actions={canAdd ? (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              Add supplier
-            </Button>
-          ) : undefined}
+        actions={
+          <>
+            <ExportExcelButton<SupplierRow>
+              resource="suppliers"
+              params={screen.listParams}
+              columns={EXPORT_COLUMNS}
+              sheetName="Suppliers"
+              fileName="Suppliers"
+            />
+            {canAdd && (
+              <Button icon={Plus} onClick={screen.openCreate}>
+                Add supplier
+              </Button>
+            )}
+          </>
+        }
         gridKey="suppliers"
         columns={columns}
         searchPlaceholder="Search name, GST, mobile or email"

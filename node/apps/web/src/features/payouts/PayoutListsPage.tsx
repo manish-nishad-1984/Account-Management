@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { PayoutListRow } from "@accountmanagement/contracts";
 import { Copy, Eye, Image as ImageIcon, Plus } from "lucide-react";
-import { DataGrid, RowActions } from "../../components/DataGrid";
+import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
+import { exportAmount, exportDate, type ExportColumn } from "../../lib/grid-export";
 import { Badge, Button, ConfirmDialog, IconButton, PageHeader } from "../../components/ui";
 import { formatDateTime, formatMoney } from "../../lib/format";
 import { usePermission } from "../../lib/permissions";
@@ -26,6 +27,20 @@ const SORTABLE = ["listDate"] as const;
 
 const Absent = () => <span className="text-slate-300">—</span>;
 
+/** What the sheet holds, column for column — the screen's own columns, as text. */
+const EXPORT_COLUMNS: ExportColumn<PayoutListRow>[] = [
+  { header: "Date", width: 12, value: (row) => exportDate(row.listDate) },
+  { header: "Title", width: 30, value: (row) => row.title },
+  { header: "Status", width: 12, value: (row) => (row.status === "confirmed" ? "Confirmed" : "Draft") },
+  { header: "Parties", width: 10, align: "right", value: (row) => row.partyCount },
+  { header: "Budget", width: 16, align: "right", value: (row) => exportAmount(row.budget) },
+  { header: "Total", width: 16, align: "right", value: (row) => exportAmount(row.total) },
+  { header: "Confirmed on", width: 12, value: (row) => exportDate(row.confirmedAt) },
+  { header: "Created on", width: 12, value: (row) => exportDate(row.createdAt) },
+  { header: "Created by", width: 22, value: (row) => row.createdByName },
+  { header: "Last updated", width: 12, value: (row) => exportDate(row.updatedAt) },
+  { header: "Updated by", width: 22, value: (row) => row.updatedByName },
+];
 
 export function PayoutListsPage() {
   const canAdd = usePermission("payout", "add");
@@ -178,11 +193,20 @@ export function PayoutListsPage() {
 
       <DataGrid<PayoutListRow>
         actions={
-          canAdd ? (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              New payout list
-            </Button>
-          ) : undefined
+          <>
+            <ExportExcelButton<PayoutListRow>
+              resource="payout-lists"
+              params={screen.listParams}
+              columns={EXPORT_COLUMNS}
+              sheetName="Payout lists"
+              fileName="Payout-lists"
+            />
+            {canAdd && (
+              <Button icon={Plus} onClick={screen.openCreate}>
+                New payout list
+              </Button>
+            )}
+          </>
         }
         gridKey="payout-lists"
         columns={columns}

@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { CLIENT_SORT_FIELDS, type ClientRow } from "@accountmanagement/contracts";
 import { Plus } from "lucide-react";
-import { DataGrid, RowActions } from "../../components/DataGrid";
+import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
+import type { ExportColumn } from "../../lib/grid-export";
 import { Button, ConfirmDialog, PageHeader } from "../../components/ui";
 import { useClientList, useDeleteClient } from "./api";
 import { ClientFormDialog } from "./ClientFormDialog";
@@ -10,6 +11,16 @@ import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
 
 const Absent = () => <span className="text-slate-300">—</span>;
+
+/** What the sheet holds, column for column — the screen's own columns, as text. */
+const EXPORT_COLUMNS: ExportColumn<ClientRow>[] = [
+  { header: "Client", width: 34, value: (row) => row.name },
+  { header: "Mobile", width: 14, value: (row) => row.mobile },
+  { header: "Email", width: 30, value: (row) => row.email },
+  { header: "GST number", width: 18, value: (row) => row.gstNo },
+  { header: "PAN", width: 14, value: (row) => row.panNo },
+  { header: "Projects", width: 40, value: (row) => row.siteNames.join(", ") },
+];
 
 /** The Client Master (9 Oct 2026): who pays us for a project. */
 export function ClientsPage() {
@@ -77,11 +88,20 @@ export function ClientsPage() {
 
       <DataGrid<ClientRow>
         actions={
-          canAdd ? (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              Add client
-            </Button>
-          ) : undefined
+          <>
+            <ExportExcelButton<ClientRow>
+              resource="clients"
+              params={screen.listParams}
+              columns={EXPORT_COLUMNS}
+              sheetName="Clients"
+              fileName="Clients"
+            />
+            {canAdd && (
+              <Button icon={Plus} onClick={screen.openCreate}>
+                Add client
+              </Button>
+            )}
+          </>
         }
         gridKey="clients"
         columns={columns}

@@ -5,7 +5,13 @@ import {
   type PurchaseOrderRow,
 } from "@accountmanagement/contracts";
 import { Check, Plus, Undo2 } from "lucide-react";
-import { DataGrid, RowActions } from "../../components/DataGrid";
+import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
+import {
+  exportAmount,
+  exportDate,
+  exportYesNo,
+  type ExportColumn,
+} from "../../lib/grid-export";
 import {
   Badge,
   Button,
@@ -50,6 +56,23 @@ const ACTIVE_OPTIONS = [
   { value: "all", label: "Active and inactive" },
 ];
 
+/** What the sheet holds, column for column — the screen's own columns, as text. */
+const EXPORT_COLUMNS: ExportColumn<PurchaseOrderRow>[] = [
+  { header: "Order", width: 18, value: (row) => row.poNo },
+  { header: "Date", width: 12, value: (row) => exportDate(row.documentDate) },
+  { header: "Buyer's ref", width: 20, value: (row) => row.buyersPurchaseNo },
+  { header: "Supplier", width: 32, value: (row) => row.supplierName },
+  { header: "Company", width: 28, value: (row) => row.companyName },
+  { header: "Site", width: 22, value: (row) => row.siteName },
+  { header: "Lines", width: 8, align: "right", value: (row) => row.lineCount },
+  { header: "Subtotal", width: 14, align: "right", value: (row) => exportAmount(row.subtotal) },
+  { header: "GST", width: 14, align: "right", value: (row) => exportAmount(row.totalGstAmount) },
+  { header: "Total", width: 16, align: "right", value: (row) => exportAmount(row.totalAmount) },
+  { header: "Approved", width: 10, value: (row) => exportYesNo(row.isApproved) },
+  { header: "Active", width: 10, value: (row) => exportYesNo(row.isActive) },
+  { header: "Created", width: 12, value: (row) => exportDate(row.createdAt) },
+];
+
 export function PurchaseOrdersPage() {
   const canAdd = usePermission("purchase-orders", "add");
   const screen = useMasterScreen<PurchaseOrderRow>({
@@ -62,10 +85,13 @@ export function PurchaseOrdersPage() {
 
   const scope = useSiteScope();
   const pdf = useDocumentPdf();
-  const query = usePurchaseOrderList(screen.listParams, {
+  const filterValues = {
     isApproved: approval === "all" ? undefined : approval === "approved",
     isActive: active === "all" ? undefined : active === "active",
-  });
+  };
+  const query = usePurchaseOrderList(screen.listParams, filterValues);
+  // The list hook adds the header's site; the export must carry it too.
+  const exportFilters = { ...filterValues, siteId: scope.siteId ?? undefined };
   const remove = useDeletePurchaseOrder();
   const setApprovalMutation = useSetApproval();
 
@@ -261,11 +287,21 @@ export function PurchaseOrdersPage() {
           </>
         }
         actions={
-          canAdd && (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              New order
-            </Button>
-          )
+          <>
+            <ExportExcelButton<PurchaseOrderRow>
+              resource="purchase-orders"
+              params={screen.listParams}
+              filters={exportFilters}
+              columns={EXPORT_COLUMNS}
+              sheetName="Purchase Orders"
+              fileName="Purchase-Orders"
+            />
+            {canAdd && (
+              <Button icon={Plus} onClick={screen.openCreate}>
+                New order
+              </Button>
+            )}
+          </>
         }
         gridKey="purchase-orders"
         columns={columns}

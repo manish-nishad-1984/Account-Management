@@ -4,7 +4,8 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { AGENCY_SORT_FIELDS, type AgencyRow } from "@accountmanagement/contracts";
 import { CheckCircle2, PauseCircle, Plus, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { DataGrid, RowActions } from "../../components/DataGrid";
+import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
+import { exportYesNo, type ExportColumn } from "../../lib/grid-export";
 import { Badge, Button, ConfirmDialog, PageHeader, SelectField } from "../../components/ui";
 import { useAgencyList, useAgencySummary, useDeleteAgency, useWorkTypes } from "./api";
 import { AgencyFormDialog } from "./AgencyFormDialog";
@@ -32,6 +33,17 @@ const STATUS_OPTIONS = [
 
 const Absent = () => <span className="text-slate-300">—</span>;
 
+/** What the sheet holds, column for column — the screen's own columns, as text. */
+const EXPORT_COLUMNS: ExportColumn<AgencyRow>[] = [
+  { header: "Agency name", width: 34, value: (row) => row.name },
+  { header: "Work nature / services", width: 40, value: (row) => row.workTypes.map((type) => type.name).join(", ") },
+  { header: "City", width: 20, value: (row) => row.cityName },
+  { header: "State", width: 20, value: (row) => row.stateName },
+  { header: "Primary contact", width: 26, value: (row) => row.primaryContactName },
+  { header: "Contact mobile", width: 16, value: (row) => row.primaryContactMobile },
+  { header: "Active", width: 10, value: (row) => exportYesNo(row.isActive) },
+];
+
 export function AgenciesPage() {
   const canAdd = usePermission("agency", "add");
   const screen = useMasterScreen<AgencyRow>({ defaultSortBy: "name" });
@@ -43,11 +55,12 @@ export function AgenciesPage() {
   const [status, setStatus] = useState<StatusFilter>("all");
   const [cityId, setCityId] = useState("");
 
-  const query = useAgencyList(screen.listParams, {
+  const listFilters = {
     workTypeId: workTypeId ? Number(workTypeId) : undefined,
     cityId: cityId ? Number(cityId) : undefined,
     isActive: status === "all" ? undefined : status === "active",
-  });
+  };
+  const query = useAgencyList(screen.listParams, listFilters);
 
   // A cursor carried across a filter change seeks into a set that no longer
   // exists, and keyset paging gives no error for that (§5j).
@@ -176,11 +189,21 @@ export function AgenciesPage() {
           </>
         }
         actions={
-          canAdd ? (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              Add agency
-            </Button>
-          ) : undefined
+          <>
+            <ExportExcelButton<AgencyRow>
+              resource="agencies"
+              params={screen.listParams}
+              filters={listFilters}
+              columns={EXPORT_COLUMNS}
+              sheetName="Agencies"
+              fileName="Agencies"
+            />
+            {canAdd && (
+              <Button icon={Plus} onClick={screen.openCreate}>
+                Add agency
+              </Button>
+            )}
+          </>
         }
         gridKey="agencies"
         columns={columns}

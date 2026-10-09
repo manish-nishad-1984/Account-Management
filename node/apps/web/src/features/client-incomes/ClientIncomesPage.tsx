@@ -2,9 +2,10 @@ import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { CLIENT_INCOME_SORT_FIELDS, type ClientIncomeRow } from "@accountmanagement/contracts";
 import { Plus } from "lucide-react";
-import { DataGrid, RowActions } from "../../components/DataGrid";
+import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
+import { exportAmount, exportDate, type ExportColumn } from "../../lib/grid-export";
 import { Button, ConfirmDialog, PageHeader, SelectField, SummaryStrip } from "../../components/ui";
-import { useSiteScope } from "../../contexts/SiteScopeContext";
+import { useScopedSiteId, useSiteScope } from "../../contexts/SiteScopeContext";
 import { formatDate, formatMoney } from "../../lib/format";
 import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
@@ -13,6 +14,21 @@ import { useClientIncomeList, useDeleteClientIncome } from "./api";
 import { ClientIncomeFormDialog } from "./ClientIncomeFormDialog";
 
 const Absent = () => <span className="text-slate-300">—</span>;
+
+/** What the sheet holds, column for column — the screen's own columns, as text. */
+const EXPORT_COLUMNS: ExportColumn<ClientIncomeRow>[] = [
+  { header: "Date", width: 12, value: (row) => exportDate(row.incomeDate) },
+  { header: "Client", width: 30, value: (row) => row.clientName },
+  { header: "Project", width: 26, value: (row) => row.siteName },
+  { header: "Received in", width: 26, value: (row) => row.companyName },
+  { header: "Amount", width: 16, align: "right", value: (row) => exportAmount(row.amount) },
+  { header: "Additional", width: 16, align: "right", value: (row) => exportAmount(row.additionalTotal) },
+  { header: "Deduction", width: 16, align: "right", value: (row) => exportAmount(row.deductionTotal) },
+  { header: "Final total", width: 16, align: "right", value: (row) => exportAmount(row.total) },
+  { header: "Method", width: 16, value: (row) => row.method },
+  { header: "Reference no.", width: 18, value: (row) => row.referenceNo },
+  { header: "Created", width: 12, value: (row) => exportDate(row.createdAt) },
+];
 
 /**
  * Income (9 Oct 2026): what a project's client has paid us, part by part.
@@ -25,6 +41,7 @@ export function ClientIncomesPage() {
   const screen = useMasterScreen<ClientIncomeRow>({ defaultSortBy: "incomeDate", defaultSortDir: "desc" });
   const [companyId, setCompanyId] = useState("");
   const companies = useCompanyOptions();
+  const { siteId } = useScopedSiteId();
   const query = useClientIncomeList(screen.listParams, { companyId });
   const remove = useDeleteClientIncome();
 
@@ -158,11 +175,22 @@ export function ClientIncomesPage() {
           />
         }
         actions={
-          canAdd ? (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              Record income
-            </Button>
-          ) : undefined
+          <>
+            {/* The list hook adds the header's project itself; the export sends the same. */}
+            <ExportExcelButton<ClientIncomeRow>
+              resource="client-incomes"
+              params={screen.listParams}
+              filters={{ companyId, siteId }}
+              columns={EXPORT_COLUMNS}
+              sheetName="Income"
+              fileName="Income"
+            />
+            {canAdd && (
+              <Button icon={Plus} onClick={screen.openCreate}>
+                Record income
+              </Button>
+            )}
+          </>
         }
         gridKey="client-incomes"
         columns={columns}

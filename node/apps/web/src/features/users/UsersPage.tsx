@@ -2,12 +2,24 @@ import { useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { USER_SORT_FIELDS, type UserRow } from "@accountmanagement/contracts";
 import { Plus } from "lucide-react";
-import { DataGrid, RowActions } from "../../components/DataGrid";
+import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
+import { exportYesNo, type ExportColumn } from "../../lib/grid-export";
 import { Badge, Button, ConfirmDialog, PageHeader } from "../../components/ui";
 import { useDeleteUser, useUserList } from "./api";
 import { UserFormDialog } from "./UserFormDialog";
 import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
+
+/** What the sheet holds, column for column — the screen's own columns, as text. */
+const EXPORT_COLUMNS: ExportColumn<UserRow>[] = [
+  { header: "Username", width: 20, value: (row) => row.userName },
+  { header: "First name", width: 18, value: (row) => row.firstName },
+  { header: "Last name", width: 18, value: (row) => row.lastName },
+  { header: "Email", width: 30, value: (row) => row.email },
+  { header: "Phone", width: 14, value: (row) => row.phoneNo },
+  { header: "Sites", width: 8, align: "right", value: (row) => row.siteCount },
+  { header: "Active", width: 10, value: (row) => exportYesNo(row.isActive) },
+];
 
 export function UsersPage() {
   const canAdd = usePermission("user", "add");
@@ -111,11 +123,20 @@ export function UsersPage() {
         // One row above the grid (client request, 18 Sep 2026): the screen's
         // filters beside the search box and its actions at the right-hand end.
         actions={
-          canAdd ? (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              Add user
-            </Button>
-          ) : undefined
+          <>
+            <ExportExcelButton<UserRow>
+              resource="users"
+              params={screen.listParams}
+              columns={EXPORT_COLUMNS}
+              sheetName="Users"
+              fileName="Users"
+            />
+            {canAdd && (
+              <Button icon={Plus} onClick={screen.openCreate}>
+                Add user
+              </Button>
+            )}
+          </>
         }
         gridKey="users"
         columns={columns}

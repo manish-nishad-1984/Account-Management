@@ -1,12 +1,25 @@
 import { Fragment, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { BalanceSheetRow } from "@accountmanagement/contracts";
+import { ExportExcelButton } from "../../components/DataGrid";
 import { Alert, PageHeader, SelectField, TextField } from "../../components/ui";
 import { useScopedSiteId, useSiteScope } from "../../contexts/SiteScopeContext";
 import { ApiError } from "../../lib/api-client";
 import { formatDate, formatMoney } from "../../lib/format";
+import { exportAmount, type ExportColumn } from "../../lib/grid-export";
 import { useCompanyOptions } from "../purchase-orders/api";
 import { useBalanceSheet, useBalanceSheetDetail, type BalanceSheetFilters } from "./api";
+
+/** The sheet the Export button writes: the rows on screen, then the Total. */
+const EXPORT_COLUMNS: ExportColumn<BalanceSheetRow>[] = [
+  { header: "Project", width: 34, value: (row) => row.siteName },
+  { header: "Income", width: 16, align: "right", value: (row) => exportAmount(row.income) },
+  { header: "Billed", width: 16, align: "right", value: (row) => exportAmount(row.billed) },
+  { header: "Paid", width: 16, align: "right", value: (row) => exportAmount(row.paid) },
+  { header: "Still to pay", width: 16, align: "right", value: (row) => exportAmount(row.stillToPay) },
+  { header: "Cash balance", width: 16, align: "right", value: (row) => exportAmount(row.cashBalance) },
+  { header: "Project result", width: 16, align: "right", value: (row) => exportAmount(row.projectResult) },
+];
 
 /**
  * The site-wise Balance Sheet (9 Oct 2026): per project, what came in and what
@@ -126,6 +139,16 @@ export function BalanceSheetPage() {
         </div>
         <div className="w-44">
           <TextField label="To" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+        </div>
+        <div className="ml-auto">
+          <ExportExcelButton<BalanceSheetRow>
+            resource="balance-sheet"
+            columns={EXPORT_COLUMNS}
+            rows={totals ? [...rows, { siteId: null, siteName: "Total", ...totals }] : rows}
+            disabled={sheet.isLoading || rows.length === 0}
+            sheetName="Balance Sheet"
+            fileName="Balance-Sheet"
+          />
         </div>
       </div>
 

@@ -6,7 +6,13 @@ import {
   type PurchaseInvoiceRow,
 } from "@accountmanagement/contracts";
 import { Check, Plus, Undo2 } from "lucide-react";
-import { DataGrid, RowActions } from "../../components/DataGrid";
+import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
+import {
+  exportAmount,
+  exportDate,
+  exportYesNo,
+  type ExportColumn,
+} from "../../lib/grid-export";
 import {
   Badge,
   Button,
@@ -55,6 +61,41 @@ const TYPE_OPTIONS = [
 const isReturn = (type: string) =>
   type === "Purchase Return" || type === "Credit Note";
 
+/** What the sheet holds, column for column — the screen's own columns, as text. */
+const EXPORT_COLUMNS: ExportColumn<PurchaseInvoiceRow>[] = [
+  { header: "Invoice", width: 20, value: (row) => row.displayNo },
+  { header: "Date", width: 12, value: (row) => exportDate(row.documentDate) },
+  { header: "Type", width: 16, value: (row) => row.invoiceType },
+  { header: "Supplier", width: 32, value: (row) => row.supplierName },
+  { header: "Company", width: 28, value: (row) => row.companyName },
+  { header: "Site", width: 22, value: (row) => row.siteName },
+  { header: "Site location", width: 22, value: (row) => row.siteLocationName },
+  { header: "Subtotal", width: 14, align: "right", value: (row) => exportAmount(row.subtotal) },
+  { header: "Total discount", width: 14, align: "right", value: (row) => exportAmount(row.totalDiscount) },
+  { header: "GST", width: 14, align: "right", value: (row) => exportAmount(row.totalGstAmount) },
+  { header: "TDS", width: 12, align: "right", value: (row) => exportAmount(row.tds) },
+  { header: "Round off", width: 12, align: "right", value: (row) => exportAmount(row.roundOff) },
+  { header: "Total", width: 16, align: "right", value: (row) => exportAmount(row.totalAmount) },
+  { header: "Pending amount", width: 16, align: "right", value: (row) => exportAmount(row.pendingAmount) },
+  {
+    header: "Payment",
+    width: 12,
+    value: (row) =>
+      row.settlement === "paid"
+        ? "Paid"
+        : row.settlement === "part"
+          ? "Part paid"
+          : row.settlement === "unpaid"
+            ? "Unpaid"
+            : "",
+  },
+  { header: "Payment status", width: 18, value: (row) => row.paymentStatus },
+  { header: "Approved", width: 10, value: (row) => exportYesNo(row.isApproved) },
+  { header: "Paid out", width: 10, value: (row) => exportYesNo(row.isPaidOut) },
+  { header: "Lines", width: 8, align: "right", value: (row) => row.lineCount },
+  { header: "Created", width: 12, value: (row) => exportDate(row.createdAt) },
+];
+
 export function PurchaseInvoicesPage() {
   const canAdd = usePermission("purchase-invoice", "add");
   const screen = useMasterScreen<PurchaseInvoiceRow>({
@@ -72,11 +113,14 @@ export function PurchaseInvoicesPage() {
   const scope = useSiteScope();
   const pdf = useDocumentPdf();
   const companies = useCompanyOptions();
-  const query = usePurchaseInvoiceList(screen.listParams, {
+  const filterValues = {
     isApproved: approval === "all" ? undefined : approval === "approved",
     invoiceType: invoiceType === "" ? undefined : invoiceType,
     companyId: companyId === "" ? undefined : companyId,
-  });
+  };
+  const query = usePurchaseInvoiceList(screen.listParams, filterValues);
+  // The list hook adds the header's site; the export must carry it too.
+  const exportFilters = { ...filterValues, siteId: scope.siteId ?? undefined };
   const remove = useDeletePurchaseInvoice();
   const setApprovalMutation = useSetApproval();
 
@@ -357,11 +401,21 @@ export function PurchaseInvoicesPage() {
           </>
         }
         actions={
-          canAdd && (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              New invoice
-            </Button>
-          )
+          <>
+            <ExportExcelButton<PurchaseInvoiceRow>
+              resource="purchase-invoices"
+              params={screen.listParams}
+              filters={exportFilters}
+              columns={EXPORT_COLUMNS}
+              sheetName="Purchase Invoices"
+              fileName="Purchase-Invoices"
+            />
+            {canAdd && (
+              <Button icon={Plus} onClick={screen.openCreate}>
+                New invoice
+              </Button>
+            )}
+          </>
         }
         gridKey="purchase-invoices"
         columns={columns}

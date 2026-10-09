@@ -6,12 +6,22 @@ import {
   type SiteLocationRow,
 } from "@accountmanagement/contracts";
 import { Plus } from "lucide-react";
-import { DataGrid, RowActions } from "../../components/DataGrid";
+import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
+import type { ExportColumn } from "../../lib/grid-export";
 import { Button, ConfirmDialog, PageHeader } from "../../components/ui";
 import { useDeleteSiteLocations, useSiteLocationList } from "./api";
 import { SiteLocationFormDialog } from "./SiteLocationFormDialog";
 import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
+
+/** What the sheet holds, column for column — the screen's own columns, as text. */
+const EXPORT_COLUMNS: ExportColumn<SiteLocationRow>[] = [
+  { header: "Site", width: 30, value: (row) => row.siteName },
+  { header: "Locations", width: 10, align: "right", value: (row) => row.locationCount },
+  { header: "With address", width: 14, align: "right", value: (row) => row.addressCount },
+  // The list carries only the first few names; the count above is the full one.
+  { header: "Location names", width: 50, value: (row) => row.locationNames.join(", ") },
+];
 
 /**
  * Site Location — the screen that was Site Groups, renamed and reshaped by the
@@ -117,11 +127,20 @@ export function SiteLocationsPage() {
         // One row above the grid (client request, 18 Sep 2026): the screen's
         // filters beside the search box and its actions at the right-hand end.
         actions={
-          canAdd ? (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              Add site location
-            </Button>
-          ) : undefined
+          <>
+            <ExportExcelButton<SiteLocationRow>
+              resource="site-locations"
+              params={screen.listParams}
+              columns={EXPORT_COLUMNS}
+              sheetName="Site locations"
+              fileName="Site-Locations"
+            />
+            {canAdd && (
+              <Button icon={Plus} onClick={screen.openCreate}>
+                Add site location
+              </Button>
+            )}
+          </>
         }
         gridKey="site-locations"
         columns={columns}

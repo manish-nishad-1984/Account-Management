@@ -4,10 +4,12 @@ import {
   RIGHT_COLUMNS,
   RIGHT_LABELS,
   type FormPermission,
+  type FormPermissionRow,
   type RightColumn,
   type UserRow,
 } from "@accountmanagement/contracts";
 import { Save, ShieldCheck } from "lucide-react";
+import { ExportExcelButton } from "../../components/DataGrid";
 import {
   Alert,
   Badge,
@@ -19,6 +21,7 @@ import {
 } from "../../components/ui";
 import { CONTROL_BASE, ringFor } from "../../components/ui/fields";
 import { ApiError } from "../../lib/api-client";
+import { exportYesNo, type ExportColumn } from "../../lib/grid-export";
 import { usePermission } from "../../lib/permissions";
 import { useFitHeight } from "../../lib/use-fit-height";
 import { useSaveUserPermissions, useUserList, useUserPermissions } from "./api";
@@ -61,6 +64,21 @@ export function PermissionsPage() {
   });
   const matrix = useUserPermissions(selectedUser?.id ?? null);
   const save = useSaveUserPermissions();
+
+  // The grid as the person sees it, ticks they have not saved yet included.
+  const exportColumns = useMemo<ExportColumn<FormPermissionRow>[]>(
+    () => [
+      { header: "Screen", width: 30, value: (row) => row.formName },
+      { header: "Group", width: 22, value: (row) => row.formGroup },
+      { header: "Permission", width: 26, value: (row) => `${row.subject}.*` },
+      ...RIGHT_COLUMNS.map((column) => ({
+        header: RIGHT_LABELS[column],
+        width: 10,
+        value: (row: FormPermissionRow) => exportYesNo(draft[row.formId]?.[column] ?? row[column]),
+      })),
+    ],
+    [draft],
+  );
 
   // The fetched matrix seeds the draft; every tick edits the draft until saved.
   useEffect(() => {
@@ -215,16 +233,26 @@ export function PermissionsPage() {
                   description="Ticking any right grants View with it — a right without View cannot be reached."
                   // On the card it saves, not on a row of its own above the page (18 Sep 2026).
                   action={
-                    selectedUser && canEdit ? (
-                      <Button
-                        icon={Save}
-                        onClick={onSave}
-                        loading={save.isPending}
-                        disabled={!dirty}
-                      >
-                        {dirty ? "Save permissions" : "Saved"}
-                      </Button>
-                    ) : undefined
+                    <span className="inline-flex items-center gap-2">
+                      <ExportExcelButton<FormPermissionRow>
+                        resource="user-permissions"
+                        columns={exportColumns}
+                        rows={matrix.data?.rows ?? []}
+                        disabled={!matrix.data}
+                        sheetName="Permissions"
+                        fileName={`Permissions-${selectedUser.userName}`}
+                      />
+                      {canEdit && (
+                        <Button
+                          icon={Save}
+                          onClick={onSave}
+                          loading={save.isPending}
+                          disabled={!dirty}
+                        >
+                          {dirty ? "Save permissions" : "Saved"}
+                        </Button>
+                      )}
+                    </span>
                   }
                 />
                 {saveError && <Alert tone="danger">{saveError}</Alert>}

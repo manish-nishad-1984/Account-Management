@@ -197,6 +197,16 @@ export async function downloadRequest(path: string): Promise<Blob> {
 }
 
 /**
+ * A POST whose answer is a file — the list screens' "Export to Excel", which
+ * sends the rows it wants formatted. Same credentials path as every other
+ * request, so an expired token is renewed and retried rather than failing.
+ */
+export async function postForBlob(path: string, body: unknown): Promise<Blob> {
+  const response = await send(path, { method: "POST", body });
+  return response.blob();
+}
+
+/**
  * A DELETE, which answers 204 with no body.
  *
  * Separate from `apiRequest` because that helper's schema is mandatory, and

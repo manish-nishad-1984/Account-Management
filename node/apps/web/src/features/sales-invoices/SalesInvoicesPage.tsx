@@ -6,7 +6,13 @@ import {
   type SalesInvoiceRow,
 } from "@accountmanagement/contracts";
 import { Check, Plus, Undo2 } from "lucide-react";
-import { DataGrid, RowActions } from "../../components/DataGrid";
+import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
+import {
+  exportAmount,
+  exportDate,
+  exportYesNo,
+  type ExportColumn,
+} from "../../lib/grid-export";
 import {
   Badge,
   Button,
@@ -47,6 +53,28 @@ const TYPE_OPTIONS = [
 const isReturn = (type: string) =>
   type === "Sales Return" || type === "Credit Note";
 
+/** What the sheet holds, column for column — the screen's own columns, as text. */
+const EXPORT_COLUMNS: ExportColumn<SalesInvoiceRow>[] = [
+  { header: "Invoice", width: 20, value: (row) => row.salesInvoiceNo },
+  { header: "Date", width: 12, value: (row) => exportDate(row.documentDate) },
+  { header: "Their ref", width: 20, value: (row) => row.customerInvoiceNo },
+  { header: "Type", width: 16, value: (row) => row.invoiceType },
+  { header: "Customer", width: 32, value: (row) => row.customerName },
+  { header: "Company", width: 28, value: (row) => row.companyName },
+  { header: "Site", width: 22, value: (row) => row.siteName },
+  { header: "Subtotal", width: 14, align: "right", value: (row) => exportAmount(row.subtotal) },
+  { header: "Total discount", width: 14, align: "right", value: (row) => exportAmount(row.totalDiscount) },
+  { header: "GST", width: 14, align: "right", value: (row) => exportAmount(row.totalGstAmount) },
+  { header: "TDS", width: 12, align: "right", value: (row) => exportAmount(row.tds) },
+  { header: "Round off", width: 12, align: "right", value: (row) => exportAmount(row.roundOff) },
+  { header: "Total", width: 16, align: "right", value: (row) => exportAmount(row.totalAmount) },
+  { header: "Payment status", width: 18, value: (row) => row.paymentStatus },
+  { header: "Approved", width: 10, value: (row) => exportYesNo(row.isApproved) },
+  { header: "Paid in", width: 10, value: (row) => exportYesNo(row.isPaidIn) },
+  { header: "Lines", width: 8, align: "right", value: (row) => row.lineCount },
+  { header: "Created", width: 12, value: (row) => exportDate(row.createdAt) },
+];
+
 export function SalesInvoicesPage() {
   const canAdd = usePermission("sales-invoice", "add");
   const screen = useMasterScreen<SalesInvoiceRow>({
@@ -61,11 +89,14 @@ export function SalesInvoicesPage() {
   const scope = useSiteScope();
   const pdf = useDocumentPdf();
   const companies = useCompanyOptions();
-  const query = useSalesInvoiceList(screen.listParams, {
+  const filterValues = {
     isApproved: approval === "all" ? undefined : approval === "approved",
     invoiceType: invoiceType === "" ? undefined : invoiceType,
     companyId: companyId === "" ? undefined : companyId,
-  });
+  };
+  const query = useSalesInvoiceList(screen.listParams, filterValues);
+  // The list hook adds the header's site; the export must carry it too.
+  const exportFilters = { ...filterValues, siteId: scope.siteId ?? undefined };
   const remove = useDeleteSalesInvoice();
   const setApprovalMutation = useSetApproval();
 
@@ -319,11 +350,21 @@ export function SalesInvoicesPage() {
           </>
         }
         actions={
-          canAdd && (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              New invoice
-            </Button>
-          )
+          <>
+            <ExportExcelButton<SalesInvoiceRow>
+              resource="sales-invoices"
+              params={screen.listParams}
+              filters={exportFilters}
+              columns={EXPORT_COLUMNS}
+              sheetName="Sales Invoices"
+              fileName="Sales-Invoices"
+            />
+            {canAdd && (
+              <Button icon={Plus} onClick={screen.openCreate}>
+                New invoice
+              </Button>
+            )}
+          </>
         }
         gridKey="sales-invoices"
         columns={columns}

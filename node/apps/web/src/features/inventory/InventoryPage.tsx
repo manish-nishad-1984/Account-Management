@@ -5,7 +5,8 @@ import {
   type InventoryInwardRow,
 } from "@accountmanagement/contracts";
 import { Check, Info, Plus, Undo2 } from "lucide-react";
-import { DataGrid, RowActions } from "../../components/DataGrid";
+import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
+import { exportDate, exportYesNo, type ExportColumn } from "../../lib/grid-export";
 import {
   Alert,
   Badge,
@@ -27,6 +28,18 @@ import { formatDate, formatQuantity } from "../../lib/format";
 
 const Absent = () => <span className="text-slate-300">—</span>;
 
+/** What the sheet holds, column for column — the screen's own columns, as text. */
+const EXPORT_COLUMNS: ExportColumn<InventoryInwardRow>[] = [
+  { header: "Item", width: 34, value: (row) => row.itemName },
+  { header: "Details", width: 30, value: (row) => row.details },
+  { header: "Date", width: 12, value: (row) => exportDate(row.documentDate) },
+  { header: "Quantity", width: 12, align: "right", value: (row) => row.quantity },
+  { header: "Unit", width: 10, value: (row) => row.unitName },
+  { header: "Site", width: 24, value: (row) => row.siteName },
+  { header: "Approved", width: 10, value: (row) => exportYesNo(row.isApproved) },
+  { header: "Created", width: 12, value: (row) => exportDate(row.createdAt) },
+];
+
 type ApprovalFilter = "all" | "pending" | "approved";
 
 const APPROVAL_OPTIONS = [
@@ -45,9 +58,10 @@ export function InventoryPage() {
   const [approval, setApproval] = useState<ApprovalFilter>("all");
 
   const scope = useSiteScope();
-  const query = useInventoryInwardList(screen.listParams, {
+  const listFilters = {
     isApproved: approval === "all" ? undefined : approval === "approved",
-  });
+  };
+  const query = useInventoryInwardList(screen.listParams, listFilters);
   const remove = useDeleteInventoryInward();
   const setApprovalMutation = useSetInventoryApproval();
 
@@ -211,11 +225,23 @@ export function InventoryPage() {
           />
         }
         actions={
-          canAdd && (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              New arrival
-            </Button>
-          )
+          <>
+            <ExportExcelButton<InventoryInwardRow>
+              resource="inventory-inward"
+              params={screen.listParams}
+              // The list hook adds the scoped site itself; the export must too.
+              filters={{ ...listFilters, siteId: scope.siteId ?? undefined }}
+              columns={EXPORT_COLUMNS}
+              sheetName="Inventory Inward"
+              fileName="Inventory-Inward"
+              disabled={!scope.isReady}
+            />
+            {canAdd && (
+              <Button icon={Plus} onClick={screen.openCreate}>
+                New arrival
+              </Button>
+            )}
+          </>
         }
         gridKey="inventory"
         columns={columns}

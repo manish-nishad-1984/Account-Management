@@ -5,7 +5,8 @@ import {
   type InwardChallanRow,
 } from "@accountmanagement/contracts";
 import { Check, Paperclip, Plus, RotateCcw, Search, Undo2 } from "lucide-react";
-import { DataGrid, RowActions } from "../../components/DataGrid";
+import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
+import { exportAmount, exportDate, exportYesNo, type ExportColumn } from "../../lib/grid-export";
 import {
   Badge,
   Button,
@@ -48,6 +49,22 @@ const NO_FILTERS = {
   approval: "all" as ApprovalFilter,
 };
 
+/** What the sheet holds, column for column — the screen's own columns, as text. */
+const EXPORT_COLUMNS: ExportColumn<InwardChallanRow>[] = [
+  { header: "Item", width: 34, value: (row) => row.itemName },
+  { header: "Receiver", width: 26, value: (row) => row.receiverName },
+  { header: "Date", width: 12, value: (row) => exportDate(row.documentDate) },
+  { header: "Quantity", width: 12, align: "right", value: (row) => exportAmount(row.quantity) },
+  { header: "Unit", width: 10, value: (row) => row.unitName },
+  { header: "Supplier", width: 30, value: (row) => row.supplierName },
+  { header: "Challan no.", width: 14, value: (row) => row.invoiceNo },
+  { header: "Attachments", width: 12, align: "right", value: (row) => row.documentCount },
+  { header: "Approved", width: 10, value: (row) => exportYesNo(row.isApproved) },
+  { header: "Site", width: 26, value: (row) => row.siteName },
+  { header: "Vehicle number", width: 16, value: (row) => row.vehicleNumber },
+  { header: "Created", width: 12, value: (row) => exportDate(row.createdAt) },
+];
+
 export function InwardChallansPage() {
   const canAdd = usePermission("inward-challan", "add");
   const screen = useMasterScreen<InwardChallanRow>({
@@ -67,13 +84,14 @@ export function InwardChallansPage() {
   const scope = useSiteScope();
   const suppliers = useSupplierOptions();
 
-  const query = useInwardChallanList(screen.listParams, {
+  const filters = {
     supplierId: applied.supplierId || undefined,
     itemId: applied.itemId || undefined,
     fromDate: applied.fromDate || undefined,
     toDate: applied.toDate || undefined,
     isApproved: applied.approval === "all" ? undefined : applied.approval === "approved",
-  });
+  };
+  const query = useInwardChallanList(screen.listParams, filters);
 
   const remove = useDeleteInwardChallan();
   const setApprovalMutation = useSetChallanApproval();
@@ -313,11 +331,22 @@ export function InwardChallansPage() {
       <DataGrid<InwardChallanRow>
         // On the grid's toolbar row, not a row of its own above the filters (18 Sep 2026).
         actions={
-          canAdd && (
-            <Button icon={Plus} onClick={screen.openCreate}>
-              New challan
-            </Button>
-          )
+          <>
+            {/* The list hook adds the header's site itself; the export sends the same. */}
+            <ExportExcelButton<InwardChallanRow>
+              resource="inward-challans"
+              params={screen.listParams}
+              filters={{ ...filters, siteId: scope.siteId ?? undefined }}
+              columns={EXPORT_COLUMNS}
+              sheetName="Inward challans"
+              fileName="Inward-challans"
+            />
+            {canAdd && (
+              <Button icon={Plus} onClick={screen.openCreate}>
+                New challan
+              </Button>
+            )}
+          </>
         }
         gridKey="inward-challans"
         columns={columns}

@@ -24,6 +24,7 @@ import { PaymentsModule } from "./modules/payments/payments.module";
 import { ReportsModule } from "./modules/reports/reports.module";
 import { InwardChallansModule } from "./modules/inward-challans/inward-challans.module";
 import { GridPreferencesModule } from "./modules/grid-preferences/grid-preferences.module";
+import { GridExportModule } from "./modules/grid-export/grid-export.module";
 import { DocumentTemplatesModule } from "./modules/document-templates/document-templates.module";
 import { AgenciesModule } from "./modules/agencies/agencies.module";
 import { GeographyModule } from "./modules/geography/geography.module";
@@ -66,6 +67,7 @@ const env = loadEnv();
     PaymentsModule,
     ReportsModule,
     GridPreferencesModule,
+    GridExportModule,
     DocumentTemplatesModule,
     AgenciesModule,
     GeographyModule,
