@@ -29,20 +29,28 @@ every page; on 15 Sep 2026 it served its login page with a 200 and no
 exception text, so that fault appears to have been cleared by someone. Who and
 when is not recorded anywhere in this repository.
 
-**Live release is `20261006-155914`, which is commit `8838be2b`** — the newest
-code commit, pushed (`origin/main` = `8838be2b`), so **nothing committed is
-waiting to deploy**. Eight releases went out on 5–6 Oct 2026 (§5ab). Two of them
-carried migrations, both applied on the live database: **`0022_payout_lists`**
-(`1 applied, 0 adopted, 22 skipped`, release `20261005-194842`) and
-**`0023_payout_list_invoices`** (`1 applied, 0 adopted, 23 skipped`, release
-`20261006-142137`); live now has 44 tables. Every release was verified on the
-day: health, a real login (`ckalathiya`), the Payout List endpoints with the
-bearer token, the bundle hash at `https://avfast.in/`, `www.avfast.in` 200, and
-the PIDs of 8080 / 7251 / 1433 unchanged. **Nothing was saved to the live
-database from a session** — the Payout List's save, bills and image were
-exercised only on the dev server. Rollback target is `20261006-155358` (the
-Purchase Invoice layout, one commit earlier); migrations are not rolled back, and
-0022 / 0023 only ADD tables, so older code simply ignores them.
+**Live release is `20261009-172212`, which is commit `3b805cec`** — the newest
+code commit, pushed (`origin/main` was `a310b543`, a documentation-only commit,
+when this was written), so **nothing committed is waiting to deploy**. Five
+releases went out on 7–9 Oct 2026 (§5ac), and **two carried migrations, both
+applied on the live database**: **`0024_payout_confirm_and_payment_allocations`**
+(release `20261008-155019`, `1 applied`) and **`0025_client_master_and_income`**
+(release `20261009-163050`, `1 applied, 0 adopted, 25 skipped`). Live now has 50
+tables. Every release was verified on the day: health, a real login
+(`ckalathiya`), `.env` mode 600, uploads unreadable by `www-data`, and the bundle
+hash at `https://avfast.in/`. Rollback target is `20261009-163050` (Client Master
+and Income, one release earlier); migrations are not rolled back, and 0024 / 0025
+only ADD tables and columns, so older code ignores them. **Nothing was saved to the
+live database from a session** — Confirm payout, Income and the Balance Sheet were
+exercised on the dev server only, and the live data is a copy for testing (§8).
+
+**The old ASP.NET app and its SQL Server were REMOVED from the VPS on 8 Oct 2026,
+at the user's instruction.** Nothing in this repository records the commands; it
+was done over ssh. nginx now redirects `www.avfast.in` and `api.avfast.in` to
+`https://avfast.in`, and serves `/` with `Cache-Control: no-cache` and `/assets/`
+with long caching (a stale bundle was making fixed screens look unfixed). §5e, §5ab
+and the `/deploy` skill still describe the old app and its "leave alone" list of
+ports 8080 / 7251 / 1433; **treat those as history**, and update the skill.
 
 **The lesson of the six-day gap (18–21 Sep, closed by `9a11f463`) held again
 on 1–2 Oct.** Both features were committed, gated (tests, typecheck, build)
@@ -139,19 +147,18 @@ tests went with it. Every `.cs` / `.cshtml` path and line number quoted in this
 file points into that folder (or into git history). The `dotnet` commands below
 and the "19 .NET" in the older sections no longer apply to this tree.
 
-**1841 Node tests pass** (157 contracts + 90 domain + 941 API + 653 web),
-measured against `8838be2b` on 6 Oct 2026 by ONE full `npm test` from `node/`
-(output piped to a file, every workspace's summary line read: 8, 6, 55 and 75
-files, no failure anywhere). `npm run build` ran on the same tree for the last
-deploy: exit 0. **`npm run typecheck` was NOT run as a command this session**;
-what was run is `tsc -b` in `apps/web` (clean, and it covers the web tests) and
-`tsc --noEmit` in `apps/api` after the Payout bills change (clean) — enough to
-say nothing is known to be broken, not enough to call the typecheck re-measured.
-**Not every earlier run was green, and the honest note matters:** during the
-deploy gate of 5 Oct one full API run failed four test FILES at load (`print-documents`,
-`item-price-history`, `item-sheet`, `purchase-requests` repository tests — no
-test inside them ran) and all four passed alone, 91/91. The same load flake as
-`PurchaseOrderFormDialog.itemFill` in web. The final run above had neither.
+**1908 Node tests pass** (157 contracts + 90 domain + 974 API + 687 web),
+measured against `3b805cec` on 9 Oct 2026 by ONE full `npm test` from `node/`
+(the deploy gate's own run; every workspace's summary line read, no failure).
+`npm run build` ran on the same tree: exit 0. Nothing after `3b805cec` touches code
+(`git diff --name-only 3b805cec..HEAD` lists only `.md` files), so the figure holds.
+**`npm run typecheck` was NOT run as a command this session**; `tsc --noEmit` in
+`apps/api` and `apps/web` was run after every change and was clean, and `web`'s
+build runs `tsc -b`. **Not every run was green, and the honest note matters:** the
+full-suite run just before the Client Master deploy failed two Purchase Order
+`itemFill` tests (they passed 3/3 alone), and an earlier one failed six API tests at
+a 60 s timeout while a second suite was running beside it (all passed alone). Both
+are load flakes; run ONE suite at a time.
 
 **EVERY LEGACY SCREEN IS NOW PORTED.** `nav.ts` carries no `"planned"` item —
 Payments, the Ledger and the Sales Report were the last three (§5u). What remains
@@ -4715,3 +4722,122 @@ a screenshot and each checked against the next one:
 
 Tests: **1841** Node (157 contracts + 90 domain + 941 API + 653 web), one full
 `npm test` at `8838be2b`, no failure. Live: release `20261006-155914`.
+
+
+---
+
+## 5ac. Confirm payout, payments tied to bills, the Client Master, Income and the site-wise Balance Sheet (7–9 Oct 2026)
+
+Commit `<COMMIT>` (the handoff; the code is `3b805cec` and earlier). Fifteen code commits (listed in §4),
+**two migrations (0024 and 0025)**, five releases, all pushed and live. A client-driven week again: each
+request came from the client, relayed in Hinglish, and most followed a screenshot. Order of the work:
+
+**Small fixes first (7 Oct).** (1) The Purchase Order got the same one-row Location / Billing / Shipping as
+the invoice. (2) **Units typing lag:** `Modal`'s effect depended on `onClose`, which every caller passes
+inline, so each keystroke re-ran the focus effect and threw focus back to the first control. It now reads
+`onClose` through a ref and the effect depends on `[open]` only (`Modal.typing.test`). (3) **The second
+vertical scrollbar on a long Purchase Order:** a hidden, absolutely positioned label below the fold stretched
+the document, because `<main>` was not the positioning parent; `main` is `relative` now. (4) **Shipping blank
+when a location is chosen:** `documentOptions` de-duplicated addresses, so a location whose address repeated
+the site's lost it; each location now carries its own `address`. **A second cause looked identical and was
+not code:** the user's browser held a stale bundle. nginx now sends `Cache-Control: no-cache` on `/` and long
+caching on `/assets/`. When "my fix did not work" arrives with a screenshot, compare the bundle hash first.
+
+**The Item form (6–7 Oct).** I built an EDIT flow first ("pick a matching item and rename it"); the user said
+*"its for new add new item, not for edit"*. Rebuilt as a template: picking a suggestion loads that item's
+details into a NEW item, the name to be changed; price changes are logged by the server as for any edit. The
+dropdown is instant (150 ms debounce) like the invoice product box. **The trap:** blur closed the list before the
+click landed on an option; a `closeTimer` ref cancels the close on refocus. That was also the cause of a flaky
+test, not just load.
+
+**Payout List polish.** Held to the header's site (`usePayoutOutstanding(enabled, siteId)`); a summary strip
+(Total outstanding / Selected / Remain to pay) under the filter, sticky; amounts with Indian commas through
+`AmountField` (it keeps the caret after the same number of digits when the commas redraw); a calendar popup on
+every `type="date"` field (`DatePickerButton` writes into the REAL input through the native value setter and
+dispatches `input` / `change`, so react-hook-form and controlled inputs both see it; its labels were first
+"Calendar of …" and collided with `getByLabelText(/list date/i)`, so they are "Open calendar" / "Calendar").
+Report grids were restyled to the app's own DataGrid look. **Form action buttons moved from the pinned bottom
+bar into the title bar's right end** (`RecordPage`), at the client's request; Dialog and Side-by-side layouts were
+left alone and the user said no to moving them.
+
+**Which bills does a lump-sum payment settle (doc 19 Q17), and Confirm payout.** The owner pays suppliers in a
+lump sum; the old rule is "payments settle the OLDEST bills". The user's idea, taken: **confirming a payout list
+IS recording the payments, tied to the bills named.** Decisions and why:
+- A new table **`payment_allocations`** (payment, bill, amount) lets a payment name the bills it settles.
+  `pendingLedger` subtracts the named amounts FIRST and only then runs the oldest-first walk over what is left
+  against the unnamed part of the payments. **An allocation counts only when its payment AND its bill are both
+  inside the filtered set**, or a From date would take money off one side. The outstanding for a (party, site)
+  does not change; only WHICH bills stay open does.
+- `payout_lists` gained `status` (draft / confirmed), `confirmed_at/by`; its lines gained `extra_paid`, its
+  bills `paid_amount`. **Confirm** makes one payment per party × company × site (a payment carries one of each),
+  each tied to its bills, in one transaction, and locks the list (edit and delete answer 409). **Reverse**
+  soft-deletes those payments, deletes their allocations and returns the list to draft, recording who. A line
+  with no bills cannot be confirmed: a payment needs a site, and the only place to get one is a bill.
+- **Overpaying:** the extra is added to the party's largest payment and **stays as a minus balance** (the client:
+  "rare; it stays minus"). It is not forced against a bill. Underpaying leaves the bill part paid.
+- **Permission:** the existing "approve" flag on form 102 (Payout) is the right to Confirm / Reverse. Migration
+  0024 sets it for everyone who could already EDIT payout lists. The dev admin needed `isApproved: true` in
+  `dev-seed.ts` or the button never appeared in dev.
+
+**Then the bills on the Payments screen and the invoice list (slice 2).** `createPaymentSchema` takes optional
+`allocations`; the controller checks each bill is this party's, company's and site's and has that much pending
+(through `pendingLedger`), then `createMany` writes them. **The trap:** `.default([])` makes the contract's OUTPUT
+type require `allocations`, which broke every test and the web dialog that built a `CreatePayment` by hand;
+the repository takes a `NewPayment` type with it optional. The Payments dialog has a "Choose bills" icon per row
+(ticking a bill puts the pending amount in a box and the row's amount follows the total). **The Purchase Invoice
+list shows Paid / Part paid / Unpaid and what is left**, from `ReportsRepository.pendingByDocument`, which shares
+`pendingBase` with the report, so the two cannot disagree. Returns and credit notes show nothing. The legacy
+`purchase_invoices.payment_status` / `is_paid_out` are still never written.
+
+**Payout image (9 Oct).** The client does not want WhatsApp opened from here. The image icon opens a preview with
+**Copy image**, and the picture now has the party names, their amounts and the total only (no bills, no title).
+The WhatsApp button went; `message.ts`' `whatsAppUrl` and its tests were left in place, unused.
+
+**Client Master, Income, Balance Sheet (9 Oct; migration 0025, forms 103 "Client" and 104 "Income").**
+- *Client:* who pays US for a project; linked to sites through `client_sites`. A separate table from
+  `suppliers` (which doubles as "customer" on old sales invoices) so neither list is polluted.
+- *Income:* project (from the header, locked; a user on "All sites" picks one), **company chosen** (a company is
+  not tied to a site anywhere in this application, and the user asked how the binding works — it does not),
+  client (those linked to the project; auto-picked if there is one), date, amount, any number of **Additional**
+  and **Deduction** lines (amount + remark each). **FINAL TOTAL = amount + additions − deductions, computed on
+  the server in whole paise and stored.** The client first said "+ / − sign per row", then "like additional,
+  deduction amount and remark" — two sections, which is what is built. It is its own table, NOT `payments`
+  direction "in": the legacy receipts have no site-and-company-and-lines shape and are not counted here.
+- *Balance Sheet:* per project, Income | Billed | Paid | Still to pay | **Cash balance** (income − paid) |
+  **Project result** (income − billed), with a drill-down to the income entries and the suppliers. Billed is
+  invoices less returns and credit notes; **opening balances are excluded** (money owed from before is not what a
+  project cost). Needs BOTH `reports-payments.view` and `income.view` (the guard requires every permission a route
+  lists). Follows the header's site like the other reports. Both balances exist because "expense" could mean
+  either and the client has not said (doc 19 Q18, part 1).
+- Doc 19 gained Q17 and Q18 (summary sheet, "new on" paragraphs and cross-reference rows each).
+
+**What went wrong, the useful parts.**
+- **The deploy block shipped after two failing tests.** The script printed `test exit 1` and carried on
+  because nothing checked it. The failures were the known Purchase Order `itemFill` load flake (3/3 alone, and
+  that code was untouched), so nothing wrong went out — but it was luck. The script now exits on a non-zero
+  test result; the repo's `/deploy` skill still has no such gate (§10).
+- **A mock that does not match the schema fails silently.** A test's `/suppliers` fixture lacked fields of
+  `supplierRowSchema`, the response failed to parse, the option list stayed empty and the test timed out on
+  "unable to find option" — nothing said "schema". Fixtures for a list the app parses need every field.
+- **Another sibling of the heredoc trap:** `cat > file <<'EOF'` with an apostrophe in the body died with
+  "unexpected EOF while looking for matching quote". Write source with the Write tool, not a heredoc.
+- Two suites run at once (a background `npm test` and a foreground vitest) timed six API tests out at 60 s and
+  killed a vitest worker. One at a time.
+- `users.write.test` asserts the exact list of forms a new user sees; adding forms 103 and 104 failed it
+  (as 100 – 102 each did). Expect that on every new form row.
+- The dev seed's returns exceed its invoices at the dev user's site, so the dev Balance Sheet shows a NEGATIVE
+  Billed. The arithmetic is right; do not "fix" it.
+
+**Honest cost.**
+- An income entry is tied to a project, a company and a client, not to anything WE issued (a running bill or
+  sales invoice). The client has not said whether it should be (doc 19 Q18 part 5).
+- Costs that are not supplier bills (labour, salary, petty cash) are not in the Balance Sheet at all. Until the
+  client answers Q18 part 2 the sheet can overstate a project's result.
+- The Balance Sheet has no download and no picture to forward; the Payout List has both.
+- Confirming a payout creates payments from a screen no one has used on the live data; it was exercised end to
+  end on the dev server only (create from real pending bills, confirm, check the report, reverse, check it again).
+- The confirm / reverse and income paths were never saved to the live database by a session; the live data is a
+  test copy until cutover.
+
+Tests: **1908** Node (157 contracts + 90 domain + 974 API + 687 web), one full `npm test` at `3b805cec`, no failure.
+Live: release `20261009-172212`.
