@@ -7,7 +7,22 @@ import {
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Upload } from "lucide-react";
 import { Alert, Button, Modal } from "../../components/ui";
 import { ApiError } from "../../lib/api-client";
+import { downloadGridExcel, type ExportColumn } from "../../lib/grid-export";
 import { locationImportRejectionFrom, useImportInvoiceLocations } from "./api";
+
+type SampleRow = string[];
+
+/** The sample file's layout and two made-up rows, so a person can see what to fill. */
+const SAMPLE_COLUMNS: ExportColumn<SampleRow>[] = [
+  { header: "Invoice no", width: 18, value: (row) => row[0] },
+  { header: "Supplier", width: 30, value: (row) => row[1] },
+  { header: "Site location", width: 22, value: (row) => row[2] },
+  { header: "Shipping address", width: 44, value: (row) => row[3] },
+];
+const SAMPLE_ROWS: SampleRow[] = [
+  ["GENT/26-27/57", "GIRIRAJ ENTERPRISE", "Block A", "Plot 5, Near Main Gate, Surat 395007"],
+  ["BI/163/26-27", "BHAGAWATI INDUSTRIES", "Store yard", "Survey 21, Akwada Road, Surat"],
+];
 
 /**
  * "Import locations" — sets the site location and shipping address of the
@@ -24,6 +39,18 @@ export function LocationImportDialog({ open, onClose }: { open: boolean; onClose
 
   const rejection = locationImportRejectionFrom(importer.error);
   const message = importer.error instanceof ApiError && !rejection ? importer.error.message : null;
+
+  const [sampleError, setSampleError] = useState<string | null>(null);
+  const downloadSample = () => {
+    setSampleError(null);
+    downloadGridExcel<SampleRow>({
+      resource: "purchase-invoices",
+      columns: SAMPLE_COLUMNS,
+      rows: SAMPLE_ROWS,
+      sheetName: "Invoice locations",
+      fileName: "Invoice-locations-sample",
+    }).catch(() => setSampleError("The sample file could not be produced."));
+  };
 
   const close = () => {
     setFile(null);
@@ -98,6 +125,10 @@ export function LocationImportDialog({ open, onClose }: { open: boolean; onClose
                 </span>
               ))}
             </p>
+            <Button type="button" variant="secondary" icon={FileSpreadsheet} className="mt-2" onClick={downloadSample}>
+              Download sample file
+            </Button>
+            {sampleError && <p className="mt-1 text-rose-700">{sampleError}</p>}
             <p className="mt-1.5 text-slate-500">
               An invoice is found by its <strong>Invoice no</strong> and <strong>Supplier</strong>. The
               location must be one of that invoice&apos;s site. A blank location or shipping cell leaves
