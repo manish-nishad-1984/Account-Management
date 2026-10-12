@@ -1,5 +1,6 @@
+import { useEffect, useState } from "react";
 import { AlertTriangle } from "lucide-react";
-import { Alert, Button } from "./index";
+import { Alert, Button, TextField } from "./index";
 import { Modal } from "./Modal";
 
 /**
@@ -23,6 +24,7 @@ export function ConfirmDialog({
   confirmLabel = "Delete",
   pending = false,
   error,
+  typeToConfirm,
 }: {
   open: boolean;
   onClose: () => void;
@@ -32,7 +34,18 @@ export function ConfirmDialog({
   confirmLabel?: string;
   pending?: boolean;
   error?: string | null;
+  /**
+   * Client request (12 Oct 2026): for records that must not go by a stray click
+   * the person types this text (e.g. the invoice number) before Delete works.
+   * Case and surrounding spaces are ignored.
+   */
+  typeToConfirm?: string;
 }) {
+  const [typed, setTyped] = useState("");
+  useEffect(() => setTyped(""), [open, typeToConfirm]);
+  const required = typeToConfirm?.trim() ?? "";
+  const matches = required === "" || typed.trim().toLowerCase() === required.toLowerCase();
+
   return (
     <Modal
       open={open}
@@ -44,7 +57,7 @@ export function ConfirmDialog({
           <Button variant="secondary" onClick={onClose} disabled={pending}>
             Cancel
           </Button>
-          <Button variant="danger" onClick={onConfirm} loading={pending}>
+          <Button variant="danger" onClick={onConfirm} loading={pending} disabled={!matches}>
             {confirmLabel}
           </Button>
         </>
@@ -57,6 +70,14 @@ export function ConfirmDialog({
           </div>
           <div className="text-sm leading-5 text-slate-600">{body}</div>
         </div>
+        {required !== "" && (
+          <TextField
+            label={`Type ${required} to confirm`}
+            value={typed}
+            autoComplete="off"
+            onChange={(event) => setTyped(event.target.value)}
+          />
+        )}
         {error && <Alert tone="danger">{error}</Alert>}
       </div>
     </Modal>

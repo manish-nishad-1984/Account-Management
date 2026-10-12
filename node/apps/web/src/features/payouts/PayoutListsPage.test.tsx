@@ -171,11 +171,14 @@ describe("PayoutListsPage", () => {
     await user.click(within(first).getByRole("button", { name: /^Delete/ }));
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/Weekly payout - 05 Oct 2026/)).toBeInTheDocument();
+    expect(within(dialog).getAllByText(/Weekly payout - 05 Oct 2026/).length).toBeGreaterThan(0);
     const deletes = () =>
       vi.mocked(globalThis.fetch).mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "DELETE");
     expect(deletes()).toHaveLength(0);
 
+    // Delete stays off until the list's name is typed.
+    expect(within(dialog).getByRole("button", { name: "Delete" })).toBeDisabled();
+    await user.type(within(dialog).getByRole("textbox"), "Weekly payout - 05 Oct 2026");
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(deletes()).toHaveLength(1));
     expect(String(deletes()[0]![0])).toMatch(new RegExp(`/payout-lists/${ID_A}$`));

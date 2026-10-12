@@ -443,6 +443,7 @@ export function PurchaseInvoicesPage() {
         pending={remove.isPending}
         error={screen.deleteError}
         title="Delete purchase invoice"
+        typeToConfirm={screen.deleteTarget?.displayNo ?? ""}
         body={
           <>
             <p>

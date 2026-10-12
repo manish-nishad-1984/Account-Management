@@ -163,6 +163,7 @@ export function SiteLocationsPage() {
         pending={remove.isPending}
         error={screen.deleteError}
         title="Delete site location"
+        typeToConfirm={screen.deleteTarget?.siteName ?? ""}
         body={
           <>
             <p>

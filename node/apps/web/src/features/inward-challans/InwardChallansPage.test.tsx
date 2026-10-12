@@ -285,6 +285,8 @@ describe("InwardChallansPage", () => {
     await userEvent.click(screen.getByRole("button", { name: /delete FLY ASH BRICKS/i }));
 
     expect(await screen.findByText(/leaves the total/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^delete$/i })).toBeDisabled();
+    await userEvent.type(screen.getByLabelText(/^Type FLY ASH BRICKS/), "FLY ASH BRICKS");
     await userEvent.click(screen.getByRole("button", { name: /^delete$/i }));
 
     await waitFor(() => {

@@ -189,6 +189,7 @@ export function SitesPage() {
         pending={remove.isPending}
         error={screen.deleteError}
         title="Delete site"
+        typeToConfirm={screen.deleteTarget?.name ?? ""}
         body={
           <>
             <p>

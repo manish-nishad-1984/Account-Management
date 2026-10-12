@@ -230,6 +230,7 @@ export function PayoutListsPage() {
         pending={remove.isPending}
         error={screen.deleteError}
         title="Delete payout list"
+        typeToConfirm={deleteName}
         body={
           <>
             <p>

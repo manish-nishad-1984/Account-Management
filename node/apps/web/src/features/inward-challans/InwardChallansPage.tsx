@@ -383,6 +383,7 @@ export function InwardChallansPage() {
         pending={remove.isPending}
         error={screen.deleteError}
         title="Delete inward challan"
+        typeToConfirm={screen.deleteTarget?.itemName ?? ""}
         body={
           <>
             <p>
