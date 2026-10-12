@@ -5,7 +5,7 @@ import {
   PURCHASE_INVOICE_SORT_FIELDS,
   type PurchaseInvoiceRow,
 } from "@accountmanagement/contracts";
-import { Check, Plus, Undo2 } from "lucide-react";
+import { Check, Plus, Undo2, Upload } from "lucide-react";
 import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
 import {
   exportAmount,
@@ -27,6 +27,7 @@ import {
   useSetApproval,
 } from "./api";
 import { PurchaseInvoiceFormDialog } from "./PurchaseInvoiceFormDialog";
+import { LocationImportDialog } from "./LocationImportDialog";
 import { usePermission } from "../../lib/permissions";
 import {
   DocumentActions,
@@ -81,6 +82,8 @@ const EXPORT_COLUMNS: ExportColumn<PurchaseInvoiceRow>[] = [
 
 export function PurchaseInvoicesPage() {
   const canAdd = usePermission("purchase-invoice", "add");
+  const canEdit = usePermission("purchase-invoice", "edit");
+  const [importOpen, setImportOpen] = useState(false);
   const screen = useMasterScreen<PurchaseInvoiceRow>({
     // `documentDate` is nullable and therefore cannot be a keyset sort column —
     // see the contract. `createdAt` is NOT NULL and is the closest honest proxy
@@ -393,6 +396,11 @@ export function PurchaseInvoicesPage() {
               sheetName="Purchase Invoices"
               fileName="Purchase-Invoices"
             />
+            {canEdit && (
+              <Button variant="secondary" icon={Upload} onClick={() => setImportOpen(true)}>
+                Import locations
+              </Button>
+            )}
             {canAdd && (
               <Button icon={Plus} onClick={screen.openCreate}>
                 New invoice
@@ -412,6 +420,8 @@ export function PurchaseInvoicesPage() {
         {...screen.gridProps(query)}
         isLoading={query.isLoading || !scope.isReady}
       />
+
+      <LocationImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
 
       <PurchaseInvoiceFormDialog
         open={screen.isFormOpen}

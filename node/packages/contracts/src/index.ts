@@ -23,6 +23,7 @@ export * from "./sales-invoices";
 export * from "./inventory-inward";
 export * from "./inward-challans";
 export * from "./item-sheet";
+export * from "./purchase-invoice-sheet";
 export * from "./item-price-history";
 export * from "./payments";
 export * from "./reports";
