@@ -10,7 +10,6 @@ import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGr
 import {
   exportAmount,
   exportDate,
-  exportYesNo,
   type ExportColumn,
 } from "../../lib/grid-export";
 import {
@@ -77,22 +76,6 @@ const EXPORT_COLUMNS: ExportColumn<PurchaseInvoiceRow>[] = [
   { header: "Round off", width: 12, align: "right", value: (row) => exportAmount(row.roundOff) },
   { header: "Total", width: 16, align: "right", value: (row) => exportAmount(row.totalAmount) },
   { header: "Pending amount", width: 16, align: "right", value: (row) => exportAmount(row.pendingAmount) },
-  {
-    header: "Payment",
-    width: 12,
-    value: (row) =>
-      row.settlement === "paid"
-        ? "Paid"
-        : row.settlement === "part"
-          ? "Part paid"
-          : row.settlement === "unpaid"
-            ? "Unpaid"
-            : "",
-  },
-  { header: "Payment status", width: 18, value: (row) => row.paymentStatus },
-  { header: "Approved", width: 10, value: (row) => exportYesNo(row.isApproved) },
-  { header: "Paid out", width: 10, value: (row) => exportYesNo(row.isPaidOut) },
-  { header: "Lines", width: 8, align: "right", value: (row) => row.lineCount },
   { header: "Created", width: 12, value: (row) => exportDate(row.createdAt) },
 ];
 
