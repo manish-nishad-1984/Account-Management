@@ -54,14 +54,26 @@ export function usePayoutDetailLoader() {
  * Parties we owe, for the builder. Fetched fresh each time a form opens: a list
  * built five days after the last is built from what is owed NOW.
  */
-export const usePayoutOutstanding = (enabled: boolean, siteId: string | null = null) =>
+const outstandingQuery = (siteId: string | null, companyId: string | null): string => {
+  const search = new URLSearchParams();
+  if (siteId) search.set("siteId", siteId);
+  if (companyId) search.set("companyId", companyId);
+  const text = search.toString();
+  return text ? `?${text}` : "";
+};
+
+export const usePayoutOutstanding = (
+  enabled: boolean,
+  siteId: string | null = null,
+  companyId: string | null = null,
+) =>
   useQuery({
-    queryKey: [RESOURCE, "outstanding", siteId],
+    queryKey: [RESOURCE, "outstanding", siteId, companyId],
     enabled,
     staleTime: 0,
     refetchOnMount: "always",
     queryFn: ({ signal }) =>
-      apiRequest(`/${RESOURCE}/outstanding${siteId ? `?siteId=${siteId}` : ""}`, {
+      apiRequest(`/${RESOURCE}/outstanding${outstandingQuery(siteId, companyId)}`, {
         schema: payoutOutstandingResponseSchema,
         signal,
       }),

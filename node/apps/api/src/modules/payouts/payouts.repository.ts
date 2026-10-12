@@ -118,11 +118,22 @@ export class PayoutsRepository extends BaseRepository {
    * useless without the outstanding beside each party, and migration 0022 grants
    * `payout` only to people who already hold that report.
    */
-  private async owedByParty(siteId?: string): Promise<Map<string, Owed>> {
+  private async owedByParty(siteId?: string, companyId?: string): Promise<Map<string, Owed>> {
+    const sums = await this.netByParty(siteId, companyId);
+    for (const [partyId, owed] of sums) {
+      if (owed.paise <= 0n) {
+        sums.delete(partyId);
+      }
+    }
+    return sums;
+  }
+
+  /** Every party's net balance, overpaid ones (negative) included. */
+  private async netByParty(siteId?: string, companyId?: string): Promise<Map<string, Owed>> {
     const sums = new Map<string, Owed>();
     for (let offset = 0; ; offset += BALANCES_PAGE) {
       const page = await this.reports.balances(
-        { direction: "out", show: "outstanding", siteId },
+        { direction: "out", show: "outstanding", siteId, companyId },
         { limit: BALANCES_PAGE, offset },
       );
       for (const row of page.rows) {
@@ -137,11 +148,6 @@ export class PayoutsRepository extends BaseRepository {
         break;
       }
     }
-    for (const [partyId, owed] of sums) {
-      if (owed.paise <= 0n) {
-        sums.delete(partyId);
-      }
-    }
     return sums;
   }
 
@@ -151,10 +157,10 @@ export class PayoutsRepository extends BaseRepository {
    * the same bills that report does. Oldest first, which is the order they should
    * be paid in.
    */
-  private async pendingByParty(siteId?: string): Promise<Map<string, PayoutPendingInvoice[]>> {
+  private async pendingByParty(siteId?: string, companyId?: string): Promise<Map<string, PayoutPendingInvoice[]>> {
     const byParty = new Map<string, PayoutPendingInvoice[]>();
     for (let offset = 0; ; offset += BALANCES_PAGE) {
-      const page = await this.reports.pendingLedger({ direction: "out", siteId }, { limit: BALANCES_PAGE, offset });
+      const page = await this.reports.pendingLedger({ direction: "out", siteId, companyId },{ limit: BALANCES_PAGE, offset });
       for (const row of page.rows) {
         const list = byParty.get(row.partyId) ?? [];
         list.push({
@@ -184,12 +190,16 @@ export class PayoutsRepository extends BaseRepository {
    * if it is owed elsewhere (client request, 7 Oct 2026: the header's site).
    * Without one, as before: the sum over every site, netted per party.
    */
-  async outstanding(siteId?: string): Promise<PayoutOutstandingResponse> {
-    const owed = [...(await this.owedByParty(siteId)).values()].sort(
-      (a, b) => a.partyName.localeCompare(b.partyName) || a.partyId.localeCompare(b.partyId),
-    );
-    const bills = await this.pendingByParty(siteId);
+  async outstanding(siteId?: string, companyId?: string): Promise<PayoutOutstandingResponse> {
+    const net = await this.netByParty(siteId, companyId);
+    const owed = [...net.values()]
+      .filter((row) => row.paise > 0n)
+      .sort((a, b) => a.partyName.localeCompare(b.partyName) || a.partyId.localeCompare(b.partyId));
+    const bills = await this.pendingByParty(siteId, companyId);
     const total = owed.reduce((sum, row) => sum + row.paise, 0n);
+    // Overpaid parties are not listed (nothing is owed them); they are the gap
+    // between this total and the Pending Outstanding report's.
+    const overpaid = [...net.values()].reduce((sum, row) => (row.paise < 0n ? sum + row.paise : sum), 0n);
     return {
       rows: owed.map((row) => ({
         partyId: row.partyId,
@@ -198,6 +208,7 @@ export class PayoutsRepository extends BaseRepository {
         invoices: bills.get(row.partyId) ?? [],
       })),
       total: fromPaise(total),
+      overpaid: fromPaise(overpaid),
     };
   }
 

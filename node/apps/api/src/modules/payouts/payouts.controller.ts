@@ -40,7 +40,7 @@ import type { AccessTokenClaims } from "../auth/token.service";
 const SUBJECT = "payout";
 
 /** The site in the header's filter, or nothing for every site. */
-const outstandingQuerySchema = z.object({ siteId: z.string().uuid().optional() });
+const outstandingQuerySchema = z.object({ siteId: z.string().uuid().optional(), companyId: z.string().uuid().optional() });
 
 @Controller("payout-lists")
 export class PayoutsController {
@@ -67,9 +67,9 @@ export class PayoutsController {
   @Get("outstanding")
   @Permissions("payout.view")
   outstanding(
-    @Query(new ZodValidationPipe(outstandingQuerySchema)) query: { siteId?: string },
+    @Query(new ZodValidationPipe(outstandingQuerySchema)) query: { siteId?: string; companyId?: string },
   ): Promise<PayoutOutstandingResponse> {
-    return this.payouts.outstanding(query.siteId);
+    return this.payouts.outstanding(query.siteId, query.companyId);
   }
 
   @Get(":id")

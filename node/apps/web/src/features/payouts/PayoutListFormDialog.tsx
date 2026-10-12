@@ -8,7 +8,8 @@ import {
   type PayoutListDetail,
   type PayoutPendingInvoice,
 } from "@accountmanagement/contracts";
-import { Alert, Button, ConfirmDialog, FormDialog, FormSection, TextField } from "../../components/ui";
+import { Alert, Button, ConfirmDialog, FormDialog, FormSection, SelectField, TextField } from "../../components/ui";
+import { useCompanyOptions } from "../purchase-orders/api";
 import { usePermission } from "../../lib/permissions";
 import { useRecordLayout } from "../../contexts/RecordLayoutContext";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
@@ -140,7 +141,12 @@ export function PayoutListFormDialog({
   // when it is on "All sites". Not fetched before the scope is known, or an
   // assigned user would see every site's parties for a moment.
   const scope = useSiteScope();
-  const outstanding = usePayoutOutstanding(open && !locked && scope.isReady, scope.siteId);
+  // Which company's bills the parties are owed for; empty is every company, as
+  // before. The Pending Outstanding report filters the same way, so choosing
+  // one company here gives that report's figure for it.
+  const [companyId, setCompanyId] = useState("");
+  const companies = useCompanyOptions();
+  const outstanding = usePayoutOutstanding(open && !locked && scope.isReady, scope.siteId, companyId || null);
   const create = useCreatePayoutList();
   const update = useUpdatePayoutList();
   const share = usePayoutSharing();
@@ -628,6 +634,20 @@ export function PayoutListFormDialog({
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
               />
+              {!locked && (
+                <SelectField
+                  label="Company"
+                  labelHidden
+                  aria-label="Company"
+                  className="w-52"
+                  value={companyId}
+                  options={[
+                    { value: "", label: "All companies" },
+                    ...(companies.data?.rows ?? []).map((row) => ({ value: row.id, label: row.name })),
+                  ]}
+                  onChange={(event) => setCompanyId(event.target.value)}
+                />
+              )}
               <label className="flex h-9 items-center gap-2 text-sm text-slate-700">
                 <input
                   type="checkbox"
@@ -637,6 +657,14 @@ export function PayoutListFormDialog({
                 />
                 Ticked only
               </label>
+              {!locked && toPaise(outstanding.data?.overpaid ?? "0") !== 0n && (
+                <span
+                  className="tabular whitespace-nowrap text-xs text-slate-500"
+                  title="Suppliers paid more than billed. They are not listed, but they lower the Pending Outstanding report's total by this much."
+                >
+                  Overpaid, not listed: {formatMoney(outstanding.data?.overpaid ?? "0")}
+                </span>
+              )}
             </div>
             {!locked && (
               <div

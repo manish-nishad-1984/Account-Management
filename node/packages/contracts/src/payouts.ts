@@ -182,6 +182,8 @@ export const payoutOutstandingResponseSchema = z.object({
   rows: z.array(payoutOutstandingRowSchema),
   /** The sum of `outstanding` over every row. */
   total: z.string(),
+  /** Overpaid parties' balances (negative); they are not in `rows`. */
+  overpaid: z.string().default("0.00"),
 });
 export type PayoutOutstandingResponse = z.infer<typeof payoutOutstandingResponseSchema>;
 
