@@ -30,6 +30,8 @@ const LIST: PayoutListDetail = {
   listDate: "2026-10-07",
   title: "Week 41",
   budget: null,
+  companyId: null,
+  companyName: null,
   total: "175000.00",
   partyCount: 2,
   createdByName: "Office",

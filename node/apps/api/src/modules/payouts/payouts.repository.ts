@@ -13,6 +13,7 @@ import type {
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
 import {
+  companies,
   paymentAllocations,
   payments,
   payoutListInvoices,
@@ -58,6 +59,8 @@ interface HeaderRow {
   list_date: string;
   title: string | null;
   budget: string | null;
+  company_id: string | null;
+  company_name: string | null;
   note: string | null;
   total: string;
   party_count: number;
@@ -77,6 +80,7 @@ interface HeaderRow {
 const HEADER = sql`
   select
     l.id, l.list_date::text as list_date, l.title, l.budget::text as budget, l.note,
+    l.company_id, co.name as company_name,
     l.status, l.confirmed_at::text as confirmed_at,
     nullif(trim(concat_ws(' ', cf.first_name, cf.last_name)), '') as confirmed_by_name,
     coalesce(t.total, 0)::text as total, coalesce(t.party_count, 0)::int as party_count,
@@ -92,6 +96,7 @@ const HEADER = sql`
   left join ${users} cu on cu.id = l.created_by
   left join ${users} uu on uu.id = l.updated_by
   left join ${users} cf on cf.id = l.confirmed_by
+  left join ${companies} co on co.id = l.company_id
 `;
 
 const iso = (value: string | null): string | null => (value === null ? null : new Date(value).toISOString());
@@ -213,8 +218,11 @@ export class PayoutsRepository extends BaseRepository {
   }
 
   /** Live lists; the search matches the title or any party's name on the list. */
-  private where(search: string | undefined): SQL[] {
+  private where(search: string | undefined, companyId?: string): SQL[] {
     const where: SQL[] = [sql`l.is_deleted = false`];
+    if (companyId) {
+      where.push(sql`l.company_id = ${companyId}::uuid`);
+    }
     if (search) {
       const pattern = `%${search}%`;
       where.push(
@@ -232,8 +240,8 @@ export class PayoutsRepository extends BaseRepository {
    * cannot express a two-column key. The cursor value is `date|created_at` as
    * text, cast back in SQL for an exact round trip, compared as a row.
    */
-  async list(query: ListQuery): Promise<{ rows: Omit<PayoutListRow, "capabilities">[]; nextCursor: string | null }> {
-    const where = this.where(query.search);
+  async list(query: ListQuery, companyId?: string): Promise<{ rows: Omit<PayoutListRow, "capabilities">[]; nextCursor: string | null }> {
+    const where = this.where(query.search, companyId);
     if (query.cursor) {
       const cursor = decodeCursor(query.cursor);
       const [date, createdAt] = cursor.value.split("|");
@@ -263,10 +271,10 @@ export class PayoutsRepository extends BaseRepository {
     };
   }
 
-  async total(search?: string): Promise<number> {
+  async total(search?: string, companyId?: string): Promise<number> {
     const [row] = rawRows<{ n: number }>(
       await this.db.execute(
-        sql`select count(*)::int as n from ${payoutLists} l where ${sql.join(this.where(search), sql` and `)}`,
+        sql`select count(*)::int as n from ${payoutLists} l where ${sql.join(this.where(search, companyId), sql` and `)}`,
       ),
     );
     return row?.n ?? 0;
@@ -280,6 +288,8 @@ export class PayoutsRepository extends BaseRepository {
       listDate: row.list_date,
       title: row.title,
       budget: row.budget,
+      companyId: row.company_id,
+      companyName: row.company_name,
       total: row.total,
       partyCount: row.party_count,
       createdByName: row.created_by_name,
@@ -355,6 +365,7 @@ export class PayoutsRepository extends BaseRepository {
             title: input.title,
             budget: input.budget,
             note: input.note,
+            companyId: input.companyId ?? null,
             ...createdBy(actorId),
           })
           .returning({ id: payoutLists.id });
@@ -378,6 +389,7 @@ export class PayoutsRepository extends BaseRepository {
             title: input.title,
             budget: input.budget,
             note: input.note,
+            companyId: input.companyId ?? null,
             ...updatedBy(actorId),
           })
           .where(and(eq(payoutLists.id, id), eq(payoutLists.isDeleted, false)))

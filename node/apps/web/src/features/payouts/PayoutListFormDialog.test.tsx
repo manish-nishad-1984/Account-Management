@@ -27,6 +27,8 @@ const DETAIL = {
   listDate: "2026-10-01",
   title: "Weekly payout",
   budget: "300000.00",
+  companyId: null,
+  companyName: null,
   total: "265000.00",
   partyCount: 3,
   status: "draft",
@@ -46,6 +48,18 @@ const DETAIL = {
   ],
 };
 
+const COMPANY = "99999999-9999-4999-8999-999999999999";
+const COMPANIES = {
+  rows: [
+    {
+      id: COMPANY, name: "DH PATEL", invoicePrefix: "DHP", gstNo: null, panNo: null, area: null, pincode: null,
+      bankName: null, userCount: 0, capabilities: { canEdit: false, canDelete: false, canApprove: false },
+    },
+  ],
+  nextCursor: null,
+  total: 1,
+};
+
 let failure: Response | null;
 
 function serve() {
@@ -53,6 +67,7 @@ function serve() {
     const url = new URL(String(input), "http://localhost");
     const method = (init as RequestInit | undefined)?.method ?? "GET";
     if (method !== "GET" && failure) return Promise.resolve(failure.clone());
+    if (/\/companies$/.test(url.pathname)) return Promise.resolve(json(COMPANIES));
     if (/\/payout-lists\/outstanding$/.test(url.pathname)) return Promise.resolve(json(OWED));
     return Promise.resolve(json(DETAIL));
   });
@@ -148,9 +163,26 @@ describe("PayoutListFormDialog", () => {
       listDate: todayInput(),
       title: "Friday payout",
       budget: null,
+      companyId: null,
       note: null,
       lines: [{ partyId: P1, amount: "50000", invoices: [] }],
     });
+  });
+
+  it("saves the company chosen for the list, and asks for that company's parties", async () => {
+    const user = userEvent.setup();
+    openNew();
+
+    await screen.findByRole("option", { name: "DH PATEL" });
+    await user.selectOptions(screen.getByRole("combobox", { name: "Company" }), "DH PATEL");
+    await user.click(await screen.findByLabelText("Pay Ambica Steel Traders"));
+    await save(user);
+
+    await waitFor(() => expect(sent("POST")).not.toBeNull());
+    expect(sent("POST")).toMatchObject({ companyId: COMPANY });
+    expect(
+      vi.mocked(globalThis.fetch).mock.calls.some(([input]) => String(input).includes(`companyId=${COMPANY}`)),
+    ).toBe(true);
   });
 
   it("refuses a zero or blank amount on a ticked party and sends nothing", async () => {
@@ -334,6 +366,7 @@ describe("PayoutListFormDialog", () => {
         listDate: "2026-10-01",
         title: "Weekly payout",
         budget: "300000.00",
+        companyId: null,
         note: "Call before paying",
         lines: [
           { partyId: P1, amount: "125000.00", invoices: [] },

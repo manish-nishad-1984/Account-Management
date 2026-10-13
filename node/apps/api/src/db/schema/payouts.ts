@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, index, integer, numeric, pgTable, date, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { suppliers } from "./masters";
+import { companies } from "./users";
 
 /**
  * Payout lists (client request, 5 Oct 2026): the plan of which suppliers to pay
@@ -21,6 +22,12 @@ export const payoutLists = pgTable(
     /** What the owner said he can spend. Informational; the lines are not capped by it. */
     budget: numeric("budget", { precision: 18, scale: 2 }),
     note: text("note"),
+    /**
+     * The company whose bills the list was built for (client request, 13 Oct
+     * 2026), or null for a list across every company, which is what lists were
+     * before. Shown on the grid and filtered by there.
+     */
+    companyId: uuid("company_id").references(() => companies.id),
     /**
      * `draft` is a plan and touches nothing. `confirmed` means the owner has paid
      * it and a user with the right has recorded that: its payments exist, its

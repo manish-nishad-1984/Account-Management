@@ -304,6 +304,25 @@ describe("PayoutsRepository (real PostgreSQL)", () => {
     const make = (listDate: string, title: string, partyId = alId) =>
       repo.create(input([{ partyId, amount: "10.00" }], { listDate, title }), ACTOR);
 
+    it("keeps the company a list was built for, shows its name, and filters by it", async () => {
+      const mine = await repo.create(input([{ partyId: alId, amount: "10.00" }], { title: "for DH", companyId }), ACTOR);
+      await make("2026-10-06", "all companies");
+
+      expect(mine).toMatchObject({ companyId });
+      expect(mine.companyName).toEqual(expect.any(String));
+
+      const only = await repo.list(listQuerySchema.parse({}), companyId);
+      expect(only.rows.map((row) => row.title)).toEqual(["for DH"]);
+      expect(await repo.total(undefined, companyId)).toBe(1);
+
+      const both = await repo.list(listQuerySchema.parse({}));
+      expect(both.rows.find((row) => row.title === "all companies")).toMatchObject({ companyId: null, companyName: null });
+
+      // Editing can change or clear it.
+      const cleared = await repo.update(mine.id, input([{ partyId: alId, amount: "10.00" }], { title: "for DH" }), ACTOR);
+      expect(cleared.companyId).toBeNull();
+    });
+
     it("is newest list date first, then newest typed, and pages without gaps or repeats", async () => {
       await make("2026-10-01", "old");
       await make("2026-10-05", "same day, first");

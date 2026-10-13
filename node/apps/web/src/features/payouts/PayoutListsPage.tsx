@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { PayoutListRow } from "@accountmanagement/contracts";
 import { Copy, Eye, Image as ImageIcon, Plus } from "lucide-react";
 import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
 import { exportAmount, exportDate, type ExportColumn } from "../../lib/grid-export";
-import { Badge, Button, ConfirmDialog, IconButton, PageHeader } from "../../components/ui";
+import { Badge, Button, ConfirmDialog, IconButton, PageHeader, SelectField } from "../../components/ui";
+import { useCompanyOptions } from "../purchase-orders/api";
 import { formatDateTime, formatMoney } from "../../lib/format";
 import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
@@ -31,6 +32,7 @@ const Absent = () => <span className="text-slate-300">—</span>;
 const EXPORT_COLUMNS: ExportColumn<PayoutListRow>[] = [
   { header: "Date", width: 12, value: (row) => exportDate(row.listDate) },
   { header: "Title", width: 30, value: (row) => row.title },
+  { header: "Company", width: 28, value: (row) => row.companyName },
   { header: "Status", width: 12, value: (row) => (row.status === "confirmed" ? "Confirmed" : "Draft") },
   { header: "Parties", width: 10, align: "right", value: (row) => row.partyCount },
   { header: "Budget", width: 16, align: "right", value: (row) => exportAmount(row.budget) },
@@ -45,7 +47,10 @@ const EXPORT_COLUMNS: ExportColumn<PayoutListRow>[] = [
 export function PayoutListsPage() {
   const canAdd = usePermission("payout", "add");
   const screen = useMasterScreen<PayoutListRow>({ defaultSortBy: "listDate", defaultSortDir: "desc" });
-  const query = usePayoutLists(screen.listParams);
+  const [companyId, setCompanyId] = useState("");
+  const companies = useCompanyOptions();
+  const filterValues = { companyId: companyId === "" ? undefined : companyId };
+  const query = usePayoutLists(screen.listParams, filterValues);
   const remove = useDeletePayoutList();
   const share = usePayoutSharing();
 
@@ -65,6 +70,16 @@ export function PayoutListsPage() {
         id: "title",
         header: "Title",
         cell: ({ row }) => (row.original.title ? <span className="text-slate-700">{row.original.title}</span> : <Absent />),
+      },
+      {
+        id: "company",
+        header: "Company",
+        cell: ({ row }) =>
+          row.original.companyName ? (
+            <span className="text-slate-700">{row.original.companyName}</span>
+          ) : (
+            <span className="text-slate-400">All companies</span>
+          ),
       },
       {
         id: "status",
@@ -192,11 +207,24 @@ export function PayoutListsPage() {
       <PayoutImageDialog share={share} />
 
       <DataGrid<PayoutListRow>
+        filters={
+          <SelectField
+            labelHidden
+            label="Company"
+            value={companyId}
+            options={[
+              { value: "", label: "All companies" },
+              ...(companies.data?.rows ?? []).map((row) => ({ value: row.id, label: row.name })),
+            ]}
+            onChange={(event) => setCompanyId(event.target.value)}
+          />
+        }
         actions={
           <>
             <ExportExcelButton<PayoutListRow>
               resource="payout-lists"
               params={screen.listParams}
+              filters={filterValues}
               columns={EXPORT_COLUMNS}
               sheetName="Payout lists"
               fileName="Payout-lists"

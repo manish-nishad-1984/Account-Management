@@ -40,6 +40,9 @@ import type { AccessTokenClaims } from "../auth/token.service";
 const SUBJECT = "payout";
 
 /** The site in the header's filter, or nothing for every site. */
+/** The list screen's one extra filter: the company the list was built for. */
+const listFilterSchema = listQuerySchema.extend({ companyId: z.string().uuid().optional() });
+
 const outstandingQuerySchema = z.object({ siteId: z.string().uuid().optional(), companyId: z.string().uuid().optional() });
 
 @Controller("payout-lists")
@@ -49,7 +52,7 @@ export class PayoutsController {
   @Get()
   @Permissions("payout.view")
   async list(
-    @Query(new ZodValidationPipe(listQuerySchema)) query: ListQuery,
+    @Query(new ZodValidationPipe(listFilterSchema)) query: ListQuery & { companyId?: string },
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<ListResponse<PayoutListRow>> {
     const granted = caller?.permissions ?? [];
@@ -59,7 +62,10 @@ export class PayoutsController {
       // "Approve" on the Payout form is the right to CONFIRM a list (and reverse it).
       canApprove: hasPermission(granted, SUBJECT, "approve"),
     };
-    const [page, total] = await Promise.all([this.payouts.list(query), this.payouts.total(query.search)]);
+    const [page, total] = await Promise.all([
+      this.payouts.list(query, query.companyId),
+      this.payouts.total(query.search, query.companyId),
+    ]);
     return { rows: page.rows.map((row) => ({ ...row, capabilities })), nextCursor: page.nextCursor, total };
   }
 

@@ -1,0 +1,2 @@
+ALTER TABLE "payout_lists" ADD COLUMN "company_id" uuid;--> statement-breakpoint
+ALTER TABLE "payout_lists" ADD CONSTRAINT "payout_lists_company_id_companies_id_fk" FOREIGN KEY ("company_id") REFERENCES "public"."companies"("id") ON DELETE no action ON UPDATE no action;

@@ -208,6 +208,7 @@ export function PayoutListFormDialog({
       setTitle("");
       setBudget("");
       setNote("");
+      setCompanyId("");
       setPicked({});
       setBills({});
       setExpanded(new Set());
@@ -217,6 +218,7 @@ export function PayoutListFormDialog({
       setTitle(detail.data.title ?? "");
       setBudget(detail.data.budget ?? "");
       setNote(detail.data.note ?? "");
+      setCompanyId(detail.data.companyId ?? "");
       const withBills = detail.data.lines.filter((line) => (line.invoices ?? []).length > 0);
       setPicked(
         Object.fromEntries(
@@ -399,7 +401,7 @@ export function PayoutListFormDialog({
         })),
     }));
     const order = lines.map((line) => line.partyId);
-    const parsed = createPayoutListSchema.safeParse({ listDate, title, budget, note, lines });
+    const parsed = createPayoutListSchema.safeParse({ listDate, title, budget, note, companyId: companyId || null, lines });
     if (!parsed.success) {
       setErrors(placeIssues(parsed.error.issues, order));
       // A ticked party hidden by the search could carry the error; show them all.

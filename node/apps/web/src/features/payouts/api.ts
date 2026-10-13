@@ -9,7 +9,7 @@ import {
   type PayoutListRow,
   type UpdatePayoutList,
 } from "@accountmanagement/contracts";
-import { useListResource, type ListParams } from "../../lib/list-query";
+import { useListResource, type ListFilters, type ListParams } from "../../lib/list-query";
 import { useCreateResource, useDeleteResource, useUpdateResource } from "../../lib/crud";
 import { apiRequest } from "../../lib/api-client";
 
@@ -21,8 +21,8 @@ const RESOURCE = "payout-lists";
  * A saved list does not change what is owed, but a list edited in one tab must
  * not leave the other tab building from yesterday's figures.
  */
-export const usePayoutLists = (params: ListParams) =>
-  useListResource<PayoutListRow>(RESOURCE, payoutListRowSchema, params);
+export const usePayoutLists = (params: ListParams, filters: ListFilters = {}) =>
+  useListResource<PayoutListRow>(RESOURCE, payoutListRowSchema, params, filters);
 
 const detailQuery = (id: string) => ({
   queryKey: [RESOURCE, "detail", id],

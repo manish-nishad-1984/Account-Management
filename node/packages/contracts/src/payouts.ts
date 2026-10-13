@@ -69,6 +69,8 @@ export const createPayoutListSchema = z
     /** What the owner has to spend, when he said. Informational; not a cap. */
     budget: optionalMoney("Budget"),
     note: optionalText(1000),
+    /** The company the list was built for; none means every company. */
+    companyId: z.string().uuid().nullable().optional(),
     lines: z.array(payoutLineInputSchema).min(1, "Add at least one party").max(500),
   })
   .superRefine((value, ctx) => {
@@ -99,6 +101,9 @@ export const payoutListRowSchema = z.object({
   listDate: z.string(),
   title: z.string().nullable(),
   budget: z.string().nullable(),
+  companyId: z.string().nullable(),
+  /** Null for a list across every company. */
+  companyName: z.string().nullable(),
   /** The sum of the line amounts. */
   total: z.string(),
   partyCount: z.number().int().nonnegative(),

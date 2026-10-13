@@ -183,6 +183,13 @@
       "when": 1791538730193,
       "tag": "0025_client_master_and_income",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791899865380,
+      "tag": "0026_payout_list_company",
+      "breakpoints": true
     }
   ]
 }
