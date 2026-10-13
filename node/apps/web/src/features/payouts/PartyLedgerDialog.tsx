@@ -8,25 +8,23 @@ import { useLedger } from "../reports/api";
 const PAGE = 200;
 
 /**
- * A supplier's ledger in a popup, opened from a bill on the payout builder
- * (client request, 13 Oct 2026), so the office can check what was billed and paid
- * without leaving the list.
+ * A supplier's ledger in a popup, opened from the eye beside the party on the
+ * payout builder (client request, 13 Oct 2026), so the office can check what was
+ * billed and paid without leaving the list.
  *
  * It is the Ledger report for ONE supplier, in the same site and company scope
  * the builder is showing, so its closing balance is the party's outstanding on
- * the row. `highlight` is the bill the eye was clicked on.
+ * the row.
  */
 export function PartyLedgerDialog({
   partyId,
   partyName,
-  highlight,
   companyId,
   siteId,
   onClose,
 }: {
   partyId: string | null;
   partyName: string;
-  highlight: string | null;
   companyId: string | null;
   siteId: string | null;
   onClose: () => void;
@@ -55,7 +53,6 @@ export function PartyLedgerDialog({
       open={partyId !== null}
       onClose={close}
       title={`Ledger · ${partyName}`}
-      description={highlight ? `Opened from bill ${highlight}` : undefined}
       size="xl"
       footer={<Button onClick={close}>Close</Button>}
     >
@@ -89,7 +86,7 @@ export function PartyLedgerDialog({
                   </tr>
                 )}
                 {data.rows.map((row) => (
-                  <tr key={row.id} className={clsx(row.displayNo === highlight && "bg-amber-50")}>
+                  <tr key={row.id}>
                     <td className="tabular whitespace-nowrap px-3 py-1.5 text-slate-700">
                       {row.documentDate ? formatDate(row.documentDate) : "—"}
                     </td>

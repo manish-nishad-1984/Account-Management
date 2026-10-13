@@ -70,7 +70,7 @@ describe("PayoutListFormDialog - bills", () => {
     expect(screen.getByText("BE-2")).toBeInTheDocument();
   });
 
-  it("opens the supplier's ledger in a popup from the eye beside a bill, without ticking it", async () => {
+  it("opens the supplier's ledger in a popup from the eye beside the party, without ticking it", async () => {
     const user = userEvent.setup();
     open();
     vi.mocked(globalThis.fetch).mockImplementation((input: RequestInfo | URL) =>
@@ -96,7 +96,7 @@ describe("PayoutListFormDialog - bills", () => {
     );
 
     await user.click(await screen.findByRole("button", { name: /show the bills of ambica/i }));
-    await user.click(screen.getByRole("button", { name: /see ledger of ambica steel traders for bill BE-1/i }));
+    await user.click(screen.getByRole("button", { name: /^see ledger of ambica steel traders$/i }));
 
     expect(await screen.findByText("Ledger · Ambica Steel Traders")).toBeInTheDocument();
     expect(await screen.findByText("Purchase")).toBeInTheDocument();
