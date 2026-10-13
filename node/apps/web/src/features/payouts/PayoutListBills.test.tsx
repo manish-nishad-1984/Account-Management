@@ -70,6 +70,41 @@ describe("PayoutListFormDialog - bills", () => {
     expect(screen.getByText("BE-2")).toBeInTheDocument();
   });
 
+  it("opens the supplier's ledger in a popup from the eye beside a bill, without ticking it", async () => {
+    const user = userEvent.setup();
+    open();
+    vi.mocked(globalThis.fetch).mockImplementation((input: RequestInfo | URL) =>
+      Promise.resolve(
+        json(
+          /reports\/ledger/.test(String(input))
+            ? {
+                rows: [
+                  {
+                    id: "invoice:d1", documentId: "d1", source: "invoice", displayNo: "BE-1", label: "Purchase",
+                    documentDate: "2026-08-01", partyId: P1, partyName: "Ambica Steel Traders", siteId: null,
+                    siteName: "SURAT", siteLocationId: null, siteLocationName: null, companyId: "c", companyName: "DH",
+                    effect: "credit", credit: "60000.00", debit: "0.00", balance: "60000.00",
+                  },
+                ],
+                total: 1, nextCursor: null, totalCredit: "60000.00", totalDebit: "0.00", closingBalance: "60000.00",
+              }
+            : /outstanding$/.test(String(input))
+              ? OWED
+              : {},
+        ),
+      ),
+    );
+
+    await user.click(await screen.findByRole("button", { name: /show the bills of ambica/i }));
+    await user.click(screen.getByRole("button", { name: /see ledger of ambica steel traders for bill BE-1/i }));
+
+    expect(await screen.findByText("Ledger · Ambica Steel Traders")).toBeInTheDocument();
+    expect(await screen.findByText("Purchase")).toBeInTheDocument();
+    const asked = vi.mocked(globalThis.fetch).mock.calls.map(([input]) => String(input));
+    expect(asked.some((url) => url.includes("/reports/ledger") && url.includes(`partyId=${P1}`) && url.includes("direction=out"))).toBe(true);
+    expect(screen.getByLabelText("Pay bill BE-1 of Ambica Steel Traders")).not.toBeChecked();
+  });
+
   it("ticks every bill for the party, in full, and the party's amount is their sum", async () => {
     const user = userEvent.setup();
     open();

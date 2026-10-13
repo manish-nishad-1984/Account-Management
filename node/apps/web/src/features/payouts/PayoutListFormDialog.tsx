@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { CheckCircle2, ChevronDown, ChevronRight, Copy, Image as ImageIcon, Search, Undo2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Copy, Eye, Image as ImageIcon, Search, Undo2 } from "lucide-react";
 import {
   createPayoutListSchema,
   type CreatePayoutList,
@@ -25,6 +25,7 @@ import {
 } from "./api";
 import { ConfirmedView } from "./ConfirmedView";
 import { ConfirmPayoutDialog } from "./ConfirmPayoutDialog";
+import { PartyLedgerDialog } from "./PartyLedgerDialog";
 import { AmountField } from "./AmountField";
 import { fromPaise, sumAmounts, toPaise } from "./decimal";
 import { formatListDate } from "./message";
@@ -145,6 +146,8 @@ export function PayoutListFormDialog({
   // before. The Pending Outstanding report filters the same way, so choosing
   // one company here gives that report's figure for it.
   const [companyId, setCompanyId] = useState("");
+  // The supplier whose ledger is open in a popup, and the bill it was opened from.
+  const [ledgerFor, setLedgerFor] = useState<{ partyId: string; partyName: string; bill: string } | null>(null);
   const companies = useCompanyOptions();
   const outstanding = usePayoutOutstanding(open && !locked && scope.isReady, scope.siteId, companyId || null);
   const create = useCreatePayoutList();
@@ -744,7 +747,7 @@ export function PayoutListFormDialog({
                           <tr
                             className={clsx(
                               "cursor-pointer transition-colors",
-                              ticked ? "bg-brand-50 hover:bg-brand-100/70" : "hover:bg-slate-100",
+                              ticked ? "bg-brand-100 hover:bg-brand-100/80" : "bg-sky-50 hover:bg-sky-100",
                             )}
                             onClick={(event) => {
                               // A click on the amount box or the box itself is theirs, not the row's.
@@ -848,6 +851,15 @@ export function PayoutListFormDialog({
                                     />
                                   </td>
                                   <td className="px-2 py-0.5 pl-9 align-top text-slate-700">
+                                    <button
+                                      type="button"
+                                      aria-label={`See ledger of ${row.partyName} for bill ${bill.displayNo}`}
+                                      title="See ledger"
+                                      className="mr-1.5 inline-flex rounded p-0.5 align-middle text-slate-500 hover:bg-slate-200 hover:text-brand-700"
+                                      onClick={() => setLedgerFor({ partyId: row.partyId, partyName: row.partyName, bill: bill.displayNo })}
+                                    >
+                                      <Eye className="size-4" />
+                                    </button>
                                     <span className="font-medium">{bill.displayNo}</span>
                                     <span className="ml-2 text-xs text-slate-500">
                                       {[bill.documentDate ? formatListDate(bill.documentDate) : null, bill.siteName]
@@ -890,6 +902,14 @@ export function PayoutListFormDialog({
           </FormSection>
           </>
           )}
+          <PartyLedgerDialog
+            partyId={ledgerFor?.partyId ?? null}
+            partyName={ledgerFor?.partyName ?? ""}
+            highlight={ledgerFor?.bill ?? null}
+            companyId={companyId || null}
+            siteId={scope.siteId}
+            onClose={() => setLedgerFor(null)}
+          />
           {saved && (
             <ConfirmPayoutDialog open={confirmOpen} list={saved} onClose={() => setConfirmOpen(false)} />
           )}
