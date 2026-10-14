@@ -47,10 +47,16 @@ export function ItemFormDialog({
   open,
   itemId,
   onClose,
+  initialName = "",
+  onSaved,
 }: {
   open: boolean;
   itemId: string | null;
   onClose: () => void;
+  /** A name to start the box with, for an item added from a document line. */
+  initialName?: string;
+  /** Called with the NEW item once it is saved, so the line that asked for it can take it. */
+  onSaved?: (item: ItemDetail) => void;
 }) {
   /**
    * A STARTING POINT PICKED FROM THE MATCHES (client request, 6 Oct 2026). While
@@ -113,7 +119,7 @@ export function ItemFormDialog({
     setFormError(null);
     if (!isEdit) {
       if (!pickedId) {
-        reset(EMPTY);
+        reset({ ...EMPTY, name: initialName });
       } else if (template.data) {
         // The copy lands on the name box, selected, ready to be typed over.
         reset(toFormValues(template.data));
@@ -122,7 +128,7 @@ export function ItemFormDialog({
     } else if (detail.data) {
       reset(toFormValues(detail.data));
     }
-  }, [open, isEdit, detail.data, pickedId, template.data, reset, setFocus]);
+  }, [open, isEdit, detail.data, pickedId, template.data, reset, setFocus, initialName]);
 
   const pending = create.isPending || update.isPending;
 
@@ -154,7 +160,8 @@ export function ItemFormDialog({
       if (isEdit) {
         await update.mutateAsync({ id: itemId, body: values });
       } else {
-        await create.mutateAsync(values);
+        const created = await create.mutateAsync(values);
+        onSaved?.(created);
       }
       onClose();
     } catch (error) {

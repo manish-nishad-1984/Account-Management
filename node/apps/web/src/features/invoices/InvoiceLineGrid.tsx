@@ -256,6 +256,7 @@ export function InvoiceLineGrid({
                       label={`Item on line ${index + 1}`}
                       labelHidden
                       allowFreeText
+                      allowAddNew
                       itemId={String(line?.itemId ?? "")}
                       itemName={String(line?.itemName ?? "")}
                       error={lineError(index, "itemId") ?? lineError(index, "itemName")}

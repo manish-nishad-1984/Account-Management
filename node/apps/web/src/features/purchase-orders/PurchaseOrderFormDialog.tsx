@@ -550,6 +550,7 @@ export function PurchaseOrderFormDialog({
                           label={`Item on line ${index + 1}`}
                           labelHidden
                           allowFreeText
+                          allowAddNew
                           // `String(...)`: `useWatch` widens a field of the form's
                           // INPUT type, which zod's coercion leaves as `{}` here.
                           // The old code only ever asked whether it was truthy.

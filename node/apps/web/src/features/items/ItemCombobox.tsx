@@ -1,13 +1,15 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
-import { ChevronDown, Pencil } from "lucide-react";
+import { ChevronDown, Pencil, Plus } from "lucide-react";
 import {
   CONTROL_BASE,
   LABEL_BASE,
   MESSAGE_BASE,
   ringFor,
 } from "../../components/ui/fields";
+import { usePermission } from "../../lib/permissions";
+import { ItemFormDialog } from "./ItemFormDialog";
 import { useItem, useItemOptions } from "./api";
 
 /**
@@ -50,6 +52,7 @@ export function ItemCombobox({
   disabled,
   error,
   allowFreeText = false,
+  allowAddNew = false,
   className,
   id,
 }: {
@@ -66,10 +69,21 @@ export function ItemCombobox({
   disabled?: boolean;
   error?: string;
   allowFreeText?: boolean;
+  /**
+   * Offer "Add new item" at the foot of the list (client request, 14 Oct 2026):
+   * a popup with the item form, and the item saved there is picked for this line.
+   * Shown only to a user who may add items.
+   */
+  allowAddNew?: boolean;
   className?: string;
   /** Supplied where something else focuses this box — the grid's Add-line button. */
   id?: string;
 }) {
+  const canAddItem = usePermission("item", "add");
+  const offerAdd = allowAddNew && canAddItem;
+  const [adding, setAdding] = useState(false);
+  // The name typed when "Add new item" was clicked, kept: the box loses focus to the popup and clears its query.
+  const [addName, setAddName] = useState("");
   const generatedId = useId();
   const inputId = id ?? generatedId;
   const listId = `${inputId}-list`;
@@ -359,8 +373,42 @@ export function ItemCombobox({
               Use “{typed}” as a typed name
             </li>
           )}
+          {offerAdd && (
+            <li role="presentation" className="sticky bottom-0 border-t border-slate-100 bg-white">
+              <button
+                type="button"
+                // `onMouseDown`, like the options: the input's blur would shut the list first.
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  setOpen(false);
+                  setAddName(typed);
+                  setAdding(true);
+                }}
+                className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-sm font-medium text-brand-700 hover:bg-brand-50"
+              >
+                <Plus aria-hidden className="size-4" />
+                Add new item
+              </button>
+            </li>
+          )}
         </ul>,
         document.body,
+      )}
+
+      {offerAdd && (
+        <ItemFormDialog
+          open={adding}
+          itemId={null}
+          initialName={addName}
+          onClose={() => {
+            setAdding(false);
+            setQuery(null);
+          }}
+          onSaved={(item) => {
+            lastLabel.current = item.name;
+            onPick(item.id, item.name);
+          }}
+        />
       )}
 
       {error && (
