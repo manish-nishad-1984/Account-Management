@@ -8,7 +8,7 @@ import {
   type PayoutListDetail,
   type PayoutPendingInvoice,
 } from "@accountmanagement/contracts";
-import { Alert, Button, ConfirmDialog, FormDialog, FormSection, SelectField, TextField } from "../../components/ui";
+import { Alert, Button, ConfirmDialog, FormDialog, FormSection, Modal, SelectField, TextField } from "../../components/ui";
 import { useCompanyOptions } from "../purchase-orders/api";
 import { usePermission } from "../../lib/permissions";
 import { useRecordLayout } from "../../contexts/RecordLayoutContext";
@@ -147,6 +147,7 @@ export function PayoutListFormDialog({
   // one company here gives that report's figure for it.
   const [companyId, setCompanyId] = useState("");
   // The supplier whose ledger is open in a popup.
+  const [overpaidOpen, setOverpaidOpen] = useState(false);
   const [ledgerFor, setLedgerFor] = useState<{ partyId: string; partyName: string } | null>(null);
   const companies = useCompanyOptions();
   const outstanding = usePayoutOutstanding(open && !locked && scope.isReady, scope.siteId, companyId || null);
@@ -663,12 +664,14 @@ export function PayoutListFormDialog({
                 Ticked only
               </label>
               {!locked && toPaise(outstanding.data?.overpaid ?? "0") !== 0n && (
-                <span
-                  className="tabular whitespace-nowrap text-xs text-slate-500"
-                  title="Suppliers paid more than billed. They are not listed, but they lower the Pending Outstanding report's total by this much."
+                <button
+                  type="button"
+                  className="tabular whitespace-nowrap text-xs text-slate-500 underline decoration-dotted underline-offset-2 hover:text-brand-700"
+                  title="Suppliers paid more than billed. They are not listed, but they lower the Pending Outstanding report's total by this much. Click to see who."
+                  onClick={() => setOverpaidOpen(true)}
                 >
                   Overpaid, not listed: {formatMoney(outstanding.data?.overpaid ?? "0")}
-                </span>
+                </button>
               )}
             </div>
             {!locked && (
@@ -906,6 +909,55 @@ export function PayoutListFormDialog({
           </FormSection>
           </>
           )}
+          <Modal
+            open={overpaidOpen}
+            onClose={() => setOverpaidOpen(false)}
+            title="Overpaid suppliers"
+            description="Paid more than billed, so nothing is owed them. They are not in the list above."
+            size="md"
+            footer={<Button onClick={() => setOverpaidOpen(false)}>Close</Button>}
+          >
+            <div className="max-h-[60vh] overflow-auto rounded-lg ring-1 ring-slate-200">
+              <table className="w-full text-left text-sm">
+                <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Supplier</th>
+                    <th className="px-3 py-2 text-right font-medium">Overpaid by</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(outstanding.data?.overpaidParties ?? []).length === 0 && (
+                    <tr>
+                      <td colSpan={2} className="px-3 py-6 text-center text-slate-500">No supplier is overpaid</td>
+                    </tr>
+                  )}
+                  {(outstanding.data?.overpaidParties ?? []).map((party) => (
+                    <tr key={party.partyId}>
+                      <td className="px-3 py-1.5">
+                        <span className="font-medium text-slate-900">{party.partyName}</span>
+                        <button
+                          type="button"
+                          aria-label={`See ledger of ${party.partyName}`}
+                          title="See ledger"
+                          className="ml-1 inline-flex rounded p-0.5 align-middle text-slate-500 hover:bg-slate-200 hover:text-brand-700"
+                          onClick={() => setLedgerFor({ partyId: party.partyId, partyName: party.partyName })}
+                        >
+                          <Eye className="size-4" />
+                        </button>
+                      </td>
+                      <td className="tabular px-3 py-1.5 text-right text-amber-700">{formatMoney(party.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-slate-50 font-medium text-slate-900">
+                  <tr>
+                    <td className="px-3 py-2">Total</td>
+                    <td className="tabular px-3 py-2 text-right">{formatMoney(outstanding.data?.overpaid ?? "0")}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </Modal>
           <PartyLedgerDialog
             partyId={ledgerFor?.partyId ?? null}
             partyName={ledgerFor?.partyName ?? ""}

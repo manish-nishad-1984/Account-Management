@@ -189,6 +189,10 @@ export const payoutOutstandingResponseSchema = z.object({
   total: z.string(),
   /** Overpaid parties' balances (negative); they are not in `rows`. */
   overpaid: z.string().default("0.00"),
+  /** Who they are, most overpaid first, for the popup behind that figure. */
+  overpaidParties: z
+    .array(z.object({ partyId: z.string(), partyName: z.string(), amount: z.string() }))
+    .default([]),
 });
 export type PayoutOutstandingResponse = z.infer<typeof payoutOutstandingResponseSchema>;
 

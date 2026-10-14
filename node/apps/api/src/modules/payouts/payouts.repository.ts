@@ -204,7 +204,10 @@ export class PayoutsRepository extends BaseRepository {
     const total = owed.reduce((sum, row) => sum + row.paise, 0n);
     // Overpaid parties are not listed (nothing is owed them); they are the gap
     // between this total and the Pending Outstanding report's.
-    const overpaid = [...net.values()].reduce((sum, row) => (row.paise < 0n ? sum + row.paise : sum), 0n);
+    const overpaidRows = [...net.values()]
+      .filter((row) => row.paise < 0n)
+      .sort((a, b) => (a.paise < b.paise ? -1 : a.paise > b.paise ? 1 : a.partyName.localeCompare(b.partyName)));
+    const overpaid = overpaidRows.reduce((sum, row) => sum + row.paise, 0n);
     return {
       rows: owed.map((row) => ({
         partyId: row.partyId,
@@ -214,6 +217,11 @@ export class PayoutsRepository extends BaseRepository {
       })),
       total: fromPaise(total),
       overpaid: fromPaise(overpaid),
+      overpaidParties: overpaidRows.map((row) => ({
+        partyId: row.partyId,
+        partyName: row.partyName,
+        amount: fromPaise(row.paise),
+      })),
     };
   }
 

@@ -20,6 +20,11 @@ const OWED = {
     { partyId: P4, partyName: "Fifth Traders", outstanding: "0.20", invoices: [] },
   ],
   total: "4125000.30",
+  overpaid: "-3123.00",
+  overpaidParties: [
+    { partyId: "o1", partyName: "Shree Balaji", amount: "-2863.00" },
+    { partyId: "o2", partyName: "Khodiyar", amount: "-260.00" },
+  ],
 };
 
 const DETAIL = {
@@ -183,6 +188,19 @@ describe("PayoutListFormDialog", () => {
     expect(
       vi.mocked(globalThis.fetch).mock.calls.some(([input]) => String(input).includes(`companyId=${COMPANY}`)),
     ).toBe(true);
+  });
+
+  it("names the overpaid suppliers behind the figure, in a popup", async () => {
+    const user = userEvent.setup();
+    openNew();
+
+    await user.click(await screen.findByRole("button", { name: /overpaid, not listed/i }));
+
+    const popup = await screen.findByRole("dialog", { name: /overpaid suppliers/i });
+    expect(within(popup).getByText("Shree Balaji")).toBeInTheDocument();
+    expect(within(popup).getByText("-2,863.00")).toBeInTheDocument();
+    expect(within(popup).getByText("Khodiyar")).toBeInTheDocument();
+    expect(within(popup).getByText("-3,123.00")).toBeInTheDocument(); // the total
   });
 
   it("refuses a zero or blank amount on a ticked party and sends nothing", async () => {

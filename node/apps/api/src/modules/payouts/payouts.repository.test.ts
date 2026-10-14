@@ -157,6 +157,9 @@ describe("PayoutsRepository (real PostgreSQL)", () => {
       await pay(shahId, "1000.00", otherSiteId); // +700 at Akwada, -1000 at Surat = -300
       const result = await repo.outstanding();
       expect(result.rows.map((row) => row.partyName)).toEqual(["AL BURHAN PIPES"]);
+      // ...and says who it left out and by how much, which is the gap to the report's total.
+      expect(result.overpaid).toBe("-300.00");
+      expect(result.overpaidParties.map((p) => [p.partyName, p.amount])).toEqual([[expect.stringContaining("SHAH"), "-300.00"]]);
     });
   });
 
