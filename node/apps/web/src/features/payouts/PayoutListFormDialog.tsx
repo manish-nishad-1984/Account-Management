@@ -751,7 +751,7 @@ export function PayoutListFormDialog({
                             className={clsx(
                               "cursor-pointer transition-colors",
                               open
-                                ? "bg-orange-100/70 hover:bg-orange-100"
+                                ? "bg-yellow-100 hover:bg-yellow-200/70"
                                 : ticked
                                   ? "bg-brand-50 hover:bg-brand-100/70"
                                   : "hover:bg-slate-100",
