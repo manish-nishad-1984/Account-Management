@@ -120,7 +120,7 @@ describe("PurchaseInvoiceImportService (real PostgreSQL)", () => {
 
   it("groups rows of one invoice, applies TDS and Adjustment once, and imports exactly what was previewed", async () => {
     const file = await sheet([
-      row({ ...BASE, "Invoice no": "B1", Quantity: "2", Rate: "500", "GST %": "18", TDS: "100", Adjustment: "-5", "Site location": "block a", "Shipping address": "Plot 5", Type: "Purchase" }),
+      row({ ...BASE, "Invoice no": "B1", Quantity: "2", Rate: "500", "GST %": "18", TDS: "100", Adjustment: "-5", "Site location": "block a", "Location Address": "Plot 5", Type: "Purchase" }),
       row({ ...BASE, "Invoice no": "B1", Quantity: "1", Rate: "250", "Discount per unit": "50", "GST %": "18", TDS: "100" }),
     ]);
     const preview = await service.preview(file);

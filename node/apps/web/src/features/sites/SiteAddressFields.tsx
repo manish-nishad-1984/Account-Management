@@ -112,7 +112,7 @@ export function SiteAddressFields({
                   : locationOptions.length === 1
                     ? "This site has no locations. Add them on Site Location."
                     : selectedLocationHasNoAddress
-                      ? "This location has no address yet. Add one on the Site Location screen, or choose a shipping address below."
+                      ? "This location has no address yet. Add one on the Site Location screen, or choose a Location Address below."
                       : undefined
             }
             error={location.error}
@@ -148,7 +148,7 @@ export function SiteAddressFields({
 
       <div>
         <label htmlFor={SHIPPING_ID} className={LABEL_BASE}>
-          Shipping address
+          Location Address
         </label>
         {!chosenSite ? (
           <p className="mt-1 text-sm text-slate-500">Choose a site first.</p>
@@ -192,7 +192,7 @@ export function SiteAddressFields({
                 changing that would be changing what the form can post.
               */}
               <option value="" disabled>
-                Choose a shipping address
+                Choose a Location Address
               </option>
               {savedElsewhere && (
                 <optgroup label={SAVED_HERE}>

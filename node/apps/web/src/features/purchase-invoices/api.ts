@@ -3,7 +3,6 @@ import {
   listResponseSchema,
   purchaseInvoiceImportPreviewSchema,
   purchaseInvoiceImportResultSchema,
-  purchaseInvoiceSheetResultSchema,
   purchaseInvoiceDetailSchema,
   purchaseInvoiceRowSchema,
   purchaseOrderRowSchema,
@@ -13,7 +12,6 @@ import {
   type PurchaseInvoiceRow,
   type PurchaseInvoiceImportPreview,
   type PurchaseInvoiceImportResult,
-  type PurchaseInvoiceSheetResult,
   type PurchaseOrderRow,
   type UpdatePurchaseInvoice,
 } from "@accountmanagement/contracts";
@@ -108,31 +106,6 @@ export const usePurchaseOrderOptions = (supplierId: string | null) =>
         { schema: listResponseSchema(purchaseOrderRowSchema) as never, signal },
       ),
   });
-
-/**
- * "Import locations": a spreadsheet that sets each named invoice's site location
- * and shipping address. A rejected file is a 400 whose body IS the result (every
- * bad row), so the dialog reads `error.body`; the mutation still throws.
- */
-export const useImportInvoiceLocations = () => {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: (file: File) =>
-      uploadRequest<PurchaseInvoiceSheetResult>(`/${RESOURCE}/import-locations`, [file], {
-        schema: purchaseInvoiceSheetResultSchema,
-      }),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: [RESOURCE] });
-    },
-  });
-};
-
-/** The rejected result out of a failed import, or null when it failed some other way. */
-export function locationImportRejectionFrom(error: unknown): PurchaseInvoiceSheetResult | null {
-  if (!(error instanceof ApiError) || !error.body) return null;
-  const parsed = purchaseInvoiceSheetResultSchema.safeParse(error.body);
-  return parsed.success ? parsed.data : null;
-}
 
 /** "Import invoices", step 1: the file priced and checked; nothing is saved. */
 export const usePreviewInvoiceImport = () =>

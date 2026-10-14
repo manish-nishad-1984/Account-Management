@@ -23,7 +23,7 @@ export const PURCHASE_INVOICE_IMPORT_COLUMNS = [
   { key: "siteLocation", header: "Site location", required: false, note: "A location of that site" },
   { key: "type", header: "Type", required: false, note: "Purchase (default), Purchase Return or Credit Note" },
   { key: "challanNo", header: "Challan no", required: false, note: "" },
-  { key: "shippingAddress", header: "Shipping address", required: false, note: "" },
+  { key: "shippingAddress", header: "Location Address", required: false, note: "" },
   { key: "item", header: "Item", required: true, note: "As in Items" },
   { key: "unit", header: "Unit", required: false, note: "Blank takes the item's own unit" },
   { key: "quantity", header: "Quantity", required: true, note: "" },

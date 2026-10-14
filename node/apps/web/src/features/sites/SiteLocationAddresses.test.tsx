@@ -54,9 +54,9 @@ describe("SiteLocationAddresses", () => {
     renderWithAuth(<Harness />);
     await screen.findByRole("option", { name: "Block A" });
     expect(box("Billing address")).toHaveTextContent("Plot 12, Akwada Lake Front");
-    expect(box("Shipping address")).toBeEmptyDOMElement();
+    expect(box("Location Address")).toBeEmptyDOMElement();
     // Both are text, not controls: nothing to type into and no address picker.
-    expect(screen.queryByRole("combobox", { name: "Shipping address" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Location Address" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
@@ -65,10 +65,10 @@ describe("SiteLocationAddresses", () => {
     await screen.findByRole("option", { name: "Block A" });
 
     await userEvent.selectOptions(screen.getByLabelText("Location"), "Block A");
-    expect(box("Shipping address")).toHaveTextContent("Block A gate, Hazira");
+    expect(box("Location Address")).toHaveTextContent("Block A gate, Hazira");
 
     await userEvent.selectOptions(screen.getByLabelText("Location"), "No location");
-    expect(box("Shipping address")).toBeEmptyDOMElement();
+    expect(box("Location Address")).toBeEmptyDOMElement();
   });
 
   it("leaves shipping blank for a location that has no address", async () => {
@@ -76,7 +76,7 @@ describe("SiteLocationAddresses", () => {
     await screen.findByRole("option", { name: "Block A" });
 
     await userEvent.selectOptions(screen.getByLabelText("Location"), "Store Yard (no address yet)");
-    expect(box("Shipping address")).toBeEmptyDOMElement();
+    expect(box("Location Address")).toBeEmptyDOMElement();
   });
 
   it("shows a location's address even when it is the same as the site's own", async () => {
@@ -84,6 +84,6 @@ describe("SiteLocationAddresses", () => {
     await screen.findByRole("option", { name: "Main Gate" });
 
     await userEvent.selectOptions(screen.getByLabelText("Location"), "Main Gate");
-    expect(box("Shipping address")).toHaveTextContent("Plot 12, Akwada Lake Front");
+    expect(box("Location Address")).toHaveTextContent("Plot 12, Akwada Lake Front");
   });
 });

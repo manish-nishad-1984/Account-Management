@@ -59,7 +59,7 @@ describe("choosing a location on SiteAddressFields", () => {
 
     await userEvent.selectOptions(screen.getByLabelText("Location"), "Block A");
 
-    expect(screen.getByLabelText("Shipping address")).toHaveValue("Block A gate, Hazira");
+    expect(screen.getByLabelText("Location Address")).toHaveValue("Block A gate, Hazira");
     // The existing "chosen address" preview is what shows it — no second display.
     expect(screen.getAllByText("Block A gate, Hazira")).toHaveLength(2); // the option, and the preview
     expect(screen.getByText("Location address")).toBeInTheDocument(); // the preview's source label
@@ -71,11 +71,11 @@ describe("choosing a location on SiteAddressFields", () => {
 
     // Pick the address-bearing location first, so there is something to clear.
     await userEvent.selectOptions(screen.getByLabelText("Location"), "Block A");
-    expect(screen.getByLabelText("Shipping address")).toHaveValue("Block A gate, Hazira");
+    expect(screen.getByLabelText("Location Address")).toHaveValue("Block A gate, Hazira");
 
     await userEvent.selectOptions(screen.getByLabelText("Location"), "Store Yard (no address yet)");
 
-    expect(screen.getByLabelText("Shipping address")).toHaveValue("");
+    expect(screen.getByLabelText("Location Address")).toHaveValue("");
     expect(
       screen.getByText(/this location has no address yet\. add one on the site location screen/i),
     ).toBeInTheDocument();
@@ -88,7 +88,7 @@ describe("choosing a location on SiteAddressFields", () => {
     await userEvent.selectOptions(screen.getByLabelText("Location"), "Block A");
     await userEvent.selectOptions(screen.getByLabelText("Location"), "No location");
 
-    expect(screen.getByLabelText("Shipping address")).toHaveValue("Block A gate, Hazira");
+    expect(screen.getByLabelText("Location Address")).toHaveValue("Block A gate, Hazira");
   });
 
 });

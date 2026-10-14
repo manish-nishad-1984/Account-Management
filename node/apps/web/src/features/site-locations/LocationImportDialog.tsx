@@ -1,54 +1,54 @@
 import { useRef, useState } from "react";
 import {
-  PURCHASE_INVOICE_LOCATION_COLUMNS,
-  PURCHASE_INVOICE_SHEET_ACCEPT,
-  type PurchaseInvoiceSheetResult,
+  SITE_LOCATION_SHEET_ACCEPT,
+  SITE_LOCATION_SHEET_COLUMNS,
+  type SiteLocationSheetResult,
 } from "@accountmanagement/contracts";
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Upload } from "lucide-react";
 import { Alert, Button, Modal } from "../../components/ui";
+import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { ApiError } from "../../lib/api-client";
 import { downloadGridExcel, type ExportColumn } from "../../lib/grid-export";
-import { locationImportRejectionFrom, useImportInvoiceLocations } from "./api";
+import { siteLocationImportRejectionFrom, useImportSiteLocations } from "./api";
 
 type SampleRow = string[];
 
 /** The sample file's layout and two made-up rows, so a person can see what to fill. */
 const SAMPLE_COLUMNS: ExportColumn<SampleRow>[] = [
-  { header: "Invoice no", width: 18, value: (row) => row[0] },
-  { header: "Supplier", width: 30, value: (row) => row[1] },
-  { header: "Site location", width: 22, value: (row) => row[2] },
-  { header: "Shipping address", width: 44, value: (row) => row[3] },
+  { header: "Site location", width: 22, value: (row) => row[0] },
+  { header: "Location Address", width: 50, value: (row) => row[1] },
 ];
 const SAMPLE_ROWS: SampleRow[] = [
-  ["GENT/26-27/57", "GIRIRAJ ENTERPRISE", "Block A", "Plot 5, Near Main Gate, Surat 395007"],
-  ["BI/163/26-27", "BHAGAWATI INDUSTRIES", "Store yard", "Survey 21, Akwada Road, Surat"],
+  ["Block A", "Plot 5, Near Main Gate, Surat 395007"],
+  ["Store yard", "Survey 21, Akwada Road, Surat"],
 ];
 
 /**
- * "Import locations" — sets the site location and shipping address of the
- * invoices a spreadsheet names (client, 12 Oct 2026).
+ * "Import locations" — a spreadsheet of locations and their Location Address,
+ * applied to the site chosen in the top header (client, 14 Oct 2026).
  *
  * All or nothing, and every bad row is listed with its Excel row number, so the
  * file is fixed once rather than once per problem.
  */
 export function LocationImportDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const scope = useSiteScope();
   const [file, setFile] = useState<File | null>(null);
-  const [done, setDone] = useState<PurchaseInvoiceSheetResult | null>(null);
+  const [done, setDone] = useState<SiteLocationSheetResult | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  const importer = useImportInvoiceLocations();
+  const importer = useImportSiteLocations();
 
-  const rejection = locationImportRejectionFrom(importer.error);
+  const rejection = siteLocationImportRejectionFrom(importer.error);
   const message = importer.error instanceof ApiError && !rejection ? importer.error.message : null;
 
   const [sampleError, setSampleError] = useState<string | null>(null);
   const downloadSample = () => {
     setSampleError(null);
     downloadGridExcel<SampleRow>({
-      resource: "purchase-invoices",
+      resource: "site-locations",
       columns: SAMPLE_COLUMNS,
       rows: SAMPLE_ROWS,
-      sheetName: "Invoice locations",
-      fileName: "Invoice-locations-sample",
+      sheetName: "Site locations",
+      fileName: "Site-locations-sample",
     }).catch(() => setSampleError("The sample file could not be produced."));
   };
 
@@ -61,8 +61,8 @@ export function LocationImportDialog({ open, onClose }: { open: boolean; onClose
   };
 
   const submit = async () => {
-    if (!file) return;
-    const result = await importer.mutateAsync(file).catch(() => null);
+    if (!file || !scope.siteId) return;
+    const result = await importer.mutateAsync({ file, siteId: scope.siteId }).catch(() => null);
     if (result) setDone(result);
   };
 
@@ -71,7 +71,7 @@ export function LocationImportDialog({ open, onClose }: { open: boolean; onClose
       open={open}
       onClose={close}
       title="Import locations"
-      description="Set the site location and shipping address of existing invoices from a spreadsheet"
+      description="Add locations and set their Location Address from a spreadsheet"
       size="lg"
       footer={
         done ? (
@@ -81,7 +81,7 @@ export function LocationImportDialog({ open, onClose }: { open: boolean; onClose
             <Button variant="secondary" onClick={close}>
               Cancel
             </Button>
-            <Button icon={Upload} onClick={submit} disabled={!file} loading={importer.isPending}>
+            <Button icon={Upload} onClick={submit} disabled={!file || !scope.siteId} loading={importer.isPending}>
               Upload
             </Button>
           </>
@@ -90,20 +90,27 @@ export function LocationImportDialog({ open, onClose }: { open: boolean; onClose
     >
       {done ? (
         <Alert tone="success" icon={CheckCircle2}>
-          Updated {done.updated} {done.updated === 1 ? "invoice" : "invoices"} from {done.rowCount}{" "}
-          {done.rowCount === 1 ? "row" : "rows"}.
+          {done.created} added, {done.updated} updated, from {done.rowCount} {done.rowCount === 1 ? "row" : "rows"}.
         </Alert>
       ) : (
         <div className="space-y-4">
+          {scope.siteId ? (
+            <Alert tone="info">
+              Locations will go to the site <strong>{scope.siteName}</strong>, the one chosen in the top header.
+            </Alert>
+          ) : (
+            <Alert icon={AlertTriangle}>Choose one site in the top header first. The sheet is applied to that site.</Alert>
+          )}
+
           <div>
-            <label htmlFor="invoice-location-file" className="mb-1.5 block text-sm font-medium text-slate-700">
+            <label htmlFor="site-location-file" className="mb-1.5 block text-sm font-medium text-slate-700">
               Spreadsheet
             </label>
             <input
               ref={input}
-              id="invoice-location-file"
+              id="site-location-file"
               type="file"
-              accept={PURCHASE_INVOICE_SHEET_ACCEPT}
+              accept={SITE_LOCATION_SHEET_ACCEPT}
               onChange={(event) => {
                 setFile(event.target.files?.[0] ?? null);
                 importer.reset();
@@ -118,7 +125,7 @@ export function LocationImportDialog({ open, onClose }: { open: boolean; onClose
               Columns (first sheet, headings in row 1)
             </p>
             <p className="mt-1.5">
-              {PURCHASE_INVOICE_LOCATION_COLUMNS.map((column, i) => (
+              {SITE_LOCATION_SHEET_COLUMNS.map((column, i) => (
                 <span key={column.key}>
                   {i > 0 && <span className="text-slate-400"> · </span>}
                   <span className={column.required ? "font-medium text-slate-700" : ""}>{column.header}</span>
@@ -130,9 +137,8 @@ export function LocationImportDialog({ open, onClose }: { open: boolean; onClose
             </Button>
             {sampleError && <p className="mt-1 text-rose-700">{sampleError}</p>}
             <p className="mt-1.5 text-slate-500">
-              An invoice is found by its <strong>Invoice no</strong> and <strong>Supplier</strong>. The
-              location must be one of that invoice&apos;s site. A blank location or shipping cell leaves
-              that field as it is.
+              A <strong>Site location</strong> the site already has takes the new <strong>Location Address</strong>;
+              a new name is added. A blank address cell leaves the address as it is. Nothing is removed.
             </p>
           </div>
 

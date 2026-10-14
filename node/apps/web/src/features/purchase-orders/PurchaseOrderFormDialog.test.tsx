@@ -515,12 +515,12 @@ describe("PurchaseOrderFormDialog", () => {
       open();
 
       // Shipping is shown, not chosen: no select, blank until a location is.
-      const shipping = await screen.findByLabelText(/^shipping address/i);
+      const shipping = await screen.findByLabelText(/^location address/i);
       expect(shipping.tagName).not.toBe("SELECT");
       expect(shipping).toBeEmptyDOMElement();
-      await waitFor(() => expect(within(screen.getByLabelText(/^location/i)).getAllByRole("option")).toHaveLength(3));
+      await waitFor(() => expect(within(screen.getByLabelText(/^location$/i)).getAllByRole("option")).toHaveLength(3));
 
-      await user.selectOptions(screen.getByLabelText(/^location/i), "55555555-5555-4555-8555-555555555555");
+      await user.selectOptions(screen.getByLabelText(/^location$/i), "55555555-5555-4555-8555-555555555555");
       expect(shipping).toHaveTextContent("Block A gate, Hazira");
 
       await user.selectOptions(screen.getByLabelText(/^supplier/i), SUPPLIER.id);
@@ -657,7 +657,7 @@ describe("PurchaseOrderFormDialog", () => {
 
         expect(await screen.findByText(/delivery split from the old screen/i)).toBeInTheDocument();
         // The address the document was saved with is shown as it was saved.
-        const shipping = await screen.findByLabelText(/^shipping address/i);
+        const shipping = await screen.findByLabelText(/^location address/i);
         await waitFor(() => expect(shipping).toHaveTextContent("Typed by hand, long ago"));
         // A contact typed on the old form is not on the site's list; it stays, labelled.
         const contact = screen.getByLabelText(/^contact person/i) as HTMLSelectElement;
@@ -689,7 +689,7 @@ describe("PurchaseOrderFormDialog", () => {
     it("lists the site's locations, with a choice of none", async () => {
       open();
 
-      const select = await screen.findByLabelText(/^location/i);
+      const select = await screen.findByLabelText(/^location$/i);
       await waitFor(() =>
         expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual([
           "No location",
@@ -710,7 +710,7 @@ describe("PurchaseOrderFormDialog", () => {
       ]);
       open();
 
-      const shipping = await screen.findByLabelText(/^shipping address/i);
+      const shipping = await screen.findByLabelText(/^location address/i);
       expect(shipping).toBeEmptyDOMElement();
       await waitFor(() => expect(screen.getByLabelText("Billing address")).toBeEmptyDOMElement());
     });

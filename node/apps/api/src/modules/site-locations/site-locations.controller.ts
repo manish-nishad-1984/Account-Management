@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,7 +10,9 @@ import {
   Patch,
   Post,
   Query,
+  Req,
 } from "@nestjs/common";
+import type { FastifyRequest } from "fastify";
 import {
   createSiteLocationsSchema,
   hasPermission,
@@ -18,10 +21,14 @@ import {
   type CreateSiteLocations,
   type ListResponse,
   type SaveSiteLocations,
+  type SiteLocationSheetResult,
   type SiteLocationDetail,
   type SiteLocationRow,
 } from "@accountmanagement/contracts";
 import { SiteLocationsRepository } from "./site-locations.repository";
+import { SiteLocationSheetRejected, SiteLocationSheetService } from "./site-location-sheet.service";
+import { readUploads } from "../../common/storage/multipart";
+import { assertSpreadsheet } from "../../common/spreadsheet/assert-spreadsheet";
 import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
@@ -41,7 +48,10 @@ const SUBJECT = "group";
 
 @Controller("site-locations")
 export class SiteLocationsController {
-  constructor(private readonly locations: SiteLocationsRepository) {}
+  constructor(
+    private readonly locations: SiteLocationsRepository,
+    private readonly sheet: SiteLocationSheetService,
+  ) {}
 
   @Get()
   @Permissions("group.view")
@@ -66,6 +76,42 @@ export class SiteLocationsController {
       nextCursor: page.nextCursor,
       total,
     };
+  }
+
+  /**
+   * "Import locations": a sheet of Site location + Location Address, applied to
+   * the one site named in `siteId` (client, 14 Oct 2026). Adds names and sets
+   * addresses, so it needs the add AND edit rights. All or nothing: a bad row
+   * answers 400 with every problem and nothing is saved.
+   */
+  @Post("import")
+  @Permissions("group.add", "group.edit")
+  @HttpCode(200)
+  async importSheet(
+    @Req() request: FastifyRequest,
+    @Query("siteId", ParseUUIDPipe) siteId: string,
+    @CurrentUser() caller: AccessTokenClaims | undefined,
+  ): Promise<SiteLocationSheetResult> {
+    const files = await readUploads(request);
+    if (files.length !== 1) {
+      throw new BadRequestException("Send one spreadsheet, not several.");
+    }
+    const file = files[0]!;
+    assertSpreadsheet(file.fileName, file.bytes);
+
+    try {
+      return await this.sheet.import(file.bytes, siteId, actorId(caller));
+    } catch (error) {
+      if (error instanceof SiteLocationSheetRejected) {
+        throw new BadRequestException({
+          message: `Nothing was imported. ${error.result.errors.length} ${
+            error.result.errors.length === 1 ? "problem" : "problems"
+          } to fix.`,
+          ...error.result,
+        });
+      }
+      throw error;
+    }
   }
 
   @Get(":siteId")

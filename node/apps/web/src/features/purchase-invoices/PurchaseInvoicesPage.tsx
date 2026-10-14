@@ -27,7 +27,6 @@ import {
   useSetApproval,
 } from "./api";
 import { PurchaseInvoiceFormDialog } from "./PurchaseInvoiceFormDialog";
-import { LocationImportDialog } from "./LocationImportDialog";
 import { InvoiceImportDialog } from "./InvoiceImportDialog";
 import { usePermission } from "../../lib/permissions";
 import {
@@ -83,8 +82,6 @@ const EXPORT_COLUMNS: ExportColumn<PurchaseInvoiceRow>[] = [
 
 export function PurchaseInvoicesPage() {
   const canAdd = usePermission("purchase-invoice", "add");
-  const canEdit = usePermission("purchase-invoice", "edit");
-  const [importOpen, setImportOpen] = useState(false);
   const [invoiceImportOpen, setInvoiceImportOpen] = useState(false);
   const screen = useMasterScreen<PurchaseInvoiceRow>({
     // `documentDate` is nullable and therefore cannot be a keyset sort column —
@@ -403,11 +400,6 @@ export function PurchaseInvoicesPage() {
                 Import invoices
               </Button>
             )}
-            {canEdit && (
-              <Button variant="secondary" icon={Upload} onClick={() => setImportOpen(true)}>
-                Import locations
-              </Button>
-            )}
             {canAdd && (
               <Button icon={Plus} onClick={screen.openCreate}>
                 New invoice
@@ -429,7 +421,6 @@ export function PurchaseInvoicesPage() {
       />
 
       <InvoiceImportDialog open={invoiceImportOpen} onClose={() => setInvoiceImportOpen(false)} />
-      <LocationImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
 
       <PurchaseInvoiceFormDialog
         open={screen.isFormOpen}

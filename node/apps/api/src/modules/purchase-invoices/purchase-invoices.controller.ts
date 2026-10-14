@@ -27,7 +27,6 @@ import {
   type ListResponse,
   type PurchaseInvoiceImportPreview,
   type PurchaseInvoiceImportResult,
-  type PurchaseInvoiceSheetResult,
   type PurchaseInvoiceDetail,
   type PurchaseInvoiceRow,
   type SetApproval,
@@ -46,10 +45,6 @@ import {
   PurchaseInvoiceImportRejected,
   PurchaseInvoiceImportService,
 } from "./purchase-invoice-import.service";
-import {
-  PurchaseInvoiceLocationSheetService,
-  PurchaseInvoiceSheetRejected,
-} from "./purchase-invoice-location-sheet.service";
 import type { AccessTokenClaims } from "../auth/token.service";
 
 /**
@@ -109,7 +104,6 @@ export class PurchaseInvoicesController {
   constructor(
     private readonly invoices: PurchaseInvoicesRepository,
     private readonly reports: ReportsRepository,
-    private readonly locationSheet: PurchaseInvoiceLocationSheetService,
     private readonly importer: PurchaseInvoiceImportService,
   ) {}
 
@@ -230,41 +224,6 @@ export class PurchaseInvoicesController {
     const file = files[0]!;
     assertSpreadsheet(file.fileName, file.bytes);
     return file;
-  }
-
-  /**
-   * "Import locations": sets the site location and shipping address of the
-   * invoices a spreadsheet names (client, 12 Oct 2026). It changes existing
-   * invoices, so it needs `purchase-invoice.edit`. All or nothing: a bad row
-   * answers 400 with every problem and nothing is saved.
-   */
-  @Post("import-locations")
-  @Permissions("purchase-invoice.edit")
-  @HttpCode(200)
-  async importLocations(
-    @Req() request: FastifyRequest,
-    @CurrentUser() caller: AccessTokenClaims | undefined,
-  ): Promise<PurchaseInvoiceSheetResult> {
-    const files = await readUploads(request);
-    if (files.length !== 1) {
-      throw new BadRequestException("Send one spreadsheet, not several.");
-    }
-    const file = files[0]!;
-    assertSpreadsheet(file.fileName, file.bytes);
-
-    try {
-      return await this.locationSheet.import(file.bytes, actorId(caller));
-    } catch (error) {
-      if (error instanceof PurchaseInvoiceSheetRejected) {
-        throw new BadRequestException({
-          message: `Nothing was imported. ${error.result.errors.length} ${
-            error.result.errors.length === 1 ? "problem" : "problems"
-          } to fix.`,
-          ...error.result,
-        });
-      }
-      throw error;
-    }
   }
 
   @Patch(":id")

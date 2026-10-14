@@ -23,7 +23,7 @@ const SAMPLE_COLUMNS: ExportColumn<SampleRow>[] = PURCHASE_INVOICE_IMPORT_COLUMN
   align: RIGHT.has(column.header) ? ("right" as const) : ("left" as const),
   value: (row: SampleRow) => row[i],
 }));
-// Order: Invoice no, Date, Supplier, Company, Site, Site location, Type, Challan no, Shipping address,
+// Order: Invoice no, Date, Supplier, Company, Site, Site location, Type, Challan no, Location Address,
 //        Item, Unit, Quantity, Rate, Discount per unit, Discount %, GST %, TDS, Adjustment, Invoice total
 const SAMPLE_ROWS: SampleRow[] = [
   ["GENT/26-27/57", "05-10-2026", "GIRIRAJ ENTERPRISE", "DH PATEL", "SURAT-AURO UNIVERSITY", "Block A", "Purchase", "CH-114", "Plot 5, Near Main Gate, Surat", "OPC 53 Grade Cement", "Bag", "100", "395.00", "", "", "18", "", "", ""],

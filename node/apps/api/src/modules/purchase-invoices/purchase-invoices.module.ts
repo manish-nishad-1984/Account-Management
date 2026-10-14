@@ -2,7 +2,6 @@ import { Module } from "@nestjs/common";
 import { ReportsModule } from "../reports/reports.module";
 import { PurchaseInvoicesController } from "./purchase-invoices.controller";
 import { PurchaseInvoiceImportService } from "./purchase-invoice-import.service";
-import { PurchaseInvoiceLocationSheetService } from "./purchase-invoice-location-sheet.service";
 import { PurchaseInvoicesRepository } from "./purchase-invoices.repository";
 
 /**
@@ -15,7 +14,7 @@ import { PurchaseInvoicesRepository } from "./purchase-invoices.repository";
 @Module({
   imports: [ReportsModule],
   controllers: [PurchaseInvoicesController],
-  providers: [PurchaseInvoicesRepository, PurchaseInvoiceLocationSheetService, PurchaseInvoiceImportService],
+  providers: [PurchaseInvoicesRepository, PurchaseInvoiceImportService],
   exports: [PurchaseInvoicesRepository],
 })
 export class PurchaseInvoicesModule {}

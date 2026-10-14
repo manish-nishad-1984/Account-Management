@@ -1,15 +1,16 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import clsx from "clsx";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   SITE_LOCATION_SORT_FIELDS,
   type SiteLocationRow,
 } from "@accountmanagement/contracts";
-import { Plus } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
 import type { ExportColumn } from "../../lib/grid-export";
 import { Button, ConfirmDialog, PageHeader } from "../../components/ui";
 import { useDeleteSiteLocations, useSiteLocationList } from "./api";
+import { LocationImportDialog } from "./LocationImportDialog";
 import { SiteLocationFormDialog } from "./SiteLocationFormDialog";
 import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
@@ -33,6 +34,8 @@ const EXPORT_COLUMNS: ExportColumn<SiteLocationRow>[] = [
  */
 export function SiteLocationsPage() {
   const canAdd = usePermission("group", "add");
+  const canEdit = usePermission("group", "edit");
+  const [importOpen, setImportOpen] = useState(false);
   const screen = useMasterScreen<SiteLocationRow>({
     defaultSortBy: "siteName",
   });
@@ -135,6 +138,11 @@ export function SiteLocationsPage() {
               sheetName="Site locations"
               fileName="Site-Locations"
             />
+            {canAdd && canEdit && (
+              <Button variant="secondary" icon={Upload} onClick={() => setImportOpen(true)}>
+                Import locations
+              </Button>
+            )}
             {canAdd && (
               <Button icon={Plus} onClick={screen.openCreate}>
                 Add site location
@@ -155,6 +163,8 @@ export function SiteLocationsPage() {
         siteId={screen.editingId}
         onClose={screen.closeForm}
       />
+
+      <LocationImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
 
       <ConfirmDialog
         open={screen.deleteTarget !== null}

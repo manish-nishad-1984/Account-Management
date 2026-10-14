@@ -34,6 +34,7 @@ type Raw = Record<ColumnKey, string> & { row: number };
 
 /** Other ways a heading may be written, besides the one the sample file uses. */
 const HEADING_ALIASES: Partial<Record<ColumnKey, string[]>> = {
+  shippingAddress: ["shipping address"],
   discountPercent: ["discount in percentage", "discount percent", "discount percentage", "discount (%)", "discount in %"],
 };
 

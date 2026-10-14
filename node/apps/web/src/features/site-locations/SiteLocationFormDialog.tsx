@@ -215,7 +215,7 @@ export function SiteLocationFormDialog({
                   : `${unnamed} addresses here have no location name yet.`}{" "}
                 They came from the old separate address list, which never recorded which
                 location each one belonged to. Name them as you go — nothing is lost
-                meanwhile, and they are still offered as shipping addresses.
+                meanwhile, and they are still offered as Location Addresses.
               </Alert>
             )}
 

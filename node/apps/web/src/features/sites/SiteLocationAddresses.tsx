@@ -73,7 +73,7 @@ export function SiteLocationAddresses({
           onShippingChange(locationId === "" ? "" : addressOf(locationId));
         }}
       />
-      <ReadOnlyAddress label="Shipping address" value={(shippingAddress ?? "").trim()} />
+      <ReadOnlyAddress label="Location Address" value={(shippingAddress ?? "").trim()} />
     </div>
   );
 }
