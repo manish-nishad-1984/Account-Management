@@ -123,6 +123,15 @@ export const NAV: NavSection[] = [
     ],
   },
   {
+    // New, no legacy screen: sheets for a company and chosen income and invoice dates,
+    // kept (14 Oct 2026). Beside Payout, as a section of one named after its screen.
+    title: "Balance Sheets",
+    icon: Scale,
+    items: [
+      { label: "Balance Sheets", to: "/balance-sheets", icon: Scale, permission: "balance-sheets", status: "ready" },
+    ],
+  },
+  {
     title: "Reports",
     icon: ScrollText,
     items: [

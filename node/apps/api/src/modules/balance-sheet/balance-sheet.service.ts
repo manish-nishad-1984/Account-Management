@@ -9,19 +9,19 @@ import { ClientIncomesRepository } from "../client-incomes/client-incomes.reposi
 import { ReportsRepository } from "../reports/reports.repository";
 
 /** Exact decimal on whole paise: money never goes through a float here. */
-const toPaise = (value: string): bigint => {
+export const toPaise = (value: string): bigint => {
   const negative = value.trimStart().startsWith("-");
   const [whole, fraction = ""] = value.replace("-", "").split(".");
   const paise = BigInt(whole || "0") * 100n + BigInt((fraction + "00").slice(0, 2));
   return negative ? -paise : paise;
 };
-const fromPaise = (paise: bigint): string => {
+export const fromPaise = (paise: bigint): string => {
   const sign = paise < 0n ? "-" : "";
   const absolute = paise < 0n ? -paise : paise;
   return `${sign}${absolute / 100n}.${String(absolute % 100n).padStart(2, "0")}`;
 };
 
-interface Figures {
+export interface Figures {
   income: bigint;
   billed: bigint;
   paid: bigint;
@@ -29,7 +29,7 @@ interface Figures {
 
 const NO_SITE = "No project";
 
-const present = (figures: Figures) => ({
+export const present = (figures: Figures) => ({
   income: fromPaise(figures.income),
   billed: fromPaise(figures.billed),
   paid: fromPaise(figures.paid),
@@ -51,9 +51,24 @@ export class BalanceSheetService {
   ) {}
 
   async sheet(query: BalanceSheetQuery): Promise<BalanceSheetResponse> {
+    return this.generate(
+      { siteId: query.siteId, companyId: query.companyId, fromDate: query.fromDate, toDate: query.toDate },
+      { siteId: query.siteId, companyId: query.companyId, fromDate: query.fromDate, toDate: query.toDate },
+    );
+  }
+
+  /**
+   * The sheet with the INCOME counted over one range of dates and the BILLS AND
+   * PAYMENTS over another (saved Balance Sheets, 14 Oct 2026). The report passes
+   * the same range for both; a saved sheet may pass two.
+   */
+  async generate(
+    incomeFilter: { siteId?: string; companyId?: string; fromDate?: string; toDate?: string },
+    expenseFilter: { siteId?: string; companyId?: string; fromDate?: string; toDate?: string },
+  ): Promise<BalanceSheetResponse> {
     const [income, expense] = await Promise.all([
-      this.incomes.incomeBySite(query),
-      this.reports.expenseBySite(query),
+      this.incomes.incomeBySite(incomeFilter),
+      this.reports.expenseBySite(expenseFilter),
     ]);
 
     const bySite = new Map<string, { siteId: string | null; siteName: string; figures: Figures }>();
