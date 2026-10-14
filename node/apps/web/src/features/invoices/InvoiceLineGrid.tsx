@@ -8,6 +8,7 @@ import {
   TextField,
 } from "../../components/ui";
 import { ItemCombobox } from "../items/ItemCombobox";
+import { AddItemLink, useItemIntoLine } from "../items/AddItemLink";
 import { formatMoney, formatQuantity } from "../../lib/format";
 
 /**
@@ -191,6 +192,20 @@ export function InvoiceLineGrid({
    * left the cursor on the + button: the rows after the new one re-register
    * under shifted names in the same render.
    */
+  /** An item created from the heading goes on the first empty line, or a new one. */
+  const addedItem = useItemIntoLine({
+    lines,
+    lineCount: fields.length,
+    insertAfter: onInsert,
+    assign: (index, itemId) => {
+      const itemField = `items.${index}.itemId`;
+      const nameField = `items.${index}.itemName`;
+      void register(itemField).onChange(changeOf(itemField, itemId));
+      void register(nameField).onChange(changeOf(nameField, ""));
+      onItemChosen?.(index, itemId);
+    },
+  });
+
   const focusLine = useRef<number | null>(null);
   useEffect(() => {
     if (focusLine.current === null) return;
@@ -205,7 +220,10 @@ export function InvoiceLineGrid({
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="w-8 py-2 pr-2">#</th>
-              <th className="py-2 pr-2">Product</th>
+              <th className="py-2 pr-2">
+                Product
+                <AddItemLink onSaved={addedItem} />
+              </th>
               <th className="w-20 py-2 pr-2">Qty</th>
               <th className="w-24 py-2 pr-2">Unit</th>
               <th className="w-28 py-2 pr-2">Price</th>
@@ -256,7 +274,6 @@ export function InvoiceLineGrid({
                       label={`Item on line ${index + 1}`}
                       labelHidden
                       allowFreeText
-                      allowAddNew
                       itemId={String(line?.itemId ?? "")}
                       itemName={String(line?.itemName ?? "")}
                       error={lineError(index, "itemId") ?? lineError(index, "itemName")}

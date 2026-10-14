@@ -37,6 +37,7 @@ import { text } from "../../lib/form-values";
 import { formatMoney, formatQuantity } from "../../lib/format";
 import { useAllUnits } from "../items/api";
 import { ItemCombobox } from "../items/ItemCombobox";
+import { AddItemLink, useItemIntoLine } from "../items/AddItemLink";
 import {
   useCompanyOptions,
   useCreatePurchaseOrder,
@@ -288,6 +289,33 @@ export function PurchaseOrderFormDialog({
       setValue(`items.${index}.gstPercent`, price.gstPercent ?? "", options);
     },
   });
+
+  /** Choose a catalogue item on a line: from the picker, or the item just added from the heading. */
+  const chooseItem = (index: number, pickedId: string) => {
+    setValue(`items.${index}.itemId`, pickedId, { shouldDirty: true });
+    // Choosing a catalogue item CLEARS the free text.
+    // React Hook Form keeps the value of a field that is
+    // no longer shown, so without this a name typed
+    // before an item was picked would be submitted
+    // alongside it and sit in `item_name` forever,
+    // contradicting the item the line references.
+    setValue(`items.${index}.itemName`, "", { shouldDirty: true });
+    // A blank quantity becomes 1; one already typed is
+    // left alone, because the person meant it.
+    if (!String(getValues(`items.${index}.quantity`) ?? "").trim()) {
+      setValue(`items.${index}.quantity`, "1", { shouldDirty: true });
+    }
+    if (pickedId) latestPrice.onItemChosen(index, pickedId);
+  };
+
+  /** An item created from the heading goes on the first empty line, or a new one. */
+  const addedItem = useItemIntoLine({
+    lines,
+    lineCount: fields.length,
+    insertAfter: (index) => insert(index + 1, EMPTY_LINE),
+    assign: chooseItem,
+  });
+
   const totals = useMemo(
     () =>
       purchaseOrderTotal.compute(
@@ -518,7 +546,10 @@ export function PurchaseOrderFormDialog({
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                     <th className="w-8 py-2 pr-2">#</th>
-                    <th className="py-2 pr-2">Product</th>
+                    <th className="py-2 pr-2">
+                      Product
+                      <AddItemLink onSaved={addedItem} />
+                    </th>
                     <th className="w-24 py-2 pr-2 text-right">Qty</th>
                     <th className="w-28 py-2 pr-2">Unit</th>
                     <th className="w-28 py-2 pr-2 text-right">Price</th>
@@ -550,7 +581,6 @@ export function PurchaseOrderFormDialog({
                           label={`Item on line ${index + 1}`}
                           labelHidden
                           allowFreeText
-                          allowAddNew
                           // `String(...)`: `useWatch` widens a field of the form's
                           // INPUT type, which zod's coercion leaves as `{}` here.
                           // The old code only ever asked whether it was truthy.
@@ -560,22 +590,7 @@ export function PurchaseOrderFormDialog({
                             errors.items?.[index]?.itemId?.message ??
                             errors.items?.[index]?.itemName?.message
                           }
-                          onPick={(pickedId) => {
-                            setValue(`items.${index}.itemId`, pickedId, { shouldDirty: true });
-                            // Choosing a catalogue item CLEARS the free text.
-                            // React Hook Form keeps the value of a field that is
-                            // no longer shown, so without this a name typed
-                            // before an item was picked would be submitted
-                            // alongside it and sit in `item_name` forever,
-                            // contradicting the item the line references.
-                            setValue(`items.${index}.itemName`, "", { shouldDirty: true });
-                            // A blank quantity becomes 1; one already typed is
-                            // left alone, because the person meant it.
-                            if (!String(getValues(`items.${index}.quantity`) ?? "").trim()) {
-                              setValue(`items.${index}.quantity`, "1", { shouldDirty: true });
-                            }
-                            if (pickedId) latestPrice.onItemChosen(index, pickedId);
-                          }}
+                          onPick={(pickedId) => chooseItem(index, pickedId)}
                           onTypeName={(name) => {
                             setValue(`items.${index}.itemName`, name, { shouldDirty: true });
                             setValue(`items.${index}.itemId`, "", { shouldDirty: true });
