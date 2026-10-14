@@ -19,13 +19,14 @@ const PAD = 32;
 const FONT = '-apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
 
 const HEIGHTS: Record<ImageRow["kind"], number> = {
+  company: 52,
   title: 56,
   party: 40,
   total: 60,
 };
 
 export function renderPayoutImage(
-  detail: Pick<PayoutListDetail, "listDate" | "lines">,
+  detail: Pick<PayoutListDetail, "listDate" | "lines"> & { companyName?: string | null },
 ): Promise<Blob> {
   const rows = buildImageRows(detail);
   const height = PAD * 2 + rows.reduce((sum, row) => sum + HEIGHTS[row.kind], 0);
@@ -63,6 +64,9 @@ export function renderPayoutImage(
   for (const row of rows) {
     const h = HEIGHTS[row.kind];
     switch (row.kind) {
+      case "company":
+        text(fit(row.left, `800 30px ${FONT}`, right - left), left, y + 36, `800 30px ${FONT}`, "#0f172a", "left");
+        break;
       case "title":
         text(row.left, left, y + 34, `700 26px ${FONT}`, "#0f172a", "left");
         text(row.right, right, y + 34, `500 18px ${FONT}`, "#475569", "right");

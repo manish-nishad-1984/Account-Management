@@ -49,4 +49,13 @@ describe("the payout list picture", () => {
       "Total: Rs 75,700.00",
     ]);
   });
+
+  it("puts the company name first, and none when the list is across every company", () => {
+    const named = buildImageRows({ ...list, companyName: "DH PATEL" });
+    expect(named[0]).toEqual({ kind: "company", left: "DH PATEL" });
+    expect(named.map((row) => row.kind)).toEqual(["company", "title", "party", "party", "total"]);
+
+    expect(buildImageRows({ ...list, companyName: null }).map((row) => row.kind)).toEqual(["title", "party", "party", "total"]);
+    expect(buildImageRows(list)[0]!.kind).toBe("title");
+  });
 });
