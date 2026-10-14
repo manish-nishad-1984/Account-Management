@@ -16,6 +16,8 @@ export const balanceSheets = pgTable(
     title: text("title"),
     /** Null means every company. */
     companyId: uuid("company_id").references(() => companies.id),
+    /** Null means every site. */
+    siteId: uuid("site_id").references(() => sites.id),
     /** The income entries counted: by their own date. Null ends are open. */
     incomeFrom: date("income_from"),
     incomeTo: date("income_to"),

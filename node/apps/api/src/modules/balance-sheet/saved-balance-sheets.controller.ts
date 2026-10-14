@@ -23,8 +23,11 @@ import type { AccessTokenClaims } from "../auth/token.service";
 /** Subject `balance-sheets`, from the form row "Balance Sheets" that migration 0027 inserts. */
 const SUBJECT = "balance-sheets";
 
-/** The list screen's one extra filter: the company the sheet was made for. */
-const listFilterSchema = listQuerySchema.extend({ companyId: z.string().uuid().optional() });
+/** The list screen's extra filters: the company and the site the sheet was made for. */
+const listFilterSchema = listQuerySchema.extend({
+  companyId: z.string().uuid().optional(),
+  siteId: z.string().uuid().optional(),
+});
 
 /**
  * Saved Balance Sheets. A sheet adds up income and expense, so working one out
@@ -39,7 +42,7 @@ export class SavedBalanceSheetsController {
   @Get()
   @Permissions("balance-sheets.view")
   async list(
-    @Query(new ZodValidationPipe(listFilterSchema)) query: ListQuery & { companyId?: string },
+    @Query(new ZodValidationPipe(listFilterSchema)) query: ListQuery & { companyId?: string; siteId?: string },
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<ListResponse<SavedBalanceSheetRow>> {
     const granted = caller?.permissions ?? [];
@@ -49,8 +52,8 @@ export class SavedBalanceSheetsController {
       canApprove: false,
     };
     const [page, total] = await Promise.all([
-      this.sheets.list(query, query.companyId),
-      this.sheets.total(query.search, query.companyId),
+      this.sheets.list(query, query.companyId, query.siteId),
+      this.sheets.total(query.search, query.companyId, query.siteId),
     ]);
     return { rows: page.rows.map((row) => ({ ...row, capabilities })), nextCursor: page.nextCursor, total };
   }

@@ -34,6 +34,8 @@ export const createBalanceSheetSchema = z
     title: optionalText(120),
     /** None means every company. */
     companyId: optionalUuidId,
+    /** None means every site. */
+    siteId: optionalUuidId,
     incomeFrom: dateOnly,
     incomeTo: dateOnly,
     invoiceFrom: dateOnly,
@@ -74,6 +76,9 @@ export const savedBalanceSheetRowSchema = z.object({
   companyId: z.string().nullable(),
   /** Null for a sheet across every company. */
   companyName: z.string().nullable(),
+  siteId: z.string().nullable(),
+  /** Null for a sheet across every site. */
+  siteName: z.string().nullable(),
   incomeFrom: z.string().nullable(),
   incomeTo: z.string().nullable(),
   invoiceFrom: z.string().nullable(),

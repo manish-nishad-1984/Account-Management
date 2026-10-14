@@ -8,6 +8,7 @@ import { Button, ConfirmDialog, IconButton, PageHeader, SelectField } from "../.
 import { formatDate, formatDateTime, formatMoney } from "../../lib/format";
 import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
+import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { useCompanyOptions } from "../purchase-orders/api";
 import { useDeleteBalanceSheet, useSavedBalanceSheets } from "./api";
 import { BalanceSheetFormDialog } from "./BalanceSheetFormDialog";
@@ -33,6 +34,7 @@ export function periodText(from: string | null, to: string | null): string {
 const EXPORT_COLUMNS: ExportColumn<SavedBalanceSheetRow>[] = [
   { header: "Title", width: 28, value: (row) => row.title },
   { header: "Company", width: 28, value: (row) => row.companyName ?? "All companies" },
+  { header: "Site", width: 28, value: (row) => row.siteName ?? "All sites" },
   { header: "Income from", width: 12, value: (row) => exportDate(row.incomeFrom) },
   { header: "Income to", width: 12, value: (row) => exportDate(row.incomeTo) },
   { header: "Invoice from", width: 12, value: (row) => exportDate(row.invoiceFrom) },
@@ -60,8 +62,13 @@ export function BalanceSheetsPage() {
   const canAdd = usePermission("balance-sheets", "add");
   const screen = useMasterScreen<SavedBalanceSheetRow>({ defaultSortBy: "createdAt", defaultSortDir: "desc" });
   const [companyId, setCompanyId] = useState("");
+  const [siteId, setSiteId] = useState("");
   const companies = useCompanyOptions();
-  const filterValues = { companyId: companyId === "" ? undefined : companyId };
+  const scope = useSiteScope();
+  const filterValues = {
+    companyId: companyId === "" ? undefined : companyId,
+    siteId: siteId === "" ? undefined : siteId,
+  };
   const query = useSavedBalanceSheets(screen.listParams, filterValues);
   const remove = useDeleteBalanceSheet();
 
@@ -84,6 +91,16 @@ export function BalanceSheetsPage() {
             <span className="text-slate-700">{row.original.companyName}</span>
           ) : (
             <span className="text-slate-400">All companies</span>
+          ),
+      },
+      {
+        id: "site",
+        header: "Site",
+        cell: ({ row }) =>
+          row.original.siteName ? (
+            <span className="text-slate-700">{row.original.siteName}</span>
+          ) : (
+            <span className="text-slate-400">All sites</span>
           ),
       },
       {
@@ -188,6 +205,17 @@ export function BalanceSheetsPage() {
 
       <DataGrid<SavedBalanceSheetRow>
         filters={
+          <>
+          <SelectField
+            labelHidden
+            label="Site"
+            value={siteId}
+            options={[
+              { value: "", label: "All sites" },
+              ...scope.sites.map((row) => ({ value: row.id, label: row.name })),
+            ]}
+            onChange={(event) => setSiteId(event.target.value)}
+          />
           <SelectField
             labelHidden
             label="Company"
@@ -198,6 +226,7 @@ export function BalanceSheetsPage() {
             ]}
             onChange={(event) => setCompanyId(event.target.value)}
           />
+          </>
         }
         actions={
           <>

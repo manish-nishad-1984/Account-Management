@@ -1,0 +1,2 @@
+ALTER TABLE "balance_sheets" ADD COLUMN "site_id" uuid;--> statement-breakpoint
+ALTER TABLE "balance_sheets" ADD CONSTRAINT "balance_sheets_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE no action ON UPDATE no action;

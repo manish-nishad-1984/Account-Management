@@ -8,7 +8,7 @@ import type {
   SavedBalanceSheetRow,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
-import { balanceSheetRows, balanceSheets, companies, users } from "../../db/schema";
+import { balanceSheetRows, balanceSheets, companies, sites, users } from "../../db/schema";
 import { decodeCursor, encodeCursor } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
@@ -21,6 +21,8 @@ interface HeaderRow {
   note: string | null;
   company_id: string | null;
   company_name: string | null;
+  site_id: string | null;
+  site_name: string | null;
   income_from: string | null;
   income_to: string | null;
   invoice_from: string | null;
@@ -43,7 +45,7 @@ interface HeaderRow {
  */
 const HEADER = sql`
   select
-    s.id, s.title, s.note, s.company_id, co.name as company_name,
+    s.id, s.title, s.note, s.company_id, co.name as company_name, s.site_id, si.name as site_name,
     s.income_from::text as income_from, s.income_to::text as income_to,
     s.invoice_from::text as invoice_from, s.invoice_to::text as invoice_to,
     coalesce(t.project_count, 0)::int as project_count,
@@ -57,6 +59,7 @@ const HEADER = sql`
     from ${balanceSheetRows} group by balance_sheet_id
   ) t on t.balance_sheet_id = s.id
   left join ${companies} co on co.id = s.company_id
+  left join ${sites} si on si.id = s.site_id
   left join ${users} cu on cu.id = s.created_by
   left join ${users} uu on uu.id = s.updated_by
 `;
@@ -75,15 +78,16 @@ export class SavedBalanceSheetsRepository extends BaseRepository {
   /** The sheet as it would be worked out now, for the form's Generate. Saves nothing. */
   async preview(input: CreateBalanceSheet): Promise<BalanceSheetPreview> {
     const done = await this.sheets.generate(
-      { companyId: input.companyId ?? undefined, fromDate: input.incomeFrom ?? undefined, toDate: input.incomeTo ?? undefined },
-      { companyId: input.companyId ?? undefined, fromDate: input.invoiceFrom ?? undefined, toDate: input.invoiceTo ?? undefined },
+      { siteId: input.siteId ?? undefined, companyId: input.companyId ?? undefined, fromDate: input.incomeFrom ?? undefined, toDate: input.incomeTo ?? undefined },
+      { siteId: input.siteId ?? undefined, companyId: input.companyId ?? undefined, fromDate: input.invoiceFrom ?? undefined, toDate: input.invoiceTo ?? undefined },
     );
     return { rows: done.rows, totals: done.totals };
   }
 
-  private where(search: string | undefined, companyId?: string): SQL[] {
+  private where(search: string | undefined, companyId?: string, siteId?: string): SQL[] {
     const where: SQL[] = [sql`s.is_deleted = false`];
     if (companyId) where.push(sql`s.company_id = ${companyId}::uuid`);
+    if (siteId) where.push(sql`s.site_id = ${siteId}::uuid`);
     if (search) {
       const pattern = `%${search}%`;
       where.push(sql`(s.title ilike ${pattern} or co.name ilike ${pattern})`);
@@ -97,6 +101,8 @@ export class SavedBalanceSheetsRepository extends BaseRepository {
       title: row.title,
       companyId: row.company_id,
       companyName: row.company_name,
+      siteId: row.site_id,
+      siteName: row.site_name,
       incomeFrom: row.income_from,
       incomeTo: row.income_to,
       invoiceFrom: row.invoice_from,
@@ -114,8 +120,9 @@ export class SavedBalanceSheetsRepository extends BaseRepository {
   async list(
     query: ListQuery,
     companyId?: string,
+    siteId?: string,
   ): Promise<{ rows: Omit<SavedBalanceSheetRow, "capabilities">[]; nextCursor: string | null }> {
-    const where = this.where(query.search, companyId);
+    const where = this.where(query.search, companyId, siteId);
     if (query.cursor) {
       const cursor = decodeCursor(query.cursor);
       where.push(sql`(s.created_at, s.id) < (cast(${cursor.value} as timestamptz), cast(${cursor.id} as uuid))`);
@@ -136,12 +143,12 @@ export class SavedBalanceSheetsRepository extends BaseRepository {
     };
   }
 
-  async total(search?: string, companyId?: string): Promise<number> {
+  async total(search?: string, companyId?: string, siteId?: string): Promise<number> {
     const [row] = rawRows<{ n: number }>(
       await this.db.execute(
         sql`select count(*)::int as n from ${balanceSheets} s
             left join ${companies} co on co.id = s.company_id
-            where ${sql.join(this.where(search, companyId), sql` and `)}`,
+            where ${sql.join(this.where(search, companyId, siteId), sql` and `)}`,
       ),
     );
     return row?.n ?? 0;
@@ -223,6 +230,7 @@ export class SavedBalanceSheetsRepository extends BaseRepository {
     return {
       title: input.title,
       companyId: input.companyId,
+      siteId: input.siteId,
       incomeFrom: input.incomeFrom,
       incomeTo: input.incomeTo,
       invoiceFrom: input.invoiceFrom,

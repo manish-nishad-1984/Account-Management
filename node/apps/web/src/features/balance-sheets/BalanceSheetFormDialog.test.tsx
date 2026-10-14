@@ -29,7 +29,7 @@ describe("BalanceSheetFormDialog", () => {
       if (url.endsWith("/companies")) return Promise.resolve(json(COMPANIES));
       if (url.endsWith("/balance-sheets/preview")) return Promise.resolve(json(PREVIEW));
       if (method === "POST" && url.endsWith("/balance-sheets")) {
-        return Promise.resolve(json({ id: "new", title: null, companyId: COMPANY, companyName: "DH PATEL", incomeFrom: null, incomeTo: null, invoiceFrom: null, invoiceTo: null, projectCount: 1, figures: FIGURES, createdByName: null, createdAt: "2026-10-14T00:00:00.000Z", updatedAt: null, updatedByName: null, note: null, rows: PREVIEW.rows }, 201));
+        return Promise.resolve(json({ id: "new", title: null, companyId: COMPANY, companyName: "DH PATEL", siteId: null, siteName: null, incomeFrom: null, incomeTo: null, invoiceFrom: null, invoiceTo: null, projectCount: 1, figures: FIGURES, createdByName: null, createdAt: "2026-10-14T00:00:00.000Z", updatedAt: null, updatedByName: null, note: null, rows: PREVIEW.rows }, 201));
       }
       return Promise.resolve(json({}));
     });
@@ -69,6 +69,41 @@ describe("BalanceSheetFormDialog", () => {
 
     await user.click(screen.getByRole("button", { name: /save balance sheet/i }));
     await waitFor(() => expect(calls().some((c) => c.method === "POST" && c.url.endsWith("/balance-sheets"))).toBe(true));
+  });
+
+  it("sends the site chosen on the sheet", async () => {
+    const user = userEvent.setup();
+    open();
+    // The test scope offers no named sites, so only "All sites" is there: the site stays open.
+    expect(screen.getByLabelText("Site")).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: /^generate$/i }));
+    await screen.findByLabelText("Balance sheet");
+    expect(calls().find((c) => c.url.endsWith("/preview"))!.body).toMatchObject({ siteId: null });
+  });
+
+  it("starts on the site chosen in the top header, and sends it", async () => {
+    const user = userEvent.setup();
+    renderWithAuth(<BalanceSheetFormDialog open sheetId={null} onClose={vi.fn()} />, {
+      permissions: ["balance-sheets.view", "balance-sheets.add"],
+      scope: { siteId: "11111111-1111-4111-8111-111111111111", siteName: "Akwada Lake Front", sites: [{ id: "11111111-1111-4111-8111-111111111111", name: "Akwada Lake Front" }, { id: "22222222-2222-4222-8222-222222222222", name: "Surat" }], canSelectAll: true },
+    });
+
+    expect(screen.getByLabelText("Site")).toHaveValue("11111111-1111-4111-8111-111111111111");
+    await user.click(screen.getByRole("button", { name: /^generate$/i }));
+    await screen.findByLabelText("Balance sheet");
+    expect(calls().find((c) => c.url.endsWith("/preview"))!.body).toMatchObject({ siteId: "11111111-1111-4111-8111-111111111111" });
+
+    // ...and it can be moved to another site, or to all of them.
+    await user.selectOptions(screen.getByLabelText("Site"), "All sites");
+    expect(await screen.findByText(/filters changed/i)).toBeInTheDocument();
+  });
+
+  it("an assigned user has no All sites to fall back on", () => {
+    renderWithAuth(<BalanceSheetFormDialog open sheetId={null} onClose={vi.fn()} />, {
+      permissions: ["balance-sheets.view", "balance-sheets.add"],
+      scope: { siteId: "11111111-1111-4111-8111-111111111111", siteName: "Akwada Lake Front", sites: [{ id: "11111111-1111-4111-8111-111111111111", name: "Akwada Lake Front" }], canSelectAll: false },
+    });
+    expect(within(screen.getByLabelText("Site")).queryByRole("option", { name: "All sites" })).not.toBeInTheDocument();
   });
 
   it("asks for another Generate once a date has changed", async () => {

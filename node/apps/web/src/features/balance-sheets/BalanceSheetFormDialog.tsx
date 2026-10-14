@@ -7,6 +7,7 @@ import {
 } from "@accountmanagement/contracts";
 import { ExportExcelButton } from "../../components/DataGrid";
 import { Alert, Button, FormDialog, FormSection, SelectField, TextField } from "../../components/ui";
+import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { ApiError } from "../../lib/api-client";
 import { formatMoney } from "../../lib/format";
 import { exportAmount, type ExportColumn } from "../../lib/grid-export";
@@ -55,12 +56,15 @@ export function BalanceSheetFormDialog({
   const isEdit = sheetId !== null;
   const detail = useSavedBalanceSheet(open && isEdit ? sheetId : null);
   const companies = useCompanyOptions();
+  // The site in the top header is where a NEW sheet starts; it can be changed here.
+  const scope = useSiteScope();
   const preview = usePreviewBalanceSheet();
   const create = useCreateBalanceSheet();
   const update = useUpdateBalanceSheet();
 
   const [title, setTitle] = useState("");
   const [companyId, setCompanyId] = useState("");
+  const [siteId, setSiteId] = useState("");
   const [incomeFrom, setIncomeFrom] = useState("");
   const [incomeTo, setIncomeTo] = useState("");
   const [invoiceFrom, setInvoiceFrom] = useState("");
@@ -70,9 +74,9 @@ export function BalanceSheetFormDialog({
   const [error, setError] = useState<string | null>(null);
 
   /** The filters that decide the figures. Title and note do not. */
-  const filterKey = (values: { companyId: string; incomeFrom: string; incomeTo: string; invoiceFrom: string; invoiceTo: string }) =>
-    JSON.stringify([values.companyId, values.incomeFrom, values.incomeTo, values.invoiceFrom, values.invoiceTo]);
-  const currentKey = filterKey({ companyId, incomeFrom, incomeTo, invoiceFrom, invoiceTo });
+  const filterKey = (values: { companyId: string; siteId: string; incomeFrom: string; incomeTo: string; invoiceFrom: string; invoiceTo: string }) =>
+    JSON.stringify([values.companyId, values.siteId, values.incomeFrom, values.incomeTo, values.invoiceFrom, values.invoiceTo]);
+  const currentKey = filterKey({ companyId, siteId, incomeFrom, incomeTo, invoiceFrom, invoiceTo });
 
   useEffect(() => {
     if (!open) return;
@@ -81,6 +85,7 @@ export function BalanceSheetFormDialog({
     if (!isEdit) {
       setTitle("");
       setCompanyId("");
+      setSiteId(scope.siteId ?? "");
       setIncomeFrom("");
       setIncomeTo("");
       setInvoiceFrom("");
@@ -91,6 +96,7 @@ export function BalanceSheetFormDialog({
       const d = detail.data;
       setTitle(d.title ?? "");
       setCompanyId(d.companyId ?? "");
+      setSiteId(d.siteId ?? "");
       setIncomeFrom(d.incomeFrom ?? "");
       setIncomeTo(d.incomeTo ?? "");
       setInvoiceFrom(d.invoiceFrom ?? "");
@@ -99,6 +105,7 @@ export function BalanceSheetFormDialog({
       setGenerated({
         key: filterKey({
           companyId: d.companyId ?? "",
+          siteId: d.siteId ?? "",
           incomeFrom: d.incomeFrom ?? "",
           incomeTo: d.incomeTo ?? "",
           invoiceFrom: d.invoiceFrom ?? "",
@@ -112,8 +119,8 @@ export function BalanceSheetFormDialog({
   }, [open, isEdit, detail.data]);
 
   const body = useMemo(
-    () => ({ title, companyId, incomeFrom, incomeTo, invoiceFrom, invoiceTo, note }),
-    [title, companyId, incomeFrom, incomeTo, invoiceFrom, invoiceTo, note],
+    () => ({ title, companyId, siteId, incomeFrom, incomeTo, invoiceFrom, invoiceTo, note }),
+    [title, companyId, siteId, incomeFrom, incomeTo, invoiceFrom, invoiceTo, note],
   );
 
   const parsed = () => {
@@ -156,6 +163,12 @@ export function BalanceSheetFormDialog({
     }
   };
 
+  const siteOptions = [
+    // Only a user not tied to particular sites may leave it on every site.
+    ...(scope.canSelectAll ? [{ value: "", label: "All sites" }] : []),
+    ...scope.sites.map((row) => ({ value: row.id, label: row.name })),
+  ];
+
   const companyOptions = [
     { value: "", label: "All companies" },
     ...(companies.data?.rows ?? []).map((row) => ({ value: row.id, label: row.name })),
@@ -192,9 +205,10 @@ export function BalanceSheetFormDialog({
         <p className="py-8 text-center text-sm text-slate-500">Loading balance sheet…</p>
       ) : (
         <>
-          <FormSection title="Sheet" columns={3}>
+          <FormSection title="Sheet" columns={2}>
             <TextField label="Title" maxLength={120} value={title} onChange={(event) => setTitle(event.target.value)} />
             <SelectField label="Company" value={companyId} options={companyOptions} onChange={(event) => setCompanyId(event.target.value)} />
+            <SelectField label="Site" value={siteId} options={siteOptions} onChange={(event) => setSiteId(event.target.value)} />
             <TextField label="Note" maxLength={1000} value={note} onChange={(event) => setNote(event.target.value)} />
           </FormSection>
 

@@ -32,6 +32,7 @@ describe("SavedBalanceSheetsRepository (real PostgreSQL)", () => {
   let payments: PaymentsRepository;
 
   let akwada: string;
+  let surat: string;
   let patel: string;
   let maharaj: string;
   let supplierId: string;
@@ -41,8 +42,8 @@ describe("SavedBalanceSheetsRepository (real PostgreSQL)", () => {
 
   const sheet = (overrides: Record<string, unknown> = {}) => createBalanceSheetSchema.parse(overrides);
 
-  const income = (companyId: string, amount: string, incomeDate = "2026-10-05") =>
-    incomes.create(createClientIncomeSchema.parse({ incomeDate, siteId: akwada, companyId, clientId, amount }), ACTOR);
+  const income = (companyId: string, amount: string, incomeDate = "2026-10-05", siteId = akwada) =>
+    incomes.create(createClientIncomeSchema.parse({ incomeDate, siteId, companyId, clientId, amount }), ACTOR);
 
   const invoice = (companyId: string, no: string, amount: string, documentDate = "2026-09-10T00:00:00.000Z") =>
     invoices.create(
@@ -88,8 +89,12 @@ describe("SavedBalanceSheetsRepository (real PostgreSQL)", () => {
     unitId = unit!.id;
     const [item] = await db.insert(schema.items).values({ name: "Cement", unitId, pricePerUnit: "395.00" }).returning({ id: schema.items.id });
     itemId = item!.id;
-    const [site] = await db.insert(schema.sites).values({ name: "Akwada Lake Front", isActive: true }).returning({ id: schema.sites.id });
-    akwada = site!.id;
+    const sitesMade = await db
+      .insert(schema.sites)
+      .values([{ name: "Akwada Lake Front", isActive: true }, { name: "Surat Diamond Park", isActive: true }])
+      .returning({ id: schema.sites.id, name: schema.sites.name });
+    akwada = sitesMade.find((x) => x.name.startsWith("Akwada"))!.id;
+    surat = sitesMade.find((x) => x.name.startsWith("Surat"))!.id;
     const companies = await db
       .insert(schema.companies)
       .values([{ name: "DH Patel" }, { name: "DH Maharaj" }])
@@ -125,6 +130,24 @@ describe("SavedBalanceSheetsRepository (real PostgreSQL)", () => {
     expect(one.totals.income).toBe("7000.00");
     const all = await repo.preview(sheet());
     expect(all.totals.income).toBe("8000.00");
+  });
+
+  it("limits the sheet to the chosen site, keeps it on the sheet, and filters the list by it", async () => {
+    await income(patel, "1000.00", "2026-10-05", akwada);
+    await income(patel, "5000.00", "2026-10-05", surat);
+
+    const onlySurat = await repo.preview(sheet({ siteId: surat }));
+    expect(onlySurat.rows.map((r) => r.siteName)).toEqual(["Surat Diamond Park"]);
+    expect(onlySurat.totals.income).toBe("5000.00");
+    expect((await repo.preview(sheet())).totals.income).toBe("6000.00");
+
+    const saved = await repo.create(sheet({ title: "Surat", siteId: surat }), ACTOR);
+    expect(saved).toMatchObject({ siteId: surat, siteName: "Surat Diamond Park" });
+    await repo.create(sheet({ title: "All sites" }), ACTOR);
+
+    expect((await repo.list(listQuerySchema.parse({}), undefined, surat)).rows.map((r) => r.title)).toEqual(["Surat"]);
+    expect(await repo.total(undefined, undefined, surat)).toBe(1);
+    expect((await repo.list(listQuerySchema.parse({}))).rows.find((r) => r.title === "All sites")).toMatchObject({ siteId: null, siteName: null });
   });
 
   it("keeps the sheet as it was worked out, and works it out again on an edit", async () => {
