@@ -1,0 +1,150 @@
+import ExcelJS from "exceljs";
+import { beforeEach, describe, expect, it } from "vitest";
+import { BadRequestException } from "@nestjs/common";
+import { PURCHASE_INVOICE_IMPORT_COLUMNS } from "@accountmanagement/contracts";
+import { PurchaseInvoicesRepository } from "./purchase-invoices.repository";
+import { PurchaseInvoiceImportRejected, PurchaseInvoiceImportService } from "./purchase-invoice-import.service";
+import * as schema from "../../db/schema";
+import { freshDatabase } from "../../test/fresh-database";
+import type { Database } from "../../db/database";
+
+const ACTOR = "11111111-1111-1111-1111-111111111111";
+const HEADERS = PURCHASE_INVOICE_IMPORT_COLUMNS.map((c) => c.header);
+
+/** A row by heading name; anything not given is blank. */
+const row = (cells: Record<string, string>) => HEADERS.map((h) => cells[h] ?? "");
+
+async function sheet(rows: string[][]): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const ws = workbook.addWorksheet("Invoices");
+  ws.addRow(HEADERS);
+  rows.forEach((r) => ws.addRow(r));
+  return Buffer.from(await workbook.xlsx.writeBuffer());
+}
+
+const BASE = {
+  Date: "05-10-2026",
+  Supplier: "SHAH ENTERPRISE",
+  Company: "DH PATEL",
+  Site: "Akwada",
+  Item: "Cement",
+};
+
+describe("PurchaseInvoiceImportService (real PostgreSQL)", () => {
+  let db: Database;
+  let service: PurchaseInvoiceImportService;
+
+  const count = async () => (await db.select().from(schema.purchaseInvoices)).length;
+
+  beforeEach(async () => {
+    db = await freshDatabase();
+    service = new PurchaseInvoiceImportService(db, new PurchaseInvoicesRepository(db));
+    const [unit] = await db.insert(schema.units).values({ name: "Bag" }).returning();
+    await db.insert(schema.items).values({ name: "Cement", unitId: unit!.id, pricePerUnit: "395.00" });
+    const [site] = await db.insert(schema.sites).values({ name: "Akwada", isActive: true }).returning();
+    await db.insert(schema.siteLocations).values({ siteId: site!.id, name: "Block A" });
+    await db.insert(schema.suppliers).values([{ name: "SHAH ENTERPRISE", area: "x" }, { name: "AL BURHAN", area: "y" }]);
+    await db.insert(schema.companies).values({ name: "DH PATEL", invoicePrefix: "DHP" });
+  });
+
+  it("prices each invoice with the form's rules: per-line rounding, then whole rupees with .50 going DOWN", async () => {
+    const preview = await service.preview(
+      await sheet([
+        // 3 x 1000 + 18% = 3540.00 exactly.
+        row({ ...BASE, "Invoice no": "A1", Quantity: "3", Rate: "1000", "GST %": "18" }),
+        // 100.50 + 0% = exactly .50: rounds down to 100.
+        row({ ...BASE, "Invoice no": "A2", Quantity: "1", Rate: "100.50" }),
+        // 100.51: above .50 rounds up to 101.
+        row({ ...BASE, "Invoice no": "A3", Quantity: "1", Rate: "100.51" }),
+        // 100.25 + 18% = 18.045 -> 18.05 per line, 118.30 -> 118.
+        row({ ...BASE, "Invoice no": "A4", Quantity: "1", Rate: "100.25", "GST %": "18" }),
+      ]),
+    );
+
+    expect(preview.errors).toEqual([]);
+    const by = Object.fromEntries(preview.invoices.map((i) => [i.invoiceNo, i]));
+    expect(by.A1).toMatchObject({ total: "3540.00", roundOff: "0.00" });
+    expect(by.A2).toMatchObject({ total: "100.00", roundOff: "-0.50" });
+    expect(by.A3).toMatchObject({ total: "101.00", roundOff: "0.49" });
+    expect(by.A4).toMatchObject({ subtotal: "100.25", totalGst: "18.05", total: "118.00" });
+    expect(preview.totals.total).toBe("3859.00");
+    expect(preview.invoiceCount).toBe(4);
+    expect(await count()).toBe(0); // a preview saves nothing
+  });
+
+  it("groups rows of one invoice, applies TDS and Adjustment once, and imports exactly what was previewed", async () => {
+    const file = await sheet([
+      row({ ...BASE, "Invoice no": "B1", Quantity: "2", Rate: "500", "GST %": "18", TDS: "100", Adjustment: "-5", "Site location": "block a", "Shipping address": "Plot 5", Type: "Purchase" }),
+      row({ ...BASE, "Invoice no": "B1", Quantity: "1", Rate: "250", "Discount per unit": "50", "GST %": "18", TDS: "100" }),
+    ]);
+    const preview = await service.preview(file);
+
+    // lines: 1000 + 180 = 1180 ; (250-50) = 200 + 36 = 236 ; sub 1200, gst 216, tds 100, adj -5 -> 1311
+    expect(preview.errors).toEqual([]);
+    expect(preview.invoices[0]).toMatchObject({ lineCount: 2, subtotal: "1200.00", totalGst: "216.00", tds: "100.00", adjustment: "-5.00", total: "1311.00" });
+
+    const done = await service.import(file, ACTOR, true, { count: preview.invoiceCount, total: preview.totals.total });
+    expect(done).toEqual({ created: 1, total: "1311.00" });
+
+    const [saved] = await db.select().from(schema.purchaseInvoices);
+    expect(saved).toMatchObject({ supplierInvoiceNo: "B1", totalAmount: "1311.00", tds: "100.00", roundOff: "-5.00", shippingAddress: "Plot 5", isApproved: true });
+    expect(saved!.siteLocationId).not.toBeNull();
+    expect((await db.select().from(schema.purchaseInvoiceItems)).length).toBe(2);
+  });
+
+  it("refuses an invoice total that disagrees with the lines, and saves nothing", async () => {
+    const file = await sheet([row({ ...BASE, "Invoice no": "C1", Quantity: "1", Rate: "1000", "GST %": "18", "Invoice total": "1181" })]);
+    const preview = await service.preview(file);
+    expect(preview.errors).toHaveLength(1);
+    expect(preview.errors[0]).toMatchObject({ row: 2, column: "Invoice total" });
+    expect(preview.errors[0]!.message).toContain("1180.00");
+
+    await expect(service.import(file, ACTOR, true, { count: 1, total: "1180.00" })).rejects.toBeInstanceOf(PurchaseInvoiceImportRejected);
+    expect(await count()).toBe(0);
+
+    const ok = await service.preview(await sheet([row({ ...BASE, "Invoice no": "C1", Quantity: "1", Rate: "1000", "GST %": "18", "Invoice total": "1,180.00" })]));
+    expect(ok.errors).toEqual([]);
+  });
+
+  it("will not import a file whose totals are not the ones that were verified", async () => {
+    const file = await sheet([row({ ...BASE, "Invoice no": "D1", Quantity: "1", Rate: "1000" })]);
+    await expect(service.import(file, ACTOR, true, { count: 1, total: "999.00" })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.import(file, ACTOR, true, { count: 2, total: "1000.00" })).rejects.toBeInstanceOf(BadRequestException);
+    expect(await count()).toBe(0);
+  });
+
+  it("refuses an invoice that is already saved, so importing a file twice cannot double it", async () => {
+    const file = await sheet([row({ ...BASE, "Invoice no": "E1", Quantity: "1", Rate: "1000" })]);
+    await service.import(file, ACTOR, true, { count: 1, total: "1000.00" });
+
+    const again = await service.preview(file);
+    expect(again.errors[0]).toMatchObject({ row: 2, column: "Invoice no" });
+    expect(again.errors[0]!.message).toContain("already saved");
+    expect(await count()).toBe(1);
+  });
+
+  it("reports every problem with its row: unknown names, bad dates, contradictions, too many decimals", async () => {
+    const preview = await service.preview(
+      await sheet([
+        row({ ...BASE, "Invoice no": "F1", Quantity: "1", Rate: "10", Supplier: "NOBODY LTD" }),
+        row({ ...BASE, "Invoice no": "F2", Quantity: "1", Rate: "10", Date: "31-02-2026" }),
+        row({ ...BASE, "Invoice no": "F3", Quantity: "1", Rate: "10", Item: "Gold bars" }),
+        row({ ...BASE, "Invoice no": "F4", Quantity: "1", Rate: "10.123" }),
+        row({ ...BASE, "Invoice no": "F5", Quantity: "1", Rate: "10", Site: "Akwada" }),
+        row({ ...BASE, "Invoice no": "F5", Quantity: "1", Rate: "10", Site: "Other site" }),
+        row({ ...BASE, "Invoice no": "F6", Quantity: "1", Rate: "10", "Site location": "Block Z" }),
+      ]),
+    );
+
+    const where = preview.errors.map((e) => `${e.row}:${e.column}`);
+    expect(where).toEqual(expect.arrayContaining(["2:Supplier", "3:Date", "4:Item", "5:Rate", "7:Site", "8:Site location"]));
+    expect(preview.invoices).toEqual([]);
+  });
+
+  it("refuses a file without the required columns", async () => {
+    const workbook = new ExcelJS.Workbook();
+    workbook.addWorksheet("x").addRow(["Invoice no", "Supplier"]);
+    const preview = await service.preview(Buffer.from(await workbook.xlsx.writeBuffer()));
+    expect(preview.errors.map((e) => e.column)).toEqual(expect.arrayContaining(["Date", "Company", "Site", "Item", "Quantity", "Rate"]));
+  });
+});

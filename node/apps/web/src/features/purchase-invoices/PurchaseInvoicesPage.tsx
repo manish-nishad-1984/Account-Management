@@ -28,6 +28,7 @@ import {
 } from "./api";
 import { PurchaseInvoiceFormDialog } from "./PurchaseInvoiceFormDialog";
 import { LocationImportDialog } from "./LocationImportDialog";
+import { InvoiceImportDialog } from "./InvoiceImportDialog";
 import { usePermission } from "../../lib/permissions";
 import {
   DocumentActions,
@@ -84,6 +85,7 @@ export function PurchaseInvoicesPage() {
   const canAdd = usePermission("purchase-invoice", "add");
   const canEdit = usePermission("purchase-invoice", "edit");
   const [importOpen, setImportOpen] = useState(false);
+  const [invoiceImportOpen, setInvoiceImportOpen] = useState(false);
   const screen = useMasterScreen<PurchaseInvoiceRow>({
     // `documentDate` is nullable and therefore cannot be a keyset sort column —
     // see the contract. `createdAt` is NOT NULL and is the closest honest proxy
@@ -396,6 +398,11 @@ export function PurchaseInvoicesPage() {
               sheetName="Purchase Invoices"
               fileName="Purchase-Invoices"
             />
+            {canAdd && (
+              <Button variant="secondary" icon={Upload} onClick={() => setInvoiceImportOpen(true)}>
+                Import invoices
+              </Button>
+            )}
             {canEdit && (
               <Button variant="secondary" icon={Upload} onClick={() => setImportOpen(true)}>
                 Import locations
@@ -421,6 +428,7 @@ export function PurchaseInvoicesPage() {
         isLoading={query.isLoading || !scope.isReady}
       />
 
+      <InvoiceImportDialog open={invoiceImportOpen} onClose={() => setInvoiceImportOpen(false)} />
       <LocationImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
 
       <PurchaseInvoiceFormDialog

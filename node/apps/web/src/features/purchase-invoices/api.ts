@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   listResponseSchema,
+  purchaseInvoiceImportPreviewSchema,
+  purchaseInvoiceImportResultSchema,
   purchaseInvoiceSheetResultSchema,
   purchaseInvoiceDetailSchema,
   purchaseInvoiceRowSchema,
@@ -9,6 +11,8 @@ import {
   type ListResponse,
   type PurchaseInvoiceDetail,
   type PurchaseInvoiceRow,
+  type PurchaseInvoiceImportPreview,
+  type PurchaseInvoiceImportResult,
   type PurchaseInvoiceSheetResult,
   type PurchaseOrderRow,
   type UpdatePurchaseInvoice,
@@ -127,5 +131,40 @@ export const useImportInvoiceLocations = () => {
 export function locationImportRejectionFrom(error: unknown): PurchaseInvoiceSheetResult | null {
   if (!(error instanceof ApiError) || !error.body) return null;
   const parsed = purchaseInvoiceSheetResultSchema.safeParse(error.body);
+  return parsed.success ? parsed.data : null;
+}
+
+/** "Import invoices", step 1: the file priced and checked; nothing is saved. */
+export const usePreviewInvoiceImport = () =>
+  useMutation({
+    mutationFn: (file: File) =>
+      uploadRequest<PurchaseInvoiceImportPreview>(`/${RESOURCE}/import/preview`, [file], {
+        schema: purchaseInvoiceImportPreviewSchema,
+      }),
+  });
+
+/**
+ * Step 2: the same file with the count and total the person verified. A refused
+ * import is a 400 whose body is the preview, so the dialog can show its problems.
+ */
+export const useImportInvoices = () => {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, count, total }: { file: File; count: number; total: string }) =>
+      uploadRequest<PurchaseInvoiceImportResult>(
+        `/${RESOURCE}/import?count=${count}&total=${encodeURIComponent(total)}`,
+        [file],
+        { schema: purchaseInvoiceImportResultSchema },
+      ),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: [RESOURCE] });
+    },
+  });
+};
+
+/** The preview out of a failed request, or null when it failed some other way. */
+export function importRejectionFrom(error: unknown): PurchaseInvoiceImportPreview | null {
+  if (!(error instanceof ApiError) || !error.body) return null;
+  const parsed = purchaseInvoiceImportPreviewSchema.safeParse(error.body);
   return parsed.success ? parsed.data : null;
 }

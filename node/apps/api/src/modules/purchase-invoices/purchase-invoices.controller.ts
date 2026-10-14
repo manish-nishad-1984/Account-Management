@@ -25,6 +25,8 @@ import {
   type BulkApprovalResult,
   type CreatePurchaseInvoice,
   type ListResponse,
+  type PurchaseInvoiceImportPreview,
+  type PurchaseInvoiceImportResult,
   type PurchaseInvoiceSheetResult,
   type PurchaseInvoiceDetail,
   type PurchaseInvoiceRow,
@@ -40,6 +42,10 @@ import { actorId } from "../../common/actor";
 import { approvalOnUpdate, approvedOnCreate } from "../../common/approval";
 import { readUploads } from "../../common/storage/multipart";
 import { assertSpreadsheet } from "../../common/spreadsheet/assert-spreadsheet";
+import {
+  PurchaseInvoiceImportRejected,
+  PurchaseInvoiceImportService,
+} from "./purchase-invoice-import.service";
 import {
   PurchaseInvoiceLocationSheetService,
   PurchaseInvoiceSheetRejected,
@@ -75,6 +81,12 @@ import type { AccessTokenClaims } from "../auth/token.service";
  */
 const SUBJECT = "purchase-invoice";
 
+/** What the person verified on the preview. */
+const importConfirmSchema = z.object({
+  count: z.coerce.number().int().nonnegative(),
+  total: z.string().regex(/^-?\d+(\.\d{1,2})?$/),
+});
+
 const filterSchema = z.object({
   siteId: z.string().uuid().optional(),
   /** The legacy list filters by COMPANY — people work one company at a time. */
@@ -98,6 +110,7 @@ export class PurchaseInvoicesController {
     private readonly invoices: PurchaseInvoicesRepository,
     private readonly reports: ReportsRepository,
     private readonly locationSheet: PurchaseInvoiceLocationSheetService,
+    private readonly importer: PurchaseInvoiceImportService,
   ) {}
 
   @Get()
@@ -165,6 +178,58 @@ export class PurchaseInvoicesController {
       { ...body, isApproved: approvedOnCreate(caller, SUBJECT) },
       actorId(caller),
     );
+  }
+
+  /**
+   * "Import invoices", step 1: read the file, price every invoice and answer with
+   * the summary and every problem. Saves nothing. `purchase-invoice.add`, like
+   * the step that follows it.
+   */
+  @Post("import/preview")
+  @Permissions("purchase-invoice.add")
+  @HttpCode(200)
+  async importPreview(@Req() request: FastifyRequest): Promise<PurchaseInvoiceImportPreview> {
+    const file = await this.oneSpreadsheet(request);
+    return this.importer.preview(file.bytes);
+  }
+
+  /**
+   * "Import invoices", step 2: the same file again, with the invoice count and
+   * grand total the person verified. Refused unless the file still comes to
+   * exactly those, and unless it has no problems. All or nothing.
+   */
+  @Post("import")
+  @Permissions("purchase-invoice.add")
+  @HttpCode(200)
+  async importInvoices(
+    @Req() request: FastifyRequest,
+    @Query(new ZodValidationPipe(importConfirmSchema)) confirm: { count: number; total: string },
+    @CurrentUser() caller: AccessTokenClaims | undefined,
+  ): Promise<PurchaseInvoiceImportResult> {
+    const file = await this.oneSpreadsheet(request);
+    try {
+      return await this.importer.import(file.bytes, actorId(caller), approvedOnCreate(caller, SUBJECT), confirm);
+    } catch (error) {
+      if (error instanceof PurchaseInvoiceImportRejected) {
+        throw new BadRequestException({
+          message: `Nothing was imported. ${error.preview.errors.length} ${
+            error.preview.errors.length === 1 ? "problem" : "problems"
+          } to fix.`,
+          ...error.preview,
+        });
+      }
+      throw error;
+    }
+  }
+
+  private async oneSpreadsheet(request: FastifyRequest) {
+    const files = await readUploads(request);
+    if (files.length !== 1) {
+      throw new BadRequestException("Send one spreadsheet, not several.");
+    }
+    const file = files[0]!;
+    assertSpreadsheet(file.fileName, file.bytes);
+    return file;
   }
 
   /**

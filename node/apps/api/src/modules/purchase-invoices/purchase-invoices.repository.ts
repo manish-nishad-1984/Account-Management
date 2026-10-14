@@ -416,44 +416,68 @@ export class PurchaseInvoicesRepository extends BaseRepository {
    * suppliers both numbering an invoice `016` is ordinary.
    */
   async create(input: CreatePurchaseInvoice & { isApproved?: boolean }, actorId: string): Promise<PurchaseInvoiceDetail> {
+    const id = await writing(() => this.db.transaction((tx) => this.insertInvoice(tx, input, actorId)));
+    return this.findById(id);
+  }
+
+  /**
+   * Several invoices in ONE transaction: all are saved or none is. The spreadsheet
+   * import uses it, so a file that fails on its eightieth invoice leaves nothing
+   * behind to be imported twice when the file is corrected and sent again.
+   */
+  async createMany(
+    inputs: Array<CreatePurchaseInvoice & { isApproved?: boolean }>,
+    actorId: string,
+  ): Promise<string[]> {
+    return writing(() =>
+      this.db.transaction(async (tx) => {
+        const ids: string[] = [];
+        for (const input of inputs) {
+          ids.push(await this.insertInvoice(tx, input, actorId));
+        }
+        return ids;
+      }),
+    );
+  }
+
+  /** One invoice and its lines, inside the caller's transaction. */
+  private async insertInvoice(
+    tx: Parameters<Parameters<Database["transaction"]>[0]>[0],
+    input: CreatePurchaseInvoice & { isApproved?: boolean },
+    actorId: string,
+  ): Promise<string> {
     const { items: lines, tds, roundOff, ...header } = input;
     const { totals, rows } = this.priced(lines, { tds: tds ?? undefined, roundOff: roundOff ?? undefined });
 
-    const id = await writing(() =>
-      this.db.transaction(async (tx) => {
-        const handle = tx as unknown as Database;
-        await assertLocationAtSite(handle, header.siteLocationId, header.siteId);
+    const handle = tx as unknown as Database;
+    await assertLocationAtSite(handle, header.siteLocationId, header.siteId);
 
-        const [created] = await tx
-          .insert(purchaseInvoices)
-          .values({
-            ...header,
-            // Our site's address, whatever the client sent — the business rule.
-            billingAddress: await billingAddressOf(handle, header.siteId),
-            documentDate: header.documentDate ? new Date(header.documentDate) : null,
-            subtotal: totals.subtotal,
-            totalGstAmount: totals.totalGst,
-            totalDiscount: totals.totalDiscount,
-            tds: totals.tds,
-            roundOff: totals.roundOff,
-            totalAmount: totals.grandTotal,
-            ...createdBy(actorId),
-          })
-          .returning({ id: purchaseInvoices.id });
+    const [created] = await tx
+      .insert(purchaseInvoices)
+      .values({
+        ...header,
+        // Our site's address, whatever the client sent — the business rule.
+        billingAddress: await billingAddressOf(handle, header.siteId),
+        documentDate: header.documentDate ? new Date(header.documentDate) : null,
+        subtotal: totals.subtotal,
+        totalGstAmount: totals.totalGst,
+        totalDiscount: totals.totalDiscount,
+        tds: totals.tds,
+        roundOff: totals.roundOff,
+        totalAmount: totals.grandTotal,
+        ...createdBy(actorId),
+      })
+      .returning({ id: purchaseInvoices.id });
 
-        const invoiceId = created!.id;
+    const invoiceId = created!.id;
 
-        await tx
-          .insert(purchaseInvoiceItems)
-          .values(
-            rows.map((row) => ({ ...row, purchaseInvoiceId: invoiceId, ...createdBy(actorId) })),
-          );
+    await tx
+      .insert(purchaseInvoiceItems)
+      .values(
+        rows.map((row) => ({ ...row, purchaseInvoiceId: invoiceId, ...createdBy(actorId) })),
+      );
 
-        return invoiceId;
-      }),
-    );
-
-    return this.findById(id);
+    return invoiceId;
   }
 
   /**
