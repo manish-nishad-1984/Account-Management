@@ -5,6 +5,7 @@ import {
   createClientSchema,
   createPurchaseInvoiceSchema,
   listQuerySchema,
+  savedBalanceSheetDetailSchema,
 } from "@accountmanagement/contracts";
 import { NotFoundException } from "@nestjs/common";
 import { BalanceSheetService } from "./balance-sheet.service";
@@ -163,6 +164,9 @@ describe("SavedBalanceSheetsRepository (real PostgreSQL)", () => {
     const again = await repo.update(saved.id, sheet({ title: "Sept", companyId: patel }), ACTOR);
     expect(again.figures.billed).toBe("500000.00");
     expect(again.rows).toHaveLength(1); // rows replaced, not added to
+    // What the edit screen reads back must parse, rows included.
+    const detail = savedBalanceSheetDetailSchema.parse(JSON.parse(JSON.stringify(await repo.findById(saved.id))));
+    expect(detail.rows).toHaveLength(1);
   });
 
   it("lists newest first, filters by company, and a removed sheet is gone", async () => {

@@ -128,3 +128,24 @@ describe("BalanceSheetFormDialog", () => {
     expect(calls().some((c) => c.url.endsWith("/preview"))).toBe(false);
   });
 });
+
+describe("BalanceSheetFormDialog, editing a saved sheet", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("shows the saved sheet's rows as soon as it opens", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    vi.mocked(globalThis.fetch).mockImplementation((input) => {
+      const url = new URL(String(input), "http://localhost").pathname;
+      if (url.endsWith("/companies")) return Promise.resolve(json(COMPANIES));
+      if (url.endsWith("/balance-sheets/saved-1")) {
+        return Promise.resolve(json({ id: "saved-1", title: "Oct", companyId: COMPANY, companyName: "DH PATEL", siteId: null, siteName: null, incomeFrom: "2026-10-01", incomeTo: "2026-10-31", invoiceFrom: null, invoiceTo: null, projectCount: 1, figures: FIGURES, createdByName: null, createdAt: "2026-10-14T00:00:00.000Z", updatedAt: null, updatedByName: null, note: null, rows: PREVIEW.rows }));
+      }
+      return Promise.resolve(json({}));
+    });
+    renderWithAuth(<BalanceSheetFormDialog open sheetId="saved-1" onClose={vi.fn()} />, {
+      permissions: ["balance-sheets.view", "balance-sheets.edit"],
+      layout: "page",
+    });
+    expect(await screen.findByText("Akwada Lake Front")).toBeInTheDocument();
+  });
+});

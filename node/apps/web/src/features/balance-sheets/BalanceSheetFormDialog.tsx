@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Calculator } from "lucide-react";
+import { AlertTriangle, Calculator } from "lucide-react";
 import {
   createBalanceSheetSchema,
   type BalanceSheetPreview,
@@ -203,6 +203,8 @@ export function BalanceSheetFormDialog({
     >
       {isEdit && detail.isLoading ? (
         <p className="py-8 text-center text-sm text-slate-500">Loading balance sheet…</p>
+      ) : isEdit && detail.isError ? (
+        <Alert icon={AlertTriangle}>This balance sheet could not be loaded. Close it and open it again.</Alert>
       ) : (
         <>
           <FormSection title="Sheet" columns={2}>
