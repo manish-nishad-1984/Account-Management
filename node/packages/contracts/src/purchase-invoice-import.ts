@@ -29,6 +29,7 @@ export const PURCHASE_INVOICE_IMPORT_COLUMNS = [
   { key: "quantity", header: "Quantity", required: true, note: "" },
   { key: "rate", header: "Rate", required: true, note: "Price per unit" },
   { key: "discount", header: "Discount per unit", required: false, note: "Rupees per unit, not a percentage" },
+  { key: "discountPercent", header: "Discount %", required: false, note: "Percent of Rate, instead of Discount per unit" },
   { key: "gst", header: "GST %", required: false, note: "e.g. 18" },
   { key: "tds", header: "TDS", required: false, note: "Per invoice; subtracted" },
   { key: "adjustment", header: "Adjustment", required: false, note: "Per invoice; added, may be negative" },

@@ -14,7 +14,7 @@ import { importRejectionFrom, useImportInvoices, usePreviewInvoiceImport } from 
 
 type SampleRow = string[];
 
-const RIGHT = new Set(["Quantity", "Rate", "Discount per unit", "GST %", "TDS", "Adjustment", "Invoice total"]);
+const RIGHT = new Set(["Quantity", "Rate", "Discount per unit", "Discount %", "GST %", "TDS", "Adjustment", "Invoice total"]);
 
 /** The sample file: every heading, and two made-up invoices (one of two lines) to show how rows are filled. */
 const SAMPLE_COLUMNS: ExportColumn<SampleRow>[] = PURCHASE_INVOICE_IMPORT_COLUMNS.map((column, i) => ({
@@ -24,16 +24,17 @@ const SAMPLE_COLUMNS: ExportColumn<SampleRow>[] = PURCHASE_INVOICE_IMPORT_COLUMN
   value: (row: SampleRow) => row[i],
 }));
 // Order: Invoice no, Date, Supplier, Company, Site, Site location, Type, Challan no, Shipping address,
-//        Item, Unit, Quantity, Rate, Discount per unit, GST %, TDS, Adjustment, Invoice total
+//        Item, Unit, Quantity, Rate, Discount per unit, Discount %, GST %, TDS, Adjustment, Invoice total
 const SAMPLE_ROWS: SampleRow[] = [
-  ["GENT/26-27/57", "05-10-2026", "GIRIRAJ ENTERPRISE", "DH PATEL", "SURAT-AURO UNIVERSITY", "Block A", "Purchase", "CH-114", "Plot 5, Near Main Gate, Surat", "OPC 53 Grade Cement", "Bag", "100", "395.00", "", "18", "", "", ""],
-  ["GENT/26-27/57", "", "", "", "", "", "", "", "", "River Sand", "Brass", "2", "5200.00", "100.00", "5", "200.00", "-3.00", "57,117.00"],
-  ["BI/163/26-27", "21-09-2026", "BHAGAWATI INDUSTRIES", "DH PATEL", "SURAT-AURO UNIVERSITY", "", "", "", "", "Fly Ash Bricks", "Nos", "5000", "6.50", "", "12", "", "", ""],
+  ["GENT/26-27/57", "05-10-2026", "GIRIRAJ ENTERPRISE", "DH PATEL", "SURAT-AURO UNIVERSITY", "Block A", "Purchase", "CH-114", "Plot 5, Near Main Gate, Surat", "OPC 53 Grade Cement", "Bag", "100", "395.00", "", "", "18", "", "", ""],
+  ["GENT/26-27/57", "", "", "", "", "", "", "", "", "River Sand", "Brass", "2", "5200.00", "", "2", "5", "200.00", "-3.00", "57,109.00"],
+  ["BI/163/26-27", "21-09-2026", "BHAGAWATI INDUSTRIES", "DH PATEL", "SURAT-AURO UNIVERSITY", "", "", "", "", "Fly Ash Bricks", "Nos", "5000", "6.50", "", "", "12", "", "", ""],
 ];
 
 const RULES = [
   "One row per item line. Rows with the same Supplier and Invoice no are one invoice; fill its Date, Company, Site and the like once, on its first row.",
-  "Each line: (Rate − Discount per unit) × Quantity, with GST % on that. Every figure is rounded to paise per line.",
+  "Each line: (Rate − discount) × Quantity, with GST % on that. Every figure is rounded to paise per line.",
+  "Discount: either Discount per unit (rupees) or Discount % (a percent of the Rate, turned into rupees per unit and rounded to paise) - not both on one line.",
   "Invoice total = lines + GST − TDS + Adjustment, rounded to a WHOLE RUPEE: exactly .50 goes down, above .50 goes up.",
   "Fill Invoice total from the paper bill to have it checked: a bill whose lines do not come to it is refused.",
 ];

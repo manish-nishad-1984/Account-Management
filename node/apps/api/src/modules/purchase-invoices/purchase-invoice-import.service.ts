@@ -32,6 +32,11 @@ export class PurchaseInvoiceImportRejected extends Error {
 type ColumnKey = (typeof PURCHASE_INVOICE_IMPORT_COLUMNS)[number]["key"];
 type Raw = Record<ColumnKey, string> & { row: number };
 
+/** Other ways a heading may be written, besides the one the sample file uses. */
+const HEADING_ALIASES: Partial<Record<ColumnKey, string[]>> = {
+  discountPercent: ["discount in percentage", "discount percent", "discount percentage", "discount (%)", "discount in %"],
+};
+
 const norm = (text: string): string => text.trim().replace(/\s+/g, " ").toLowerCase();
 const headerOf = (key: ColumnKey): string => PURCHASE_INVOICE_IMPORT_COLUMNS.find((c) => c.key === key)!.header;
 
@@ -129,7 +134,9 @@ export class PurchaseInvoiceImportService extends BaseRepository {
     const at = new Map<string, number>();
     sheet.header.forEach((name, i) => at.set(norm(name), i));
     const index = {} as Record<ColumnKey, number | undefined>;
-    for (const c of PURCHASE_INVOICE_IMPORT_COLUMNS) index[c.key] = at.get(norm(c.header));
+    for (const c of PURCHASE_INVOICE_IMPORT_COLUMNS) {
+      index[c.key] = at.get(norm(c.header)) ?? HEADING_ALIASES[c.key]?.map((alias) => at.get(alias)).find((i) => i !== undefined);
+    }
     const missing = PURCHASE_INVOICE_IMPORT_COLUMNS.filter((c) => c.required && index[c.key] === undefined);
     if (missing.length > 0) {
       return reject(missing.map((c) => ({ row: 1, column: c.header, message: `The column "${c.header}" is missing.` })));
@@ -266,6 +273,32 @@ export class PurchaseInvoiceImportService extends BaseRepository {
         err(first.row, "invoiceNo", `Invoice "${first.invoiceNo}" of "${supplier.name}" for "${company.name}" is already saved. Importing it again would double it.`);
       }
 
+      /**
+       * The discount of a line in RUPEES PER UNIT, the one form an invoice stores.
+       *
+       * "Discount %" is a percent of the Rate, turned into rupees per unit and
+       * rounded to the paise the invoice keeps (half up), which is exactly what
+       * typing that rupee figure on the form would give. Giving both columns on a
+       * line is refused: which one counts would be a guess.
+       */
+      const discountPerUnitOf = (r: Raw): string => {
+        const rupees = figure(r.discount);
+        const percent = figure(r.discountPercent);
+        if (percent === "") return rupees;
+        if (rupees !== "" && Number(rupees) !== 0) {
+          err(r.row, "discountPercent", "Give Discount per unit or Discount %, not both.");
+          return rupees;
+        }
+        if (!/^\d{1,3}(\.\d{1,2})?$/.test(percent) || Number(percent) > 100) {
+          err(r.row, "discountPercent", `"${r.discountPercent}" is not a percentage between 0 and 100 (at most 2 decimals).`);
+          return "";
+        }
+        const rate = figure(r.rate);
+        // A rate that is not an amount is reported by its own column.
+        if (!/^\d{1,15}(\.\d{1,2})?$/.test(rate)) return "";
+        return format(money.round(money.percentOf(decimal(percent), decimal(rate))));
+      };
+
       // The lines.
       const lines = rows.map((r) => {
         let itemId: string | null = null;
@@ -287,7 +320,7 @@ export class PurchaseInvoiceImportService extends BaseRepository {
           unitId: unitId ?? 0,
           quantity: figure(r.quantity),
           unitPrice: figure(r.rate),
-          discountPerUnit: figure(r.discount),
+          discountPerUnit: discountPerUnitOf(r),
           gstPercent: figure(r.gst),
         };
       });

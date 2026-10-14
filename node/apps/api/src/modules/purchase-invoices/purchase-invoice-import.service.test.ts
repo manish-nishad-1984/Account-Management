@@ -72,6 +72,52 @@ describe("PurchaseInvoiceImportService (real PostgreSQL)", () => {
     expect(await count()).toBe(0); // a preview saves nothing
   });
 
+  it("takes a Discount % as a percent of the Rate, in rupees per unit rounded to paise", async () => {
+    const preview = await service.preview(
+      await sheet([
+        // 2% of 5200 = 104.00 per unit; 2 x 5096 = 10192 + 5% GST 509.60 = 10701.60 -> 10702
+        row({ ...BASE, "Invoice no": "P1", Quantity: "2", Rate: "5200", "Discount %": "2", "GST %": "5" }),
+        // 2.5% of 395 = 9.875 per unit -> 9.88 (half up): net 385.12, as typing 9.88 on the form gives
+        row({ ...BASE, "Invoice no": "P2", Quantity: "1", Rate: "395", "Discount %": "2.5" }),
+        // 100% leaves nothing; "5 %" is read as 5
+        row({ ...BASE, "Invoice no": "P3", Quantity: "1", Rate: "250", "Discount %": "100" }),
+        row({ ...BASE, "Invoice no": "P4", Quantity: "1", Rate: "200", "Discount %": "5 %" }),
+      ]),
+    );
+
+    expect(preview.errors).toEqual([]);
+    const by = Object.fromEntries(preview.invoices.map((i) => [i.invoiceNo, i]));
+    expect(by.P1).toMatchObject({ subtotal: "10192.00", totalGst: "509.60", total: "10702.00" });
+    expect(by.P2).toMatchObject({ subtotal: "385.12", total: "385.00" });
+    expect(by.P3).toMatchObject({ subtotal: "0.00", total: "0.00" });
+    expect(by.P4).toMatchObject({ subtotal: "190.00", total: "190.00" });
+  });
+
+  it("refuses Discount % together with Discount per unit, and a percentage that is not one", async () => {
+    const preview = await service.preview(
+      await sheet([
+        row({ ...BASE, "Invoice no": "Q1", Quantity: "1", Rate: "100", "Discount per unit": "5", "Discount %": "5" }),
+        row({ ...BASE, "Invoice no": "Q2", Quantity: "1", Rate: "100", "Discount %": "101" }),
+        row({ ...BASE, "Invoice no": "Q3", Quantity: "1", Rate: "100", "Discount %": "abc" }),
+        row({ ...BASE, "Invoice no": "Q4", Quantity: "1", Rate: "100", "Discount %": "1.234" }),
+      ]),
+    );
+    expect(preview.errors.map((e) => `${e.row}:${e.column}`)).toEqual(["2:Discount %", "3:Discount %", "4:Discount %", "5:Discount %"]);
+    expect(preview.errors[0]!.message).toContain("not both");
+  });
+
+  it("accepts the heading written as Discount in Percentage", async () => {
+    const heads = HEADERS.map((h) => (h === "Discount %" ? "Discount in Percentage" : h));
+    const given: Record<string, string> = { ...BASE, "Invoice no": "R1", Quantity: "1", Rate: "1000", "Discount in Percentage": "10" };
+    const workbook = new ExcelJS.Workbook();
+    const ws = workbook.addWorksheet("Invoices");
+    ws.addRow(heads);
+    ws.addRow(heads.map((h) => given[h] ?? ""));
+    const preview = await service.preview(Buffer.from(await workbook.xlsx.writeBuffer()));
+    expect(preview.errors).toEqual([]);
+    expect(preview.invoices[0]).toMatchObject({ subtotal: "900.00", total: "900.00" });
+  });
+
   it("groups rows of one invoice, applies TDS and Adjustment once, and imports exactly what was previewed", async () => {
     const file = await sheet([
       row({ ...BASE, "Invoice no": "B1", Quantity: "2", Rate: "500", "GST %": "18", TDS: "100", Adjustment: "-5", "Site location": "block a", "Shipping address": "Plot 5", Type: "Purchase" }),
