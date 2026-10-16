@@ -310,14 +310,17 @@ describe("PrintDocumentsRepository (real PostgreSQL)", () => {
       expect(printed.terms).not.toMatch(/script|onclick|onerror|<img/i);
     });
 
-    it("puts the order's billing address under the company name, as the legacy print did", async () => {
+    it("puts the company's own address in the top box and the site's address under the consignee", async () => {
       const order = await raise();
       await db
         .update(schema.purchaseOrders)
-        .set({ billingAddress: "Akwada Lake Front, Bhavnagar" })
+        .set({ billingAddress: "Akwada Lake Front, Bhavnagar", shippingAddress: "Somewhere else" })
         .where(eq(schema.purchaseOrders.id, order.id));
 
-      expect((await repo.purchaseOrder(order.id)).company.address).toBe("Akwada Lake Front, Bhavnagar");
+      const printed = await repo.purchaseOrder(order.id);
+      expect(printed.company.address).toBe("Ground Floor, Ring Road, Surat, 395002");
+      expect(printed.shippingName).toBe("Akwada Lake Front");
+      expect(printed.shippingAddress).toBe("Akwada Lake Front, Bhavnagar");
     });
   });
 

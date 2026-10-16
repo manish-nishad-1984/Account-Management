@@ -148,9 +148,10 @@ export class PrintDocumentsRepository extends BaseRepository {
    * a discount row on paper that the total does not reflect is a sum that does
    * not add up in front of the supplier.
    *
-   * THE COMPANY'S ADDRESS IS THE ORDER'S BILLING ADDRESS when it has one, which
-   * is what the legacy print put under the company name; the company's own
-   * address otherwise.
+   * THE COMPANY'S OWN ADDRESS goes under the company name, and the SITE's address
+   * (the order's billing address) in the consignee box. The legacy print put the
+   * billing address under the company name; the client asked for this on
+   * 16 Oct 2026.
    *
    * THE TERMS ARE SANITISED AGAIN HERE. The order module sanitises them on every
    * write, but rows imported from the legacy database never went through a
@@ -190,10 +191,13 @@ export class PrintDocumentsRepository extends BaseRepository {
         contactNumber: order.contactNumber,
       },
       description: order.description,
+      // The consignee box carries the SITE and its address (client, 16 Oct 2026), as on the invoices.
       shippingName: site,
-      shippingAddress: order.shippingAddress ?? order.groupAddress,
+      shippingAddress: order.billingAddress ?? order.shippingAddress ?? order.groupAddress,
       terms: sanitiseTerms(order.terms),
-      company: { ...company, address: order.billingAddress ?? company.address },
+      // The company's OWN address, in the top box (client, 16 Oct 2026). The order's billing
+      // address, which the legacy print put here, is the site's: it is in the consignee box now.
+      company,
       party,
       items: order.items.map((line) => ({
         ...line,
