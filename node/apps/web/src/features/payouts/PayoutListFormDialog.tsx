@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { CheckCircle2, ChevronDown, ChevronRight, Copy, Eye, Image as ImageIcon, Search, Undo2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Copy, Eye, Filter, Image as ImageIcon, Search, Undo2 } from "lucide-react";
 import {
   createPayoutListSchema,
   type CreatePayoutList,
@@ -26,6 +26,7 @@ import {
 import { ConfirmedView } from "./ConfirmedView";
 import { ConfirmPayoutDialog } from "./ConfirmPayoutDialog";
 import { PartyLedgerDialog } from "./PartyLedgerDialog";
+import { PartyBillFilterDialog } from "./PartyBillFilterDialog";
 import { AmountField } from "./AmountField";
 import { fromPaise, sumAmounts, toPaise } from "./decimal";
 import { formatListDate } from "./message";
@@ -149,6 +150,8 @@ export function PayoutListFormDialog({
   // The supplier whose ledger is open in a popup.
   const [overpaidOpen, setOverpaidOpen] = useState(false);
   const [ledgerFor, setLedgerFor] = useState<{ partyId: string; partyName: string } | null>(null);
+  // The party whose bills are being filtered by date in a popup.
+  const [filterFor, setFilterFor] = useState<string | null>(null);
   const companies = useCompanyOptions();
   const outstanding = usePayoutOutstanding(open && !locked && scope.isReady, scope.siteId, companyId || null);
   const create = useCreatePayoutList();
@@ -360,6 +363,27 @@ export function PayoutListFormDialog({
       }
       return { ...current, [row.partyId]: mine };
     });
+  };
+
+  /**
+   * OK on the date filter: exactly these bills are ticked for the party, each for its
+   * pending amount, and the party's others are not. None chosen clears the party.
+   */
+  const applyBillFilter = (row: BuilderRow, keys: string[]) => {
+    setPicked((current) => {
+      if (!(row.partyId in current)) return current;
+      const { [row.partyId]: _dropped, ...rest } = current;
+      return rest;
+    });
+    setBills((current) => {
+      const { [row.partyId]: _dropped, ...rest } = current;
+      const chosen = row.bills.filter((bill) => keys.includes(bill.key) && (toPaise(bill.pending) ?? 0n) > 0n);
+      if (chosen.length === 0) return rest;
+      return { ...rest, [row.partyId]: Object.fromEntries(chosen.map((bill) => [bill.key, bill.pending])) };
+    });
+    if (keys.length > 0) setExpanded((current) => new Set(current).add(row.partyId));
+    clearLineError(row.partyId);
+    setFilterFor(null);
   };
 
   const setBillAmount = (partyId: string, key: string, value: string) => {
@@ -807,6 +831,17 @@ export function PayoutListFormDialog({
                                 >
                                   <Eye className="size-4" />
                                 </button>
+                                {canOpen && (
+                                  <button
+                                    type="button"
+                                    aria-label={`Filter the bills of ${row.partyName} by date`}
+                                    title="Filter bills by date"
+                                    className="inline-flex rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-brand-700"
+                                    onClick={() => setFilterFor(row.partyId)}
+                                  >
+                                    <Filter className="size-4" />
+                                  </button>
+                                )}
                               </div>
                               {flag && <div className="mt-0.5 pl-5 text-xs text-amber-700">{flag}</div>}
                             </td>
@@ -965,6 +1000,17 @@ export function PayoutListFormDialog({
             siteId={scope.siteId}
             onClose={() => setLedgerFor(null)}
           />
+          {(() => {
+            const row = rows.find((candidate) => candidate.partyId === filterFor);
+            return (
+              <PartyBillFilterDialog
+                partyName={row ? row.partyName : null}
+                bills={(row?.bills ?? []).filter((bill) => (toPaise(bill.pending) ?? 0n) > 0n)}
+                onApply={(keys) => row && applyBillFilter(row, keys)}
+                onClose={() => setFilterFor(null)}
+              />
+            );
+          })()}
           {saved && (
             <ConfirmPayoutDialog open={confirmOpen} list={saved} onClose={() => setConfirmOpen(false)} />
           )}

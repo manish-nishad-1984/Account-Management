@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PayoutListFormDialog } from "./PayoutListFormDialog";
@@ -31,6 +31,12 @@ const OWED = {
     },
   ],
   total: "100000.00",
+};
+
+/** The date-filter popup, found by its title: the payout dialog under it is a dialog too. */
+const filterPopup = async () => {
+  const title = await screen.findByText("Filter bills · Ambica Steel Traders");
+  return title.closest('[role="dialog"]') as HTMLElement;
 };
 
 const sent = () => {
@@ -157,5 +163,37 @@ describe("PayoutListFormDialog - bills", () => {
     await user.click(screen.getByLabelText("Pay Ambica Steel Traders"));
     expect(screen.getByText("0 parties ticked")).toBeInTheDocument();
     expect(screen.getByText("2 bills")).toBeInTheDocument();
+  });
+
+  // Client, 17 Oct 2026: a filter beside the party, with a date range; OK ticks what falls inside it.
+  it("filters a party's bills by date, and OK ticks only the bills inside the dates", async () => {
+    const user = userEvent.setup();
+    open();
+    await user.click(await screen.findByRole("button", { name: /^filter the bills of ambica steel traders by date$/i }));
+
+    const dialog = await filterPopup();
+    // Both bills at first.
+    expect(within(dialog).getByText("BE-1")).toBeInTheDocument();
+    expect(within(dialog).getByText("BE-2")).toBeInTheDocument();
+
+    // 1 Sep onwards: only BE-2.
+    await user.type(within(dialog).getByLabelText("From date"), "2026-09-01");
+    expect(within(dialog).queryByText("BE-1")).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/1 of 2 bills will be ticked/i)).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: /^ok$/i }));
+
+    expect(screen.getByText("1 of 2 bills")).toBeInTheDocument();
+    expect(screen.getByLabelText("Pay bill BE-2 of Ambica Steel Traders")).toBeChecked();
+    expect(screen.getByLabelText("Pay bill BE-1 of Ambica Steel Traders")).not.toBeChecked();
+    expect(screen.getByText("Total").parentElement).toHaveTextContent("40,000.00");
+  });
+
+  it("Cancel on the filter changes nothing", async () => {
+    const user = userEvent.setup();
+    open();
+    await user.click(await screen.findByRole("button", { name: /^filter the bills of ambica steel traders by date$/i }));
+    await user.click(within(await filterPopup()).getByRole("button", { name: /^cancel$/i }));
+    expect(screen.getByText("0 parties ticked")).toBeInTheDocument();
   });
 });
