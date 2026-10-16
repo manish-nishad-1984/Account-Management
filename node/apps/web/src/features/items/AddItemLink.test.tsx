@@ -40,6 +40,31 @@ describe("AddItemLink", () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ id: CREATED.id })));
   });
 
+  // Client, 16 Oct 2026: inside an invoice form (itself a form, in full-page mode), "Create item"
+  // submitted the INVOICE and showed its "required" errors. Two forms shared one id.
+  it.each(["modal", "page"] as const)("inside another form, in %s layout, Create item saves the item and not the form behind", async (layout) => {
+    const user = userEvent.setup();
+    const onSaved = vi.fn();
+    const outer = vi.fn((event: { preventDefault: () => void }) => event.preventDefault());
+    renderWithAuth(
+      <form id="form-dialog" onSubmit={outer}>
+        <AddItemLink onSaved={onSaved} />
+      </form>,
+      { permissions: ["item.view", "item.add"], layout },
+    );
+
+    await user.click(screen.getByRole("button", { name: /add new item/i }));
+    await user.type(await screen.findByLabelText(/item name/i), "M SAND");
+    await user.selectOptions(await screen.findByLabelText(/^unit/i), "Bag");
+    await user.type(screen.getByLabelText(/price per unit/i), "1200");
+    await user.click(screen.getByRole("button", { name: /create item/i }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ id: CREATED.id })));
+    expect(outer).not.toHaveBeenCalled();
+    // A popup in either layout: a dialog, not a page.
+    expect(screen.queryByRole("button", { name: /back to list/i })).not.toBeInTheDocument();
+  });
+
   it("is not shown to a user who may not add items", () => {
     renderWithAuth(<AddItemLink onSaved={vi.fn()} />, { permissions: ["item.view"] });
     expect(screen.queryByRole("button", { name: /add new item/i })).not.toBeInTheDocument();

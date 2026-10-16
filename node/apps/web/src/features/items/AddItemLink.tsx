@@ -24,7 +24,7 @@ export function AddItemLink({ onSaved }: { onSaved: (item: ItemDetail) => void }
         <Plus aria-hidden className="size-3.5" />
         Add new item
       </button>
-      <ItemFormDialog open={open} itemId={null} onClose={() => setOpen(false)} onSaved={onSaved} />
+      <ItemFormDialog popup open={open} itemId={null} onClose={() => setOpen(false)} onSaved={onSaved} />
     </>
   );
 }

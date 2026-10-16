@@ -1,6 +1,7 @@
 import { Package, Percent } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import { money } from "@accountmanagement/domain";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
 import {
@@ -49,6 +50,7 @@ export function ItemFormDialog({
   onClose,
   initialName = "",
   onSaved,
+  popup = false,
 }: {
   open: boolean;
   itemId: string | null;
@@ -57,6 +59,8 @@ export function ItemFormDialog({
   initialName?: string;
   /** Called with the NEW item once it is saved, so the line that asked for it can take it. */
   onSaved?: (item: ItemDetail) => void;
+  /** Opened from another form: always a centred popup, never a page or side panel. */
+  popup?: boolean;
 }) {
   /**
    * A STARTING POINT PICKED FROM THE MATCHES (client request, 6 Oct 2026). While
@@ -84,6 +88,8 @@ export function ItemFormDialog({
     setError,
     setFocus,
     watch,
+    getValues,
+    setValue,
     formState: { errors },
   } = useForm<FormValues, unknown, Submitted>({
     resolver: zodResolver(createItemSchema),
@@ -129,6 +135,25 @@ export function ItemFormDialog({
       reset(toFormValues(detail.data));
     }
   }, [open, isEdit, detail.data, pickedId, template.data, reset, setFocus, initialName]);
+
+  /**
+   * GST AMOUNT FROM THE PRICE AND THE PERCENTAGE (client request, 16 Oct 2026):
+   * type the percentage and the amount is filled in — price × percentage ÷ 100,
+   * to the paisa — and it follows the price. It stays an ordinary box: a person can
+   * type over it, and what is in the box is what is saved.
+   */
+  // The box that just changed is read from the event: its value is not in the form state yet.
+  const fillGstAmount = (changed: "pricePerUnit" | "gstPercent") => (event: { target: { value: string } }) => {
+    const percent = String(changed === "gstPercent" ? event.target.value : (getValues("gstPercent") ?? "")).trim();
+    const price = String(changed === "pricePerUnit" ? event.target.value : (getValues("pricePerUnit") ?? "")).trim();
+    if (percent === "") {
+      setValue("gstAmount", "", { shouldDirty: true });
+      return;
+    }
+    if (!/^\d+(\.\d{1,2})?$/.test(price) || !/^\d{1,3}(\.\d{1,2})?$/.test(percent)) return;
+    const amount = money.format(money.round(money.percentOf(money.decimal(percent), money.decimal(price)), 2));
+    setValue("gstAmount", amount, { shouldDirty: true, shouldValidate: true });
+  };
 
   const pending = create.isPending || update.isPending;
 
@@ -184,6 +209,7 @@ export function ItemFormDialog({
       formError={formError}
       pending={pending}
       submitLabel={isEdit ? "Save changes" : "Create item"}
+      popup={popup}
     >
       {isEdit && detail.isLoading ? (
         <p className="py-8 text-center text-sm text-slate-500">Loading item…</p>
@@ -330,7 +356,7 @@ export function ItemFormDialog({
               inputMode="decimal"
               hint="Amount with at most 2 decimal places"
               error={errors.pricePerUnit?.message}
-              {...register("pricePerUnit")}
+              {...register("pricePerUnit", { onChange: fillGstAmount("pricePerUnit") })}
             />
             <TextField
               label="HSN code"
@@ -354,7 +380,7 @@ export function ItemFormDialog({
               inputMode="decimal"
               hint="5, 12, 18 or 28 — leave blank if the item has no GST"
               error={errors.gstPercent?.message}
-              {...register("gstPercent")}
+              {...register("gstPercent", { onChange: fillGstAmount("gstPercent") })}
             />
             <TextField
               label="GST amount"
@@ -363,10 +389,8 @@ export function ItemFormDialog({
               {...register("gstAmount")}
             />
             <Alert tone="info" className="sm:col-span-2">
-              The GST amount is stored exactly as entered. It is not calculated
-              from the price and percentage — three different calculations
-              exist in the current system and which is correct has not been
-              settled with the business.
+              The GST amount is filled in from the price and the percentage. You
+              can change it, and what is in the box is what is saved.
             </Alert>
           </FormSection>
 

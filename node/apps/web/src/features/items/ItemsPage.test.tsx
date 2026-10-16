@@ -126,13 +126,11 @@ describe("ItemFormDialog", () => {
   });
 
   /**
-   * The single most important assertion about this form. `gstAmount` is
-   * derivable, so the obvious thing is to compute it as the user types — and
-   * that would silently pick a winner among the three disagreeing jQuery
-   * calculators of finding B-2, months before the business decides which is
-   * right. The value entered is the value sent.
+   * The GST amount is filled from the price and the percentage (client request,
+   * 16 Oct 2026), follows the price, and can still be typed over: what is in the
+   * box is what is sent.
    */
-  it("sends the GST amount exactly as typed, deriving nothing", async () => {
+  it("fills the GST amount from the price and percentage, and sends what is in the box", async () => {
     routeFetch({ rows: [], nextCursor: null, total: 0 });
     renderWith(<ItemFormDialog open itemId={null} onClose={vi.fn()} />);
 
@@ -140,15 +138,23 @@ describe("ItemFormDialog", () => {
 
     await userEvent.type(screen.getByLabelText(/item name/i), "Test Item");
     await userEvent.selectOptions(screen.getByLabelText(/^unit/i), "1");
-    await userEvent.type(screen.getByLabelText(/price per unit/i), "100.00");
+    await userEvent.type(screen.getByLabelText(/price per unit/i), "100.50");
     await userEvent.type(screen.getByLabelText(/gst percentage/i), "18");
-    // Deliberately NOT 18.00 — if anything derived it, this would be 18.00.
-    await userEvent.type(screen.getByLabelText(/gst amount/i), "17.50");
+    expect(screen.getByLabelText(/gst amount/i)).toHaveValue("18.09");
+
+    // The price changes, the amount follows.
+    await userEvent.clear(screen.getByLabelText(/price per unit/i));
+    await userEvent.type(screen.getByLabelText(/price per unit/i), "200");
+    expect(screen.getByLabelText(/gst amount/i)).toHaveValue("36.00");
+
+    // Typed over, it is kept.
+    await userEvent.clear(screen.getByLabelText(/gst amount/i));
+    await userEvent.type(screen.getByLabelText(/gst amount/i), "35.50");
     await userEvent.click(screen.getByRole("button", { name: /create item/i }));
 
     await waitFor(() => expect(bodyOfMethod("POST")).toBeDefined());
-    expect(bodyOfMethod("POST").gstAmount).toBe("17.50");
-    expect(bodyOfMethod("POST").pricePerUnit).toBe("100.00");
+    expect(bodyOfMethod("POST").gstAmount).toBe("35.50");
+    expect(bodyOfMethod("POST").pricePerUnit).toBe("200");
   });
 
   /**

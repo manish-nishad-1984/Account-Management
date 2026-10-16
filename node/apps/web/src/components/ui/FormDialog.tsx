@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useId, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Alert, Button } from "./index";
 import { Modal } from "./Modal";
@@ -38,6 +38,7 @@ export function FormDialog({
   size = "lg",
   footerStart,
   readOnly = false,
+  popup = false,
   children,
 }: {
   open: boolean;
@@ -58,10 +59,23 @@ export function FormDialog({
    * that can only be refused by the server is worse than none.
    */
   readOnly?: boolean;
+  /**
+   * Always a centred popup, whatever layout the screen uses. For a form opened FROM
+   * another form ("Add new item" on an invoice): in full-page or side-by-side mode it
+   * would otherwise open as a second page or panel, at the foot of the first form.
+   */
+  popup?: boolean;
   children: ReactNode;
 }) {
-  const formId = "form-dialog";
-  const { layout, setPaneOpen, setPageOpen, pageHost } = useRecordLayout();
+  /*
+    A UNIQUE id per form. The footer's Save button finds its form by this id, and a
+    form opened from another form (Add new item, on an invoice) used to share the
+    same fixed id: its Create button then submitted the INVOICE form behind it, which
+    showed the invoice's "required" errors and never saved the item.
+  */
+  const formId = useId();
+  const { layout: screenLayout, setPaneOpen, setPageOpen, pageHost } = useRecordLayout();
+  const layout = popup ? "modal" : screenLayout;
   const docked = layout === "split";
   const full = layout === "page";
 
@@ -99,6 +113,8 @@ export function FormDialog({
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
+        // A form inside a form's React tree (a popup opened from it) must not also submit the outer one.
+        event.stopPropagation();
         onSubmit();
       }}
       className="space-y-4"

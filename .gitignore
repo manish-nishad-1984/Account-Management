@@ -415,3 +415,5 @@ obj/
 **/dotnet-tools.json
 AccountManegmentAPI/web.config
 /AccountManegments.Web/Views/InvoiceMaster/_DocumentListPartial.cshtml
+resync/
+resync2/
