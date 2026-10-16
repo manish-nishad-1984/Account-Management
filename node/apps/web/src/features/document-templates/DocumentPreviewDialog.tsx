@@ -6,6 +6,7 @@ import { Alert, Button, Modal } from "../../components/ui";
 import { describeLoadError } from "../../lib/load-error";
 import { usePrintBundle } from "./api";
 import { DocumentRenderer, DocumentStyles } from "./render/DocumentRenderer";
+import { LetterheadSpaceControl, useLetterheadSpace } from "./letterhead";
 
 const BUILT_IN = "built-in";
 
@@ -36,6 +37,8 @@ export function DocumentPreviewDialog({
   const [chosen, setChosen] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  // Room for a letterhead, remembered in this browser; the PDF and the print page both use it.
+  const [space, setSpace] = useLetterheadSpace();
 
   const templates = bundle.data?.templates ?? [];
   const templateId = chosen ?? bundle.data?.defaultTemplateId ?? BUILT_IN;
@@ -55,7 +58,7 @@ export function DocumentPreviewDialog({
     try {
       // Loaded on the click, so the PDF libraries never load with a list.
       const { saveDocumentPdf } = await import("./pdf");
-      await saveDocumentPdf(layout, bundle.data.document);
+      await saveDocumentPdf(layout, bundle.data.document, space);
     } catch {
       setPdfError("The PDF could not be made in this browser. Use Print, and choose Save as PDF there.");
     } finally {
@@ -86,6 +89,9 @@ export function DocumentPreviewDialog({
       }
     >
       <DocumentStyles />
+      <div className="mb-3">
+        <LetterheadSpaceControl space={space} onChange={setSpace} />
+      </div>
       {templates.length > 0 && (
         <div className="mb-3 flex items-center gap-2">
           <label htmlFor="preview-layout" className="text-xs font-medium text-slate-600">

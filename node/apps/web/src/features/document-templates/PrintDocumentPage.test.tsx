@@ -89,6 +89,34 @@ describe("PrintDocumentPage", () => {
     expect(vi.mocked(globalThis.fetch).mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true);
   });
 
+  // Client, 17 Oct 2026: a bill printed on a letterhead leaves the top of every page empty.
+  it("leaves the space asked for at the top and foot of every page, and remembers it", async () => {
+    window.localStorage.clear();
+    const user = userEvent.setup();
+    vi.mocked(globalThis.fetch).mockImplementation(async () => json(bundle(null)));
+    const { unmount } = open(`/print/sales-invoice/${INVOICE}`);
+    await screen.findByText("TAX INVOICE · DHP/26-27/0107");
+
+    const margin = presetLayout("classic", "sales-invoice").page.marginMm; // 10
+    const pageRule = () =>
+      /@page \{[^}]*\}/.exec(Array.from(document.querySelectorAll("style")).map((s) => s.textContent).join(" "))![0];
+    expect(pageRule()).toContain(`margin: ${margin}mm ${margin}mm ${margin}mm;`);
+
+    await user.clear(screen.getByLabelText("Space at the top, in millimetres"));
+    await user.type(screen.getByLabelText("Space at the top, in millimetres"), "45");
+    await user.clear(screen.getByLabelText("Space at the bottom, in millimetres"));
+    await user.type(screen.getByLabelText("Space at the bottom, in millimetres"), "20");
+    expect(pageRule()).toContain(`margin: ${margin + 45}mm ${margin}mm ${margin + 20}mm;`);
+    expect(screen.getByLabelText("Letterhead space at the top")).toBeInTheDocument();
+
+    // Another visit to the page starts with the same space.
+    unmount();
+    open(`/print/sales-invoice/${INVOICE}`);
+    await screen.findByText("TAX INVOICE · DHP/26-27/0107");
+    expect(screen.getByLabelText("Space at the top, in millimetres")).toHaveValue(45);
+    window.localStorage.clear();
+  });
+
   it("says so when the invoice cannot be opened", async () => {
     vi.mocked(globalThis.fetch).mockImplementation(async () => json({ message: "Forbidden" }, 403));
     open(`/print/sales-invoice/${INVOICE}`);

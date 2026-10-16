@@ -6,6 +6,7 @@ import { Alert, Button } from "../../components/ui";
 import { describeLoadError } from "../../lib/load-error";
 import { usePrintBundle } from "./api";
 import { DocumentRenderer, DocumentStyles, pageSizeMm } from "./render/DocumentRenderer";
+import { LetterheadSpaceControl, useLetterheadSpace } from "./letterhead";
 
 const BUILT_IN = "built-in";
 
@@ -42,6 +43,8 @@ export function PrintDocumentPage() {
     [template, documentType],
   );
   const page = pageSizeMm(layout.page);
+  // Room left for a letterhead, over and above the margin; remembered in this browser.
+  const [space, setSpace] = useLetterheadSpace();
 
   const [saving, setSaving] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
@@ -52,7 +55,7 @@ export function PrintDocumentPage() {
     try {
       // Loaded on the click; see pdf.tsx for why.
       const { saveDocumentPdf } = await import("./pdf");
-      await saveDocumentPdf(layout, bundle.data.document);
+      await saveDocumentPdf(layout, bundle.data.document, space);
     } catch {
       setPdfError("The PDF could not be made in this browser. Use Print, and choose Save as PDF there.");
     } finally {
@@ -79,7 +82,7 @@ export function PrintDocumentPage() {
         rather than as padding on the page so a second sheet gets them too.
       */}
       <style>{`
-        @page { size: ${layout.page.size} ${layout.page.orientation}; margin: ${layout.page.marginMm}mm; }
+        @page { size: ${layout.page.size} ${layout.page.orientation}; margin: ${layout.page.marginMm + space.topMm}mm ${layout.page.marginMm}mm ${layout.page.marginMm + space.bottomMm}mm; }
         @media print {
           html, body { background: #fff !important; }
           .dt-print-sheet { box-shadow: none !important; margin: 0 !important; width: auto !important; }
@@ -95,6 +98,7 @@ export function PrintDocumentPage() {
           {bundle.data ? `${bundle.data.document.title} · ${bundle.data.document.number}` : "Print"}
         </span>
         <span className="flex-1" />
+        <LetterheadSpaceControl space={space} onChange={setSpace} />
         <label htmlFor="print-template" className="text-xs font-medium text-slate-600">
           Layout
         </label>
@@ -143,8 +147,27 @@ export function PrintDocumentPage() {
         </p>
       ) : (
         <div className="relative overflow-x-auto p-6 print:overflow-visible print:p-0">
-          <div className="dt-print-sheet mx-auto shadow-lg" style={{ width: `${page.width}mm` }}>
+          <div className="dt-print-sheet mx-auto bg-white shadow-lg" style={{ width: `${page.width}mm` }}>
+            {/* On screen only: where the letterhead will be. On paper the page margin leaves the space. */}
+            {space.topMm > 0 && (
+              <div
+                className="flex items-end justify-center border-b border-dashed border-slate-300 bg-slate-50 pb-1 text-[10px] uppercase tracking-wide text-slate-400 print:hidden"
+                style={{ height: `${space.topMm}mm` }}
+                aria-label="Letterhead space at the top"
+              >
+                Letterhead space · {space.topMm} mm
+              </div>
+            )}
             <DocumentRenderer layout={layout} document={bundle.data.document} />
+            {space.bottomMm > 0 && (
+              <div
+                className="flex items-start justify-center border-t border-dashed border-slate-300 bg-slate-50 pt-1 text-[10px] uppercase tracking-wide text-slate-400 print:hidden"
+                style={{ height: `${space.bottomMm}mm` }}
+                aria-label="Letterhead space at the bottom"
+              >
+                Letterhead space · {space.bottomMm} mm
+              </div>
+            )}
           </div>
         </div>
       )}

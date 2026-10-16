@@ -2,6 +2,7 @@ import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import type { PrintDocument, TemplateLayout } from "@accountmanagement/contracts";
 import { DocumentRenderer, DocumentStyles, pageSizeMm } from "./render/DocumentRenderer";
+import { readLetterheadSpace, type LetterheadSpace } from "./letterhead";
 
 /**
  * A document, saved as a PDF file without the print dialog (client request,
@@ -137,7 +138,12 @@ function drawOffScreen(layout: TemplateLayout, document: PrintDocument, contentW
 }
 
 /** Draw, photograph, page and save one document. Resolves once the file is handed to the browser. */
-export async function saveDocumentPdf(layout: TemplateLayout, document: PrintDocument): Promise<void> {
+export async function saveDocumentPdf(
+  layout: TemplateLayout,
+  document: PrintDocument,
+  // Room for a letterhead, on every page, over and above the margin (this browser's setting).
+  space: LetterheadSpace = readLetterheadSpace(),
+): Promise<void> {
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
     import("html2canvas-pro"),
     import("jspdf"),
@@ -146,7 +152,7 @@ export async function saveDocumentPdf(layout: TemplateLayout, document: PrintDoc
   const size = pageSizeMm(layout.page);
   const margin = layout.page.marginMm;
   const contentWidthMm = size.width - 2 * margin;
-  const contentHeightMm = size.height - 2 * margin;
+  const contentHeightMm = Math.max(40, size.height - 2 * margin - space.topMm - space.bottomMm);
   const orientation = size.width > size.height ? "landscape" : "portrait";
 
   const { sheet, remove } = drawOffScreen(layout, document, contentWidthMm);
@@ -185,7 +191,7 @@ export async function saveDocumentPdf(layout: TemplateLayout, document: PrintDoc
       const heightMm = (cut - top) / pxPerMm;
       const fit = Math.min(1, contentHeightMm / heightMm);
       const widthMm = contentWidthMm * fit;
-      pdf.addImage(slice.toDataURL("image/jpeg", 0.92), "JPEG", margin + (contentWidthMm - widthMm) / 2, margin, widthMm, heightMm * fit);
+      pdf.addImage(slice.toDataURL("image/jpeg", 0.92), "JPEG", margin + (contentWidthMm - widthMm) / 2, margin + space.topMm, widthMm, heightMm * fit);
       top = cut;
     });
 
