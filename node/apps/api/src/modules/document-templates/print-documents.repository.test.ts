@@ -201,6 +201,24 @@ describe("PrintDocumentsRepository (real PostgreSQL)", () => {
     expect(printed.totals.totalAmount).toBe(invoice.totalAmount);
   });
 
+  /** Client, 16 Oct 2026: the company, with its own address, on top; the consignee box is the SITE and its address. */
+  it("puts the company's address in the top box and the site's address under the consignee", async () => {
+    const invoice = await purchases.create(
+      createPurchaseInvoiceSchema.parse({ supplierId: partyId, companyId, siteId, supplierInvoiceNo: "GT-1023", items: lines() }),
+      ACTOR,
+    );
+    await db
+      .update(schema.purchaseInvoices)
+      .set({ billingAddress: "Akwada Lake Front, Bhavnagar", shippingAddress: "Block A gate, Hazira" })
+      .where(eq(schema.purchaseInvoices.id, invoice.id));
+
+    const printed = await repo.purchaseInvoice(invoice.id);
+
+    expect(printed.company.address).toBe("Ground Floor, Ring Road, Surat, 395002");
+    expect(printed.shippingName).toBe("Akwada Lake Front");
+    expect(printed.shippingAddress).toBe("Akwada Lake Front, Bhavnagar");
+  });
+
   describe("a purchase order", () => {
     const orderLines = () => [
       { itemId: cementId, unitId, quantity: "10", unitPrice: "400.00", gstPercent: "28" },

@@ -79,8 +79,9 @@ export class PrintDocumentsRepository extends BaseRepository {
         contactNumber: invoice.contactNumber,
       },
       description: invoice.description,
-      shippingName: null,
-      shippingAddress: invoice.shippingAddress,
+      // The consignee box carries the SITE and its address (client, 16 Oct 2026).
+      shippingName: site,
+      shippingAddress: invoice.billingAddress ?? invoice.shippingAddress,
       terms: null,
       company,
       party,
@@ -122,8 +123,10 @@ export class PrintDocumentsRepository extends BaseRepository {
         contactNumber: invoice.contactNumber,
       },
       description: invoice.description,
-      shippingName: null,
-      shippingAddress: invoice.shippingAddress ?? invoice.groupAddress,
+      // The consignee box carries the SITE and its address (client, 16 Oct 2026); the
+      // location's address, which used to stand here, is the fallback for a site with none.
+      shippingName: site,
+      shippingAddress: invoice.billingAddress ?? invoice.shippingAddress ?? invoice.groupAddress,
       terms: null,
       company,
       party,
