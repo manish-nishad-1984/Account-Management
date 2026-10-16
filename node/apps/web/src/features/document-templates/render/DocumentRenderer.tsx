@@ -76,6 +76,13 @@ const STYLESHEET = `
 .dt-striped tfoot td { border-top: 1pt solid var(--dt-primary); }
 .dt-lines th { color: var(--dt-primary); border-bottom: 1.2pt solid var(--dt-primary); }
 .dt-lines td { border-bottom: 0.5pt solid var(--dt-rule); }
+/* The low-ink styles: no fill anywhere, only rules. */
+.dt-outline th { color: var(--dt-primary); border: 0.75pt solid var(--dt-primary); border-bottom-width: 1.4pt; }
+.dt-outline td { border: 0.75pt solid var(--dt-rule); }
+.dt-outline tfoot td { border-top: 1.2pt solid var(--dt-primary); }
+.dt-ruled th { color: var(--dt-primary); border-top: 1.2pt solid var(--dt-primary); border-bottom: 1.2pt solid var(--dt-primary); }
+.dt-ruled tbody tr:last-child td { border-bottom: 0.75pt solid var(--dt-rule); }
+.dt-ruled tfoot td { border-top: 1.2pt solid var(--dt-primary); }
 .dt-table tfoot td { font-weight: 700; }
 .dt-item-desc { color: #6b7280; font-size: 0.9em; }
 .dt-totals { margin-left: auto; min-width: 55%; border-collapse: collapse; }

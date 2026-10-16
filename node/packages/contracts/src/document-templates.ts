@@ -113,8 +113,13 @@ export const templateStylesSchema = z.object({
   baseFontSize: z.number().min(7).max(14).default(9),
   /** Vertical padding of a table cell, in pixels. */
   tableRowSpacing: z.number().min(0).max(10).default(3),
-  /** `grid` rules every cell, `lines` only rows, `striped` shades alternate rows. */
-  tableStyle: z.enum(["grid", "lines", "striped"]).default("grid"),
+  /**
+   * `grid` rules every cell under a filled header, `lines` only rows, `striped` shades
+   * alternate rows. The last two are the LOW-INK styles (client request, 17 Oct 2026):
+   * `outline` rules every cell but leaves the header unfilled, and `ruled` has only a
+   * rule above and below the header and under the last line, no fill and no cell rules.
+   */
+  tableStyle: z.enum(["grid", "lines", "striped", "outline", "ruled"]).default("grid"),
   /** A border round every row — the boxed look of the old invoice. */
   boxed: z.boolean().default(false),
 });
@@ -331,7 +336,23 @@ export type TemplateLayoutInput = z.input<typeof templateLayoutSchema>;
 // Starter layouts
 // ---------------------------------------------------------------------------
 
-export const TEMPLATE_PRESETS = ["classic", "compact", "modern", "minimal"] as const;
+/**
+ * The first four are the original starters. The six `eco-*` ones (client request,
+ * 17 Oct 2026) are LOW-INK: white page, black and grey only, no filled bars or shaded
+ * rows, thin rules — they look professional and use a fraction of the toner.
+ */
+export const TEMPLATE_PRESETS = [
+  "classic",
+  "compact",
+  "modern",
+  "minimal",
+  "eco-classic",
+  "eco-ledger",
+  "eco-executive",
+  "eco-statement",
+  "eco-dense",
+  "eco-clean",
+] as const;
 export type TemplatePreset = (typeof TEMPLATE_PRESETS)[number];
 
 export const TEMPLATE_PRESET_LABELS: Record<TemplatePreset | "custom", string> = {
@@ -339,6 +360,12 @@ export const TEMPLATE_PRESET_LABELS: Record<TemplatePreset | "custom", string> =
   compact: "Compact",
   modern: "Modern",
   minimal: "Minimal",
+  "eco-classic": "Eco Classic",
+  "eco-ledger": "Eco Ledger",
+  "eco-executive": "Eco Executive",
+  "eco-statement": "Eco Statement",
+  "eco-dense": "Eco Dense",
+  "eco-clean": "Eco Clean",
   custom: "Custom",
 };
 
@@ -393,6 +420,8 @@ export function presetLayout(preset: TemplatePreset, documentType: DocumentType)
   const fields = INVOICE_FIELDS(documentType);
   const order = documentType === "purchase-order";
   const terms = b({ type: "terms" });
+  /** An order has no discount, so its tables never carry that column. */
+  const columns = (list: ItemColumn[]): ItemColumn[] => (order ? list.filter((column) => column !== "discount") : list);
 
   const rows = (() => {
     switch (preset) {
@@ -509,6 +538,160 @@ export function presetLayout(preset: TemplatePreset, documentType: DocumentType)
             ),
             row({ blocks: [b({ type: "amount-in-words" })] }),
             ...(order ? [row({ blocks: [terms] })] : []),
+          ],
+        };
+
+      // ---- The low-ink starters ------------------------------------------------
+      // Black and grey on white. No filled header, banner or shaded row anywhere.
+
+      case "eco-classic":
+        // The old invoice's page, boxed and ruled, with the header left unfilled.
+        return {
+          styles: { primaryColor: "#111827", accentColor: "#4b5563", fontFamily: "Arial", baseFontSize: 8.5, tableStyle: "outline", boxed: true },
+          rows: [
+            row({ blocks: [b({ type: "title", variant: "plain", align: "center" })] }),
+            row(
+              { blocks: [b({ type: "company", nameSize: "lg" })] },
+              { blocks: [b({ type: "document-fields", fields })] },
+            ),
+            row(
+              { blocks: [b({ type: "party", heading })] },
+              { blocks: [b({ type: "shipping", heading: "Consignee (Ship to)" })] },
+            ),
+            row({ blocks: [b({ type: "items-table", columns: columns(["index", "item", "hsn", "quantity", "rate", "unit", "discount", "gst-percent", "amount"]) })] }),
+            row({ blocks: [b({ type: "totals", rows: ["subtotal", "discount", "cgst-sgst", "tds", "round-off"] }), b({ type: "amount-in-words" })] }),
+            row(
+              { weight: order ? 2 : 1, blocks: [order ? terms : b({ type: "bank-details", heading: "Company's Bank Details" })] },
+              { blocks: [b({ type: "signature" })] },
+            ),
+            row({ blocks: [b({ type: "text", body: order ? "This is a Computer Generated Purchase Order" : "This is a Computer Generated Invoice", align: "center" })] }),
+          ],
+        };
+
+      case "eco-ledger":
+        // Every cell ruled, like a ledger page; tax per line, no boxes round the page.
+        return {
+          styles: { primaryColor: "#111827", accentColor: "#374151", fontFamily: "Arial", baseFontSize: 8.5, tableStyle: "outline", tableRowSpacing: 3 },
+          rows: [
+            row(
+              { weight: 3, blocks: [b({ type: "company", nameSize: "lg" })] },
+              { weight: 2, blocks: [b({ type: "title", align: "right" }), b({ type: "document-fields", fields, align: "right" })] },
+            ),
+            row({ blocks: [b({ type: "divider" })] }),
+            row(
+              { blocks: [b({ type: "party", heading })] },
+              { blocks: [b({ type: "shipping" })] },
+            ),
+            row({ blocks: [b({ type: "items-table", columns: columns(["index", "item", "hsn", "quantity", "unit", "rate", "discount", "taxable", "gst-percent", "gst-amount", "amount"]) })] }),
+            row(
+              { weight: 3, blocks: [b({ type: "tax-summary", split: "cgst-sgst", showHsn: true }), b({ type: "amount-in-words", show: "both" })] },
+              { weight: 2, blocks: [b({ type: "totals", rows: ["subtotal", "discount", "cgst-sgst", "tds", "round-off"] })] },
+            ),
+            row(
+              { weight: order ? 2 : 1, blocks: [order ? terms : b({ type: "bank-details" })] },
+              { blocks: [b({ type: "signature" })] },
+            ),
+          ],
+        };
+
+      case "eco-executive":
+        // A serif letterhead: centred company and title, ruled table, calm and formal.
+        return {
+          styles: { primaryColor: "#111827", accentColor: "#4b5563", fontFamily: "Georgia", baseFontSize: 9.5, tableStyle: "ruled", tableRowSpacing: 4 },
+          rows: [
+            row({ blocks: [b({ type: "company", align: "center", nameSize: "xl" })] }),
+            row({ blocks: [b({ type: "divider" })] }),
+            row({ blocks: [b({ type: "title", align: "center" })] }),
+            row({ blocks: [b({ type: "document-fields", fields, align: "center" })] }),
+            row({ blocks: [b({ type: "spacer", heightMm: 2 })] }),
+            row(
+              { blocks: [b({ type: "party", heading })] },
+              { blocks: [b({ type: "shipping" })] },
+            ),
+            row({ blocks: [b({ type: "items-table", columns: columns(["index", "item", "hsn", "quantity", "unit", "rate", "discount", "gst-percent", "amount"]) })] }),
+            row(
+              { weight: 3, blocks: [b({ type: "amount-in-words" })] },
+              { weight: 2, blocks: [b({ type: "totals", rows: ["subtotal", "discount", "gst", "tds", "round-off"] })] },
+            ),
+            row(
+              { weight: order ? 2 : 1, blocks: [order ? terms : b({ type: "bank-details" })] },
+              { blocks: [b({ type: "signature" })] },
+            ),
+          ],
+        };
+
+      case "eco-statement":
+        // The plainest: few columns, only rules, lots of white. For short bills.
+        return {
+          styles: { primaryColor: "#1f2937", accentColor: "#6b7280", fontFamily: "Arial", baseFontSize: 9, tableStyle: "ruled", tableRowSpacing: 4 },
+          rows: [
+            row(
+              { blocks: [b({ type: "company", nameSize: "lg", showState: false })] },
+              { blocks: [b({ type: "title", align: "right" }), b({ type: "document-fields", fields: ["number", "date", "site"], align: "right" })] },
+            ),
+            row({ blocks: [b({ type: "spacer", heightMm: 4 })] }),
+            row(
+              { blocks: [b({ type: "party", heading, showState: false })] },
+              { blocks: [b({ type: "shipping" })] },
+            ),
+            row({ blocks: [b({ type: "items-table", columns: ["index", "item", "quantity", "unit", "rate", "amount"], showDescription: true })] }),
+            row(
+              { weight: 3, blocks: [b({ type: "amount-in-words" })] },
+              { weight: 2, blocks: [b({ type: "totals", rows: ["subtotal", "discount", "gst", "tds", "round-off"] })] },
+            ),
+            row(
+              { weight: order ? 2 : 1, blocks: [order ? terms : b({ type: "bank-details" })] },
+              { blocks: [b({ type: "signature" })] },
+            ),
+          ],
+        };
+
+      case "eco-dense":
+        // Small type and tight rows: the most lines to a page, so the fewest pages printed.
+        return {
+          styles: { primaryColor: "#111827", accentColor: "#4b5563", fontFamily: "Arial", baseFontSize: 7.5, tableStyle: "lines", tableRowSpacing: 1 },
+          rows: [
+            row(
+              { weight: 2, blocks: [b({ type: "company", nameSize: "md", showState: false })] },
+              { blocks: [b({ type: "title", align: "right" })] },
+              { blocks: [b({ type: "document-fields", fields: ["number", "date", "challan-no", "vehicle-no"], align: "right" })] },
+            ),
+            row({ blocks: [b({ type: "divider" })] }),
+            row(
+              { blocks: [b({ type: "party", heading, showState: false })] },
+              { blocks: [b({ type: "shipping" })] },
+            ),
+            row({ blocks: [b({ type: "items-table", columns: columns(["index", "item", "hsn", "quantity", "unit", "rate", "discount", "gst-percent", "amount"]), showDescription: false })] }),
+            row(
+              { weight: 3, blocks: [b({ type: "amount-in-words" }), order ? terms : b({ type: "bank-details" })] },
+              { weight: 2, blocks: [b({ type: "totals", rows: ["subtotal", "discount", "gst", "tds", "round-off"] }), b({ type: "signature" })] },
+            ),
+          ],
+        };
+
+      case "eco-clean":
+        // Rows ruled in light lines only; company left, title right; room to breathe.
+        return {
+          styles: { primaryColor: "#1f2937", accentColor: "#6b7280", fontFamily: "Arial", baseFontSize: 9, tableStyle: "lines", tableRowSpacing: 4 },
+          rows: [
+            row(
+              { weight: 3, blocks: [b({ type: "company", nameSize: "xl" })] },
+              { weight: 2, blocks: [b({ type: "title", align: "right" }), b({ type: "document-fields", fields, align: "right" })] },
+            ),
+            row({ blocks: [b({ type: "divider" })] }),
+            row(
+              { blocks: [b({ type: "party", heading, showContact: true })] },
+              { blocks: [b({ type: "shipping" })] },
+            ),
+            row({ blocks: [b({ type: "items-table", columns: columns(["index", "item", "hsn", "quantity", "unit", "rate", "discount", "gst-percent", "gst-amount", "amount"]) })] }),
+            row(
+              { weight: 3, blocks: [b({ type: "amount-in-words" }), b({ type: "notes" })] },
+              { weight: 2, blocks: [b({ type: "totals", rows: ["subtotal", "discount", "cgst-sgst", "tds", "round-off"] })] },
+            ),
+            row(
+              { weight: order ? 2 : 1, blocks: [order ? terms : b({ type: "bank-details" })] },
+              { blocks: [b({ type: "signature" })] },
+            ),
           ],
         };
     }

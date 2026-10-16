@@ -20,6 +20,12 @@ const PRESET_NOTES: Record<TemplatePreset, string> = {
   compact: "One header row, striped lines, totals beside the bank details",
   modern: "Large company name, every line column, tax table and totals side by side",
   minimal: "Just the essentials, lots of white space",
+  "eco-classic": "Low ink: the old invoice's boxed page, header unfilled",
+  "eco-ledger": "Low ink: every cell ruled like a ledger, tax per line",
+  "eco-executive": "Low ink: serif letterhead, centred, ruled table",
+  "eco-statement": "Low ink: the plainest, few columns, only rules",
+  "eco-dense": "Low ink: small type, tight rows, the fewest pages",
+  "eco-clean": "Low ink: light row lines, company left, title right",
 };
 
 /**
