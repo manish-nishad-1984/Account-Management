@@ -32,6 +32,7 @@ import {
   DocumentPdfError,
   useDocumentPdf,
 } from "../document-templates/DocumentActions";
+import { DocumentPreviewDialog } from "../document-templates/DocumentPreviewDialog";
 import { useMasterScreen } from "../../lib/use-master-screen";
 import { formatDate, formatMoney } from "../../lib/format";
 
@@ -85,6 +86,7 @@ export function PurchaseOrdersPage() {
 
   const scope = useSiteScope();
   const pdf = useDocumentPdf();
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const filterValues = {
     isApproved: approval === "all" ? undefined : approval === "approved",
     isActive: active === "all" ? undefined : active === "active",
@@ -238,6 +240,7 @@ export function PurchaseOrdersPage() {
               documentType="purchase-order"
               id={row.original.id}
               label={row.original.poNo}
+              onPreview={() => setPreviewId(row.original.id)}
             />
             <RowActions
               capabilities={row.original.capabilities}
@@ -260,6 +263,12 @@ export function PurchaseOrdersPage() {
       />
 
       <DocumentPdfError pdf={pdf} />
+      <DocumentPreviewDialog
+        open={previewId !== null}
+        onClose={() => setPreviewId(null)}
+        documentType="purchase-order"
+        id={previewId}
+      />
 
       <DataGrid<PurchaseOrderRow>
         // One row above the grid (client request, 18 Sep 2026): the screen's

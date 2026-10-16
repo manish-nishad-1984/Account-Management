@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { FileDown, LoaderCircle, Printer } from "lucide-react";
+import { Eye, FileDown, LoaderCircle, Printer } from "lucide-react";
 import { presetLayout, type DocumentType, type PrintBundle, type TemplateLayout } from "@accountmanagement/contracts";
 import { Alert, Button, IconButton } from "../../components/ui";
 import { ApiError } from "../../lib/api-client";
@@ -134,27 +134,37 @@ export function DocumentActions({
   documentType,
   id,
   label,
+  onPreview,
 }: {
   pdf: DocumentPdf;
   documentType: DocumentType;
   id: string;
   /** The document's number, so every button's name is unique in the table. */
   label: string;
+  /**
+   * Given, the row shows PREVIEW in place of Download PDF (purchase orders, client
+   * request 16 Oct 2026). Download is then inside the preview.
+   */
+  onPreview?: () => void;
 }) {
   const navigate = useNavigate();
   const busy = pdf.busyId === id;
 
   return (
     <>
-      <IconButton
-        label={busy ? `Saving the PDF of ${label}` : `Download PDF of ${label}`}
-        icon={busy ? LoaderCircle : FileDown}
-        aria-busy={busy || undefined}
-        // One at a time: two photographs drawn at once only make both slower.
-        disabled={pdf.busyId !== null}
-        onClick={() => void pdf.download(documentType, id)}
-        className={busy ? "size-9 lg:size-7 [&>svg]:animate-spin" : "size-9 lg:size-7"}
-      />
+      {onPreview ? (
+        <IconButton label={`Preview ${label}`} icon={Eye} onClick={onPreview} className="size-9 lg:size-7" />
+      ) : (
+        <IconButton
+          label={busy ? `Saving the PDF of ${label}` : `Download PDF of ${label}`}
+          icon={busy ? LoaderCircle : FileDown}
+          aria-busy={busy || undefined}
+          // One at a time: two photographs drawn at once only make both slower.
+          disabled={pdf.busyId !== null}
+          onClick={() => void pdf.download(documentType, id)}
+          className={busy ? "size-9 lg:size-7 [&>svg]:animate-spin" : "size-9 lg:size-7"}
+        />
+      )}
       <IconButton
         label={`Print ${label}`}
         icon={Printer}

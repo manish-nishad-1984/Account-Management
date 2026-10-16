@@ -52,7 +52,7 @@ import { useLatestPriceFill } from "../invoices/useLatestPriceFill";
 import { TermsField } from "./TermsField";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { todayInput } from "../../lib/dates";
-import { SavedDocumentPdfButton } from "../document-templates/DocumentActions";
+import { SavedDocumentPreviewButton } from "../document-templates/DocumentPreviewDialog";
 
 /**
  * The purchase order form.
@@ -424,7 +424,7 @@ export function PurchaseOrderFormDialog({
       formError={formError}
       pending={pending}
       footerStart={
-        orderId !== null ? <SavedDocumentPdfButton documentType="purchase-order" id={orderId} dirty={isDirty} /> : undefined
+        orderId !== null ? <SavedDocumentPreviewButton documentType="purchase-order" id={orderId} dirty={isDirty} /> : undefined
       }
       submitLabel={isEdit ? "Save changes" : "Add purchase order"}
       // Wider than every other form dialog, because this one's body is a grid.
