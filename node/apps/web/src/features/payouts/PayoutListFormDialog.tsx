@@ -27,6 +27,7 @@ import { ConfirmedView } from "./ConfirmedView";
 import { ConfirmPayoutDialog } from "./ConfirmPayoutDialog";
 import { PartyLedgerDialog } from "./PartyLedgerDialog";
 import { PartyBillFilterDialog } from "./PartyBillFilterDialog";
+import { AgeBadge } from "./AgeBadge";
 import { AmountField } from "./AmountField";
 import { fromPaise, sumAmounts, toPaise } from "./decimal";
 import { formatListDate } from "./message";
@@ -908,6 +909,7 @@ export function PayoutListFormDialog({
                                         .filter(Boolean)
                                         .join(" · ")}
                                     </span>
+                                    <AgeBadge documentDate={bill.documentDate} />
                                     {bill.pending === "0" && (
                                       <span className="ml-2 text-xs text-amber-700">paid since this list was saved</span>
                                     )}

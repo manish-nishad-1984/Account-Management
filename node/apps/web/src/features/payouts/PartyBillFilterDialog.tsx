@@ -3,6 +3,7 @@ import { Button, Modal, TextField } from "../../components/ui";
 import { formatMoney } from "../../lib/format";
 import { fromPaise, toPaise } from "./decimal";
 import { formatListDate } from "./message";
+import { AgeBadge } from "./AgeBadge";
 
 export interface FilterableBill {
   key: string;
@@ -122,6 +123,7 @@ export function PartyBillFilterDialog({
                   <span className="ml-2 text-xs text-slate-500">
                     {[bill.documentDate ? formatListDate(bill.documentDate) : null, bill.siteName].filter(Boolean).join(" · ")}
                   </span>
+                  <AgeBadge documentDate={bill.documentDate} />
                 </td>
                 <td className="tabular px-3 py-1.5 text-right text-slate-700">{formatMoney(bill.pending)}</td>
               </tr>
