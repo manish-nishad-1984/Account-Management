@@ -242,7 +242,8 @@ export const purchaseInvoiceItems = pgTable(
       .notNull()
       .references(() => units.id),
 
-    quantity: numeric("quantity", { precision: 18, scale: 2 }).notNull(),
+    /** Three decimals (client, 19 Oct 2026: 1.327 CBM); widened from two, nothing lost. */
+    quantity: numeric("quantity", { precision: 18, scale: 3 }).notNull(),
 
     /** Price of one unit BEFORE discount — the source's hidden `.productamount`. */
     unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull(),

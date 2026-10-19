@@ -102,9 +102,13 @@ export const discountPercentOf = (line: InvoiceLineValues | undefined): string =
   return `${((discount / price) * 100).toFixed(2)}%`;
 };
 
-/** Quantity is not money, so summing it for a footer display is safe as a number. */
+/**
+ * Quantity is not money, so summing it for a footer display is safe as a number.
+ * Three places: a purchase invoice line can carry 1.327 (19 Oct 2026); the footer
+ * drops trailing zeros, so a two-place sum still reads as before.
+ */
 export const totalQuantityOf = (lines: InvoiceLineValues[] | undefined): string =>
-  (lines ?? []).reduce((sum, line) => sum + Number(previewNumber(line?.quantity)), 0).toFixed(2);
+  (lines ?? []).reduce((sum, line) => sum + Number(previewNumber(line?.quantity)), 0).toFixed(3);
 
 /**
  * A change event for a field this component only has `register` for.

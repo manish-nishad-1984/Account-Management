@@ -1,0 +1,1 @@
+ALTER TABLE "purchase_invoice_items" ALTER COLUMN "quantity" SET DATA TYPE numeric(18, 3);

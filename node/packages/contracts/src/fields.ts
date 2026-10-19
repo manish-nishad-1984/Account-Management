@@ -187,13 +187,21 @@ export const optionalMoney = (label: string) =>
  * that the value is never parsed to a float, not even to compare it.
  */
 const QUANTITY_PATTERN = /^\d{1,15}(\.\d{1,2})?$/;
+const QUANTITY_PATTERN_3 = /^\d{1,15}(\.\d{1,3})?$/;
 
-export const quantity = (label: string) =>
+/**
+ * `places` is 2 for every document but the purchase invoice, which takes 3 (client,
+ * 19 Oct 2026: timber billed as 1.327 CBM). The column it lands in must hold as many.
+ */
+export const quantity = (label: string, places: 2 | 3 = 2) =>
   z
     .string()
     .trim()
     .min(1, `${label} is required`)
-    .regex(QUANTITY_PATTERN, `${label} must be a number with at most 2 decimal places`)
+    .regex(
+      places === 3 ? QUANTITY_PATTERN_3 : QUANTITY_PATTERN,
+      `${label} must be a number with at most ${places} decimal places`,
+    )
     .refine((value) => /[1-9]/.test(value), `${label} must be greater than zero`);
 
 /** A percentage, 0 to 100, with at most 2 decimal places. Also a string. */

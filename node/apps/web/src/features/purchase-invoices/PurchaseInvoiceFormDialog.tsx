@@ -125,7 +125,8 @@ const toFormValues = (detail: PurchaseInvoiceDetail): FormValues => ({
     itemName: line.itemId === null ? line.itemLabel : "",
     itemDescription: text(line.itemDescription),
     unitId: line.unitId,
-    quantity: line.quantity,
+    // Stored to three places since 19 Oct 2026; "1.000" is shown as "1.00", "1.327" as is.
+    quantity: line.quantity.replace(/^(-?\d+\.\d\d)0$/, "$1"),
     unitPrice: line.unitPrice,
     discountPerUnit: line.discountPerUnit,
     gstPercent: text(line.gstPercent),

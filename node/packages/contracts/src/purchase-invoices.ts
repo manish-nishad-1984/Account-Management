@@ -201,7 +201,8 @@ export const purchaseInvoiceLineInputSchema = z
     itemName: optionalText(200),
     itemDescription: optionalText(500),
     unitId: z.coerce.number().int().positive("Choose a unit"),
-    quantity: quantity("Quantity"),
+    /** Up to 3 decimals here only (client, 19 Oct 2026: 1.327 CBM of timber). */
+    quantity: quantity("Quantity", 3),
     unitPrice: money("Price"),
     /** Rupees PER UNIT, as the legacy screen holds it — not per line. */
     discountPerUnit: optionalMoney("Discount"),

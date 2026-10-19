@@ -395,6 +395,19 @@ describe("PurchaseInvoicesRepository (real PostgreSQL)", () => {
     });
   });
 
+  // Client, 19 Oct 2026: timber billed as 1.327 CBM.
+  it("keeps a quantity with three decimals, and prices the line on all three", async () => {
+    const created = await repo.create(
+      input({ items: [{ itemId, unitId, quantity: "1.327", unitPrice: "29201.21", gstPercent: "18" }] }),
+      ACTOR,
+    );
+    // 1.327 x 29201.21 = 38750.00567 -> 38750.01; 18% of it = 6975.00.
+    expect(created.items[0]).toMatchObject({ quantity: "1.327", netAmount: "38750.01", gstAmount: "6975.00", lineTotal: "45725.01" });
+    expect(() => createPurchaseInvoiceSchema.parse({ ...input(), items: [{ itemId, unitId, quantity: "1.3275", unitPrice: "1" }] })).toThrow(
+      /at most 3 decimal places/,
+    );
+  });
+
   // Client, 19 Oct 2026: "Export to Excel" with the items of each invoice.
   describe("the lines of many invoices, for the export", () => {
     it("returns each named invoice's lines with its id, in line order, and nothing of the others", async () => {
@@ -419,7 +432,7 @@ describe("PurchaseInvoicesRepository (real PostgreSQL)", () => {
         [1, "OPC 53 Grade Cement", "Bag"],
         [2, "Labour", "Bag"],
       ]);
-      expect(ofTwo[0]).toMatchObject({ quantity: "3.00", unitPrice: "1000.00", gstAmount: "540.00", lineTotal: "3540.00" });
+      expect(ofTwo[0]).toMatchObject({ quantity: "3.000", unitPrice: "1000.00", gstAmount: "540.00", lineTotal: "3540.00" });
       expect(await repo.linesOf([])).toEqual([]);
     });
   });
