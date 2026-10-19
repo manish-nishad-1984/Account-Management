@@ -189,6 +189,59 @@ describe("PayoutListFormDialog - bills", () => {
     expect(screen.getByText("Total").parentElement).toHaveTextContent("40,000.00");
   });
 
+  // Client, 19 Oct 2026: a wider popup with more ways to choose among many bills.
+  it("ticks the oldest bills that fit a sum, and OK ticks only those", async () => {
+    const user = userEvent.setup();
+    open();
+    await user.click(await screen.findByRole("button", { name: /^filter the bills of ambica steel traders by date$/i }));
+    const dialog = await filterPopup();
+
+    await user.type(within(dialog).getByLabelText(/pay up to/i), "70,000");
+    await user.click(within(dialog).getByRole("button", { name: /^tick to fit$/i }));
+    // BE-1 (60,000, oldest) fits; BE-2 would go over.
+    expect(within(dialog).getByLabelText("Pay bill BE-1")).toBeChecked();
+    expect(within(dialog).getByLabelText("Pay bill BE-2")).not.toBeChecked();
+    expect(within(dialog).getByText(/1 of 2 bills will be ticked/i)).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: /^ok$/i }));
+    expect(screen.getByLabelText("Pay bill BE-1 of Ambica Steel Traders")).toBeChecked();
+    expect(screen.getByLabelText("Pay bill BE-2 of Ambica Steel Traders")).not.toBeChecked();
+  });
+
+  it("finds bills by number and pending amount, and ticks or unticks all shown at once", async () => {
+    const user = userEvent.setup();
+    open();
+    await user.click(await screen.findByRole("button", { name: /^filter the bills of ambica steel traders by date$/i }));
+    const dialog = await filterPopup();
+
+    await user.click(within(dialog).getByRole("button", { name: /^untick all shown$/i }));
+    expect(within(dialog).getByText(/0 of 2 bills will be ticked/i)).toBeInTheDocument();
+
+    await user.type(within(dialog).getByLabelText(/bill no\. contains/i), "be-2");
+    expect(within(dialog).queryByText("BE-1")).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: /^tick all shown$/i }));
+    expect(within(dialog).getByText(/1 of 2 bills will be ticked/i)).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: /^clear filters$/i }));
+    await user.type(within(dialog).getByLabelText(/pending from/i), "50000");
+    expect(within(dialog).getByText("BE-1")).toBeInTheDocument();
+    expect(within(dialog).queryByText("BE-2")).not.toBeInTheDocument();
+  });
+
+  it("shift-click ticks every bill between two clicks", async () => {
+    const user = userEvent.setup();
+    open();
+    await user.click(await screen.findByRole("button", { name: /^filter the bills of ambica steel traders by date$/i }));
+    const dialog = await filterPopup();
+    await user.click(within(dialog).getByRole("button", { name: /^untick all shown$/i }));
+
+    await user.click(within(dialog).getByLabelText("Pay bill BE-1"));
+    await user.keyboard("{Shift>}");
+    await user.click(within(dialog).getByLabelText("Pay bill BE-2"));
+    await user.keyboard("{/Shift}");
+    expect(within(dialog).getByText(/2 of 2 bills will be ticked/i)).toBeInTheDocument();
+  });
+
   it("Cancel on the filter changes nothing", async () => {
     const user = userEvent.setup();
     open();

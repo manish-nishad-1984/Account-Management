@@ -836,7 +836,7 @@ export function PayoutListFormDialog({
                                   <button
                                     type="button"
                                     aria-label={`Filter the bills of ${row.partyName} by date`}
-                                    title="Filter bills by date"
+                                    title="Filter and choose bills"
                                     className="inline-flex rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-brand-700"
                                     onClick={() => setFilterFor(row.partyId)}
                                   >
