@@ -168,6 +168,25 @@ export const purchaseInvoiceDetailSchema = purchaseInvoiceRowSchema
 export type PurchaseInvoiceDetail = z.infer<typeof purchaseInvoiceDetailSchema>;
 
 /**
+ * "Export to Excel" WITH ITEMS (client, 19 Oct 2026): the lines of many invoices
+ * in one request, each saying whose it is. The list is read first, then its ids
+ * are sent here in batches.
+ */
+export const PURCHASE_INVOICE_LINES_MAX_IDS = 1000;
+export const purchaseInvoiceLinesRequestSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(PURCHASE_INVOICE_LINES_MAX_IDS),
+});
+export type PurchaseInvoiceLinesRequest = z.infer<typeof purchaseInvoiceLinesRequestSchema>;
+export const purchaseInvoiceExportLineSchema = purchaseInvoiceItemRowSchema.extend({
+  purchaseInvoiceId: z.string(),
+});
+export type PurchaseInvoiceExportLine = z.infer<typeof purchaseInvoiceExportLineSchema>;
+export const purchaseInvoiceLinesResponseSchema = z.object({
+  lines: z.array(purchaseInvoiceExportLineSchema),
+});
+export type PurchaseInvoiceLinesResponse = z.infer<typeof purchaseInvoiceLinesResponseSchema>;
+
+/**
  * A line as it is written.
  *
  * `gstAmount`, `netAmount` and `lineTotal` are absent by construction — they are

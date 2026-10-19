@@ -19,6 +19,7 @@ import {
   createPurchaseInvoiceSchema,
   hasPermission,
   listQuerySchema,
+  purchaseInvoiceLinesRequestSchema,
   setApprovalSchema,
   updatePurchaseInvoiceSchema,
   type BulkApproval,
@@ -28,6 +29,8 @@ import {
   type PurchaseInvoiceImportPreview,
   type PurchaseInvoiceImportResult,
   type PurchaseInvoiceDetail,
+  type PurchaseInvoiceLinesRequest,
+  type PurchaseInvoiceLinesResponse,
   type PurchaseInvoiceRow,
   type SetApproval,
   type UpdatePurchaseInvoice,
@@ -150,6 +153,16 @@ export class PurchaseInvoicesController {
       nextCursor: page.nextCursor,
       total,
     };
+  }
+
+  /** "Export to Excel" with items: the lines of the invoices named, each with its invoice's id. */
+  @Post("lines")
+  @Permissions("purchase-invoice.view")
+  @HttpCode(200)
+  async lines(
+    @Body(new ZodValidationPipe(purchaseInvoiceLinesRequestSchema)) body: PurchaseInvoiceLinesRequest,
+  ): Promise<PurchaseInvoiceLinesResponse> {
+    return { lines: await this.invoices.linesOf(body.ids) };
   }
 
   @Get(":id")

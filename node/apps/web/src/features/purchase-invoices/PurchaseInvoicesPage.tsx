@@ -6,7 +6,8 @@ import {
   type PurchaseInvoiceRow,
 } from "@accountmanagement/contracts";
 import { Check, Plus, Undo2, Upload } from "lucide-react";
-import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
+import { DataGrid, RowActions } from "../../components/DataGrid";
+import { InvoiceExportButton } from "./InvoiceExportButton";
 import {
   exportAmount,
   exportDate,
@@ -387,14 +388,7 @@ export function PurchaseInvoicesPage() {
         }
         actions={
           <>
-            <ExportExcelButton<PurchaseInvoiceRow>
-              resource="purchase-invoices"
-              params={screen.listParams}
-              filters={exportFilters}
-              columns={EXPORT_COLUMNS}
-              sheetName="Purchase Invoices"
-              fileName="Purchase-Invoices"
-            />
+            <InvoiceExportButton params={screen.listParams} filters={exportFilters} invoiceColumns={EXPORT_COLUMNS} />
             {canAdd && (
               <Button variant="secondary" icon={Upload} onClick={() => setInvoiceImportOpen(true)}>
                 Import invoices

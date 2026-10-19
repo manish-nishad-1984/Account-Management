@@ -5,6 +5,7 @@ import type {
   CreatePurchaseInvoice,
   ListQuery,
   PurchaseInvoiceDetail,
+  PurchaseInvoiceExportLine,
   PurchaseInvoiceItemRow,
   PurchaseInvoiceLineInput,
   SortDirection,
@@ -342,6 +343,35 @@ export class PurchaseInvoicesRepository extends BaseRepository {
       .leftJoin(items, eq(purchaseInvoiceItems.itemId, items.id))
       .where(eq(purchaseInvoiceItems.purchaseInvoiceId, purchaseInvoiceId))
       .orderBy(purchaseInvoiceItems.lineNumber);
+  }
+
+  /** The lines of many invoices, for the export with items: by invoice, then line number. */
+  async linesOf(ids: readonly string[]): Promise<PurchaseInvoiceExportLine[]> {
+    if (ids.length === 0) return [];
+    return this.db
+      .select({
+        purchaseInvoiceId: purchaseInvoiceItems.purchaseInvoiceId,
+        id: purchaseInvoiceItems.id,
+        itemId: purchaseInvoiceItems.itemId,
+        itemLabel: ITEM_LABEL,
+        itemDescription: purchaseInvoiceItems.itemDescription,
+        unitId: purchaseInvoiceItems.unitId,
+        unitName: units.name,
+        quantity: purchaseInvoiceItems.quantity,
+        unitPrice: purchaseInvoiceItems.unitPrice,
+        discountPerUnit: purchaseInvoiceItems.discountPerUnit,
+        discountPercent: DISCOUNT_PERCENT,
+        gstPercent: purchaseInvoiceItems.gstPercent,
+        gstAmount: purchaseInvoiceItems.gstAmount,
+        netAmount: purchaseInvoiceItems.netAmount,
+        lineTotal: purchaseInvoiceItems.lineTotal,
+        lineNumber: purchaseInvoiceItems.lineNumber,
+      })
+      .from(purchaseInvoiceItems)
+      .innerJoin(units, eq(purchaseInvoiceItems.unitId, units.id))
+      .leftJoin(items, eq(purchaseInvoiceItems.itemId, items.id))
+      .where(inArray(purchaseInvoiceItems.purchaseInvoiceId, [...ids]))
+      .orderBy(purchaseInvoiceItems.purchaseInvoiceId, purchaseInvoiceItems.lineNumber);
   }
 
   async findById(id: string): Promise<PurchaseInvoiceDetail> {

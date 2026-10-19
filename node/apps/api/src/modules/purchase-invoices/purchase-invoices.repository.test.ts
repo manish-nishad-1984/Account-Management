@@ -395,6 +395,35 @@ describe("PurchaseInvoicesRepository (real PostgreSQL)", () => {
     });
   });
 
+  // Client, 19 Oct 2026: "Export to Excel" with the items of each invoice.
+  describe("the lines of many invoices, for the export", () => {
+    it("returns each named invoice's lines with its id, in line order, and nothing of the others", async () => {
+      const two = await repo.create(
+        input({
+          items: [
+            { itemId, unitId, quantity: "3", unitPrice: "1000.00", gstPercent: "18" },
+            { itemName: "Labour", unitId, quantity: "1", unitPrice: "500.00" },
+          ],
+        }),
+        ACTOR,
+      );
+      const one = await repo.create(input({ supplierInvoiceNo: "BB/155" }), ACTOR);
+      const left = await repo.create(input({ supplierInvoiceNo: "BB/156" }), ACTOR);
+
+      const lines = await repo.linesOf([two.id, one.id]);
+
+      expect(lines).toHaveLength(3);
+      expect(lines.some((line) => line.purchaseInvoiceId === left.id)).toBe(false);
+      const ofTwo = lines.filter((line) => line.purchaseInvoiceId === two.id);
+      expect(ofTwo.map((line) => [line.lineNumber, line.itemLabel, line.unitName])).toEqual([
+        [1, "OPC 53 Grade Cement", "Bag"],
+        [2, "Labour", "Bag"],
+      ]);
+      expect(ofTwo[0]).toMatchObject({ quantity: "3.00", unitPrice: "1000.00", gstAmount: "540.00", lineTotal: "3540.00" });
+      expect(await repo.linesOf([])).toEqual([]);
+    });
+  });
+
   describe("approval and deletion", () => {
     it("states the approval rather than toggling it", async () => {
       const created = await repo.create(input(), ACTOR);
