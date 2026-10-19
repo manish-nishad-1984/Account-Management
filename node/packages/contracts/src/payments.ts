@@ -172,6 +172,12 @@ export const updatePaymentSchema = z.object({
   description: optionalText(500).optional(),
   method: optionalText(100).optional(),
   referenceNo: optionalText(100).optional(),
+}).superRefine((value, ctx) => {
+  // POSITIVE on an edit too (19 Oct 2026, when payments became editable on screen):
+  // a negative amount would turn the payment into a charge, as on create.
+  if (value.amount !== undefined && !(Number.parseFloat(value.amount) > 0)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["amount"], message: "Amount must be more than zero" });
+  }
 });
 export type UpdatePayment = z.infer<typeof updatePaymentSchema>;
 

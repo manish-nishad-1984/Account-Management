@@ -125,11 +125,11 @@ describe("the sidebar", () => {
    * hold them. The report was invisible on the live site until the client asked
    * where it had gone.
    */
-  it("opens the Ledger and the Sales Report on the one right", () => {
+  it("opens the Ledger on the one right, and there is no Sales Report any more", () => {
     renderShell(["reports-payments.view"], "/reports/ledger");
 
     expect(tabs("Reports")).toContain("Ledger");
-    expect(tabs("Reports")).toContain("Sales Report");
+    expect(tabs("Reports")).not.toContain("Sales Report");
     expect(railNames()).toContain("Invoicing");
   });
 

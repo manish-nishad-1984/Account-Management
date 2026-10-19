@@ -101,8 +101,8 @@ export function PendingLedgerPage() {
               label="Pending outstanding filters"
               value={draft}
               onChange={setDraft}
-              onApply={() => {
-                setApplied(draft);
+              onApply={(next = draft) => {
+                setApplied(next);
                 setOffset(0);
                 setSearched(true);
               }}

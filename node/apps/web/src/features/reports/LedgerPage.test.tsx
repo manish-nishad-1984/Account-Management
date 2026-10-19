@@ -311,3 +311,66 @@ describe("the ledger screen", () => {
     });
   });
 });
+
+describe("the ledger, client requests of 19 Oct 2026", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const ledgerCalls = () =>
+    vi.mocked(globalThis.fetch).mock.calls
+      .map(([input]) => new URL(String(input), "http://localhost"))
+      .filter((url) => url.pathname.endsWith("/reports/ledger"));
+
+  it("searches at once when a date shortcut is pressed, without pressing Search", async () => {
+    withReports(ledgerResponse([ledgerRow()]));
+    renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
+
+    await userEvent.click(await screen.findByRole("button", { name: "This financial year" }));
+    await waitFor(() => expect(ledgerCalls().length).toBe(1));
+    expect(ledgerCalls()[0]!.searchParams.get("fromDate")).toMatch(/^\d{4}-04-01$/);
+
+    await userEvent.click(screen.getByRole("button", { name: "All dates" }));
+    await waitFor(() => expect(ledgerCalls().length).toBe(2));
+    expect(ledgerCalls()[1]!.searchParams.get("fromDate")).toBeNull();
+  });
+
+  it("asks for the whole ledger, start to end, unless fewer rows are chosen", async () => {
+    withReports(ledgerResponse([ledgerRow()]));
+    renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
+    await search();
+    await waitFor(() => expect(ledgerCalls().length).toBe(1));
+    expect(ledgerCalls()[0]!.searchParams.get("limit")).toBe("5000");
+
+    await userEvent.selectOptions(await screen.findByLabelText("Rows to show"), "100");
+    await waitFor(() => expect(ledgerCalls().at(-1)!.searchParams.get("limit")).toBe("100"));
+  });
+
+  it("opens a payment for editing from its ledger row, and not an invoice", async () => {
+    withReports(
+      ledgerResponse([
+        ledgerRow(),
+        ledgerRow({ id: "payment:pppp", documentId: "pppp", source: "payment", displayNo: "PayOut", label: "Payment", effect: "debit", credit: "0.00", debit: "4000.00", balance: "6000.00" }),
+      ]),
+    );
+    renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view", "reports-payments.edit"] });
+    await search();
+
+    const edits = await screen.findAllByRole("button", { name: /^edit /i });
+    expect(edits).toHaveLength(1);
+    expect(edits[0]).toHaveAccessibleName("Edit payment PayOut of AL BURHAN PIPES");
+  });
+
+  it("shows no Edit without the right to change payments", async () => {
+    withReports(ledgerResponse([ledgerRow({ id: "payment:pppp", documentId: "pppp", source: "payment", label: "Payment" })]));
+    renderWithAuth(<LedgerPage />, { permissions: ["reports-payments.view"] });
+    await search();
+    await screen.findByText("Payment");
+    expect(screen.queryByRole("button", { name: /^edit /i })).not.toBeInTheDocument();
+  });
+});
+

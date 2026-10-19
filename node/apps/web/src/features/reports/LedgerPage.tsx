@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2, Pencil } from "lucide-react";
 import type { LedgerRow } from "@accountmanagement/contracts";
-import { Alert, EmptyState } from "../../components/ui";
+import { Alert, EmptyState, IconButton } from "../../components/ui";
+import { usePermission } from "../../lib/permissions";
+import { PaymentEditDialog, type PaymentEditTarget } from "../payments/PaymentEditDialog";
 import { formatDate, formatMoney } from "../../lib/format";
 import { EMPTY_FILTERS, ReportFilters, toQuery, type FilterState } from "./ReportFilters";
 import { ExportButtons } from "./ExportButtons";
@@ -46,6 +48,9 @@ const balanceTone = (value: string) => (value.startsWith("-") ? "text-amber-700"
 
 const noSite = <span className="text-xs text-slate-400">No site</span>;
 
+/** "All": the API's ledger cap (`LEDGER_MAX_LIMIT`), a supplier's whole history and more. */
+const LEDGER_ALL = 5000;
+
 export function LedgerPage() {
   const [direction, setDirection] = useState<"out" | "in">("out");
   const [draft, setDraft] = useState<FilterState>(EMPTY_FILTERS);
@@ -58,11 +63,20 @@ export function LedgerPage() {
    * back to that empty state.
    */
   const [searched, setSearched] = useState(false);
+  /**
+   * THE WHOLE LEDGER BY DEFAULT (client, 19 Oct 2026: "full ledger, start to end").
+   * "All" is up to 5,000 rows at once — a supplier's entire history — and the
+   * pager stays for anything longer. 100 is still there for a quick look.
+   */
+  const [pageSize, setPageSize] = useState<number>(LEDGER_ALL);
+  // The payment opened from its ledger row for editing.
+  const [editing, setEditing] = useState<PaymentEditTarget | null>(null);
+  const canEditPayments = usePermission("reports-payments", "edit");
 
-  const ledger = useLedger({ ...toQuery(applied), direction, limit: REPORT_PAGE, offset }, searched);
+  const ledger = useLedger({ ...toQuery(applied), direction, limit: pageSize, offset }, searched);
 
-  const apply = () => {
-    setApplied(draft);
+  const apply = (next: FilterState = draft) => {
+    setApplied(next);
     // A cursor carried across a filter change seeks into a set that no longer
     // exists — §5j found the same thing on inward challans.
     setOffset(0);
@@ -137,6 +151,35 @@ export function LedgerPage() {
       cell: (row) => formatMoney(row.balance),
       footer: formatMoney(ledger.data?.closingBalance ?? "0"),
     },
+    // Edit a payment from its row, as the old ledger screen allowed (client, 19 Oct 2026).
+    ...(canEditPayments
+      ? [
+          {
+            key: "action",
+            header: "",
+            nowrap: true,
+            cell: (row: LedgerRow) =>
+              row.source === "payment" || row.source === "opening_balance" ? (
+                <IconButton
+                  label={`Edit ${row.label.toLowerCase()} ${row.displayNo} of ${row.partyName}`}
+                  icon={Pencil}
+                  className="size-7"
+                  onClick={() =>
+                    setEditing({
+                      id: row.documentId,
+                      kind: row.source === "opening_balance" ? "opening_balance" : "payment",
+                      direction,
+                      partyName: row.partyName,
+                      companyName: row.companyName,
+                      siteId: row.siteId,
+                      siteName: row.siteName,
+                    })
+                  }
+                />
+              ) : null,
+          } satisfies ReportColumn<LedgerRow>,
+        ]
+      : []),
   ];
 
   return (
@@ -186,18 +229,38 @@ export function LedgerPage() {
                     minWidth="60rem"
                     fit
                   />
-                  <ReportPager
-                    offset={offset}
-                    total={ledger.data.total}
-                    hasNext={ledger.data.nextCursor !== null}
-                    onPage={setOffset}
-                    note="The balance runs across pages."
-                  />
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="mt-3 flex items-center gap-2 text-xs text-slate-600">
+                      Show
+                      <select
+                        aria-label="Rows to show"
+                        value={pageSize}
+                        onChange={(event) => {
+                          setPageSize(Number(event.target.value));
+                          setOffset(0);
+                        }}
+                        className="h-7 rounded-md border-0 bg-white px-2 pr-7 text-xs text-slate-800 ring-1 ring-inset ring-slate-300 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
+                      >
+                        <option value={LEDGER_ALL}>All (start to end)</option>
+                        <option value={500}>500 rows</option>
+                        <option value={REPORT_PAGE}>{REPORT_PAGE} rows</option>
+                      </select>
+                    </label>
+                    <ReportPager
+                      offset={offset}
+                      total={ledger.data.total}
+                      hasNext={ledger.data.nextCursor !== null}
+                      onPage={setOffset}
+                      pageSize={pageSize}
+                      note="The balance runs across pages."
+                    />
+                  </div>
                 </>
               )}
             </>
         )}
       />
+      <PaymentEditDialog row={editing} onClose={() => setEditing(null)} />
     </>
   );
 }

@@ -32,7 +32,6 @@ import { PermissionsPage } from "./features/users/PermissionsPage";
 import { PaymentsPage } from "./features/payments/PaymentsPage";
 import { LedgerPage } from "./features/reports/LedgerPage";
 import { PendingLedgerPage } from "./features/reports/PendingLedgerPage";
-import { SalesReportPage } from "./features/reports/SalesReportPage";
 import { DocumentLayoutsPage } from "./features/document-templates/DocumentLayoutsPage";
 import { PrintDocumentPage } from "./features/document-templates/PrintDocumentPage";
 import { createQueryClient } from "./lib/query-client";
@@ -72,7 +71,6 @@ const IMPLEMENTED: Record<string, React.ComponentType> = {
   "/reports/balance-sheet": BalanceSheetPage,
   "/reports/ledger": LedgerPage,
   "/reports/pending-ledger": PendingLedgerPage,
-  "/reports/sales": SalesReportPage,
   "/settings/document-layouts": DocumentLayoutsPage,
 };
 

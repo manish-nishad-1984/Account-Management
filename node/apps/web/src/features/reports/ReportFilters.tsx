@@ -69,7 +69,8 @@ export function ReportFilters({
 }: {
   value: FilterState;
   onChange: (next: FilterState) => void;
-  onApply: () => void;
+  /** Runs the search; given filters, with those (a date shortcut applies at once). */
+  onApply: (next?: FilterState) => void;
   onReset: () => void;
   partyLabel: string;
   /**
@@ -99,7 +100,7 @@ export function ReportFilters({
       className="mb-3 rounded-xl border border-slate-200 bg-white p-2.5 shadow-card [&_input]:h-9 [&_select]:h-9"
       onSubmit={(event) => {
         event.preventDefault();
-        onApply();
+        onApply(value);
       }}
     >
       <div className={FILTER_ROW}>
@@ -177,14 +178,24 @@ export function ReportFilters({
         <button
           type="button"
           className="rounded-full px-2.5 py-1.5 text-brand-700 ring-1 ring-inset ring-brand-200 hover:bg-brand-50 lg:px-2 lg:py-0.5"
-          onClick={() => onChange({ ...value, ...financialYearRange() })}
+          // A shortcut SEARCHES at once (client, 19 Oct 2026): it only filled the two
+          // dates before, and nothing changed until Search was pressed.
+          onClick={() => {
+            const next = { ...value, ...financialYearRange() };
+            onChange(next);
+            onApply(next);
+          }}
         >
           This financial year
         </button>
         <button
           type="button"
           className="rounded-full px-2.5 py-1.5 text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-50 lg:px-2 lg:py-0.5"
-          onClick={() => onChange({ ...value, fromDate: "", toDate: "" })}
+          onClick={() => {
+            const next = { ...value, fromDate: "", toDate: "" };
+            onChange(next);
+            onApply(next);
+          }}
         >
           All dates
         </button>

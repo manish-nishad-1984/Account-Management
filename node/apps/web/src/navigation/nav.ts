@@ -34,7 +34,6 @@ import {
   ShieldCheck,
   ShoppingBag,
   ShoppingCart,
-  TrendingUp,
   Truck,
   Users,
   Wallet,
@@ -139,7 +138,7 @@ export const NAV: NavSection[] = [
       // screen actually asks for. `sales-report` and `details-report` are dead
       // rows in the Form table, checked nowhere in the .NET solution and inactive
       // in production, so naming them here hid the report from everyone.
-      { label: "Sales Report", to: "/reports/sales", icon: TrendingUp, permission: "reports-payments", status: "ready", legacy: "/Sales/SalesReport" },
+      // "Sales Report" was here until 19 Oct 2026; the client asked for it to go.
       { label: "Ledger", to: "/reports/ledger", icon: BookOpen, permission: "reports-payments", status: "ready", legacy: "/InvoiceMaster/PayOutInvoice" },
       // Began as the "Pending Ledger", a copy of the ledger for the client to try out (14 Sep 2026).
       // Since 1 Oct 2026 it is only the outstanding summary: site, supplier and net.

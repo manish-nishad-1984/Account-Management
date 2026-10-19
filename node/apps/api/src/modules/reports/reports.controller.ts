@@ -35,7 +35,15 @@ const pagingSchema = z.object({
   offset: z.coerce.number().int().nonnegative().max(1_000_000).default(0),
 });
 
-const ledgerQuerySchema = reportFilterSchema.and(pagingSchema);
+/**
+ * THE LEDGER MAY BE READ WHOLE (client, 19 Oct 2026: "we have to see the full
+ * ledger, start to end"). Its own cap is 5,000 rows, which is a supplier's whole
+ * history and more; the other reports keep the 200 above.
+ */
+export const LEDGER_MAX_LIMIT = 5_000;
+const ledgerQuerySchema = reportFilterSchema.and(
+  pagingSchema.extend({ limit: z.coerce.number().int().positive().max(LEDGER_MAX_LIMIT).default(50) }),
+);
 const balancesRequestSchema = balancesQuerySchema.and(pagingSchema);
 
 /** The sales report is one direction of the summary; it cannot ask for the other. */

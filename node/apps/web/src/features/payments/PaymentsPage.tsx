@@ -9,6 +9,7 @@ import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
 import { formatDate, formatMoney } from "../../lib/format";
 import { PaymentFormDialog } from "./PaymentFormDialog";
+import { PaymentEditDialog } from "./PaymentEditDialog";
 import { useDeletePayment, usePaymentList } from "./api";
 
 /**
@@ -40,6 +41,8 @@ export function PaymentsPage() {
   const canAdd = usePermission("reports-payments", "add");
   const [direction, setDirection] = useState<"out" | "in">("out");
   const [formOpen, setFormOpen] = useState(false);
+  // The payment open for editing (the Record payments repeater only creates).
+  const [editing, setEditing] = useState<PaymentRow | null>(null);
 
   const screen = useMasterScreen<PaymentRow>({ defaultSortBy: "createdAt", defaultSortDir: "desc" });
   const filters = { direction };
@@ -145,7 +148,7 @@ export function PaymentsPage() {
           <RowActions
             capabilities={row.original.capabilities}
             label={`payment of ${row.original.amount} to ${row.original.partyName}`}
-            onEdit={() => screen.openEdit(row.original.id)}
+            onEdit={() => setEditing(row.original)}
             onDelete={() => askDelete(row.original)}
           />
         ),
@@ -218,6 +221,12 @@ export function PaymentsPage() {
         open={formOpen}
         direction={direction}
         onClose={() => setFormOpen(false)}
+      />
+
+      <PaymentEditDialog
+        row={editing}
+        readOnly={editing !== null && !editing.capabilities.canEdit}
+        onClose={() => setEditing(null)}
       />
 
       <ConfirmDialog

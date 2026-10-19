@@ -277,24 +277,27 @@ export function ReportPager({
   hasNext,
   onPage,
   note,
+  pageSize = REPORT_PAGE,
 }: {
   offset: number;
   total: number;
   hasNext: boolean;
   onPage: (offset: number) => void;
   note?: string;
+  /** Rows to a page, when a screen lets the reader choose. */
+  pageSize?: number;
 }) {
   return (
     <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
       <span>
-        Showing {total === 0 ? 0 : offset + 1} to {Math.min(offset + REPORT_PAGE, total)} of {total}.
+        Showing {total === 0 ? 0 : offset + 1} to {Math.min(offset + pageSize, total)} of {total}.
         {note ? ` ${note}` : ""}
       </span>
       <div className="flex gap-2">
-        <Button variant="secondary" disabled={offset === 0} onClick={() => onPage(Math.max(0, offset - REPORT_PAGE))}>
+        <Button variant="secondary" disabled={offset === 0} onClick={() => onPage(Math.max(0, offset - pageSize))}>
           Previous
         </Button>
-        <Button variant="secondary" disabled={!hasNext} onClick={() => onPage(offset + REPORT_PAGE)}>
+        <Button variant="secondary" disabled={!hasNext} onClick={() => onPage(offset + pageSize)}>
           Next
         </Button>
       </div>
