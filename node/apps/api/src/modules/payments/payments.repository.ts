@@ -13,6 +13,8 @@ import { companies, paymentAllocations, payments, siteLocations, sites, supplier
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
+import { rawRows } from "../../common/raw-rows";
+import { fromPaise, toPaise } from "../balance-sheet/balance-sheet.service";
 
 /**
  * Payments — `/Report/ReportDetails` panel 3.
@@ -253,18 +255,62 @@ export class PaymentsRepository extends BaseRepository {
       patch.paymentDate = input.paymentDate ? new Date(input.paymentDate) : null;
     }
 
-    const [row] = await writing(() =>
-      this.db
-        .update(payments)
-        .set(patch)
-        .where(and(eq(payments.id, id), eq(payments.isDeleted, false)))
-        .returning(DETAIL_COLUMNS),
+    const row = await writing(() =>
+      this.db.transaction(async (tx) => {
+        const [updated] = await tx
+          .update(payments)
+          .set(patch)
+          .where(and(eq(payments.id, id), eq(payments.isDeleted, false)))
+          .returning(DETAIL_COLUMNS);
+        if (updated && input.amount !== undefined) {
+          await this.fitAllocations(tx as unknown as Database, id, input.amount);
+        }
+        return updated;
+      }),
     );
 
     if (!row) {
       throw new NotFoundException("Payment not found");
     }
     return shape(row) as PaymentDetail;
+  }
+
+  /**
+   * A PAYMENT NEVER SETTLES MORE THAN IT IS (client, 19 Oct 2026). Its bills were
+   * named when it was made; when the amount is cut, so is what it settles: the
+   * oldest bill keeps its share first, the next takes what is left, and a bill
+   * nothing is left for is no longer named. Raising the amount names nothing new.
+   *
+   * CHINTAN-DEMO showed why: a payment edited from 1,416 to 1,000 still settled the
+   * whole 1,416 bill, so the bill read as paid and the party's bills summed 416
+   * short of its outstanding.
+   */
+  private async fitAllocations(tx: Database, paymentId: string, amount: string): Promise<void> {
+    const named = rawRows<{ id: string; amount: string }>(
+      await tx.execute(sql`
+        select a.id, a.amount::text as amount
+        from payment_allocations a
+        left join purchase_invoices pi on a.document_kind = 'invoice' and pi.id::text = a.document_id::text
+        left join sales_invoices si on a.document_kind = 'invoice' and si.id::text = a.document_id::text
+        left join payments ob on a.document_kind = 'opening_balance' and ob.id::text = a.document_id::text
+        where a.payment_id = ${paymentId}
+        order by coalesce(pi.document_date, si.document_date, ob.payment_date) asc nulls first, a.id
+      `),
+    );
+    let left = toPaise(amount);
+    for (const one of named) {
+      const share = toPaise(one.amount);
+      if (left >= share) {
+        left -= share;
+        continue;
+      }
+      if (left > 0n) {
+        await tx.update(paymentAllocations).set({ amount: fromPaise(left) }).where(eq(paymentAllocations.id, one.id));
+        left = 0n;
+      } else {
+        await tx.delete(paymentAllocations).where(eq(paymentAllocations.id, one.id));
+      }
+    }
   }
 
   /**

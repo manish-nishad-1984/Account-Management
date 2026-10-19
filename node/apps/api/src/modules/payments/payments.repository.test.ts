@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { NotFoundException } from "@nestjs/common";
 import {
   createPaymentSchema,
+  createPurchaseInvoiceSchema,
   listQuerySchema,
   updatePaymentSchema,
   type CreatePayment,
 } from "@accountmanagement/contracts";
 import { PaymentsRepository } from "./payments.repository";
+import { PurchaseInvoicesRepository } from "../purchase-invoices/purchase-invoices.repository";
 import * as schema from "../../db/schema";
 import { freshDatabase } from "../../test/fresh-database";
 import type { Database } from "../../db/database";
@@ -218,6 +220,54 @@ describe("PaymentsRepository (real PostgreSQL)", () => {
       expect(updated.amount).toBe("750.25");
       expect(updated.description).toBe("Part settlement");
       expect(updated.paymentDate).toContain("2026-03-15");
+    });
+
+    // Client, 19 Oct 2026 (CHINTAN-DEMO): an edit from 1,416 to 1,000 still settled the 1,416 bill.
+    it("cuts what an edited payment settles to its new amount, the oldest bill first", async () => {
+      const [unit] = await db.insert(schema.units).values({ name: "Nos" }).returning({ id: schema.units.id });
+      const bills = new PurchaseInvoicesRepository(db);
+      const bill = (no: string, date: string, price: string) =>
+        bills.create(
+          createPurchaseInvoiceSchema.parse({
+            supplierInvoiceNo: no,
+            supplierId,
+            companyId,
+            siteId,
+            documentDate: date,
+            items: [{ itemName: "Demo", unitId: unit!.id, quantity: "1", unitPrice: price }],
+          }),
+          ACTOR,
+        );
+      const newer = await bill("2", "2026-10-19", "600.00");
+      const older = await bill("1", "2026-10-01", "1000.00");
+      await repo.createMany(
+        [
+          input({
+            amount: "1600.00",
+            allocations: [
+              { source: "invoice", documentId: newer.id, amount: "600.00" },
+              { source: "invoice", documentId: older.id, amount: "1000.00" },
+            ],
+          }),
+        ],
+        ACTOR,
+      );
+      const { id } = (await repo.list(query())).rows[0]!;
+      const named = async () =>
+        Object.fromEntries(
+          (await db.select().from(schema.paymentAllocations)).map((a) => [a.documentId, a.amount]),
+        );
+
+      await repo.update(id, updatePaymentSchema.parse({ amount: "1200" }), ACTOR);
+      expect(await named()).toEqual({ [older.id]: "1000.00", [newer.id]: "200.00" });
+
+      await repo.update(id, updatePaymentSchema.parse({ amount: "700" }), ACTOR);
+      expect(await named()).toEqual({ [older.id]: "700.00" });
+
+      // Raising it names nothing new; an edit that leaves the amount alone changes nothing.
+      await repo.update(id, updatePaymentSchema.parse({ amount: "5000" }), ACTOR);
+      await repo.update(id, updatePaymentSchema.parse({ description: "note" }), ACTOR);
+      expect(await named()).toEqual({ [older.id]: "700.00" });
     });
 
     /**
