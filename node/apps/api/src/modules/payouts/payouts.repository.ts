@@ -347,7 +347,9 @@ export class PayoutsRepository extends BaseRepository {
           .orderBy(asc(payoutListInvoices.lineNumber))
       : [];
 
-    const owed = await this.owedByParty();
+    // THE LIST'S OWN COMPANY (client, 19 Oct 2026): a DH PATEL list showed a party's
+    // DH PATEL INFRA balance added in. A list with no company keeps every company.
+    const owed = await this.owedByParty(undefined, header.company_id ?? undefined);
     return {
       ...this.toRow(header),
       confirmedByName: header.confirmed_by_name,
@@ -712,7 +714,8 @@ export class PayoutsRepository extends BaseRepository {
       throw new BadRequestException({ message, issues: [{ path: `lines.${missing}.partyId`, message }] });
     }
 
-    const owed = await this.owedByParty();
+    // What the party is owed BY THE LIST'S COMPANY, as the builder showed it.
+    const owed = await this.owedByParty(undefined, input.companyId ?? undefined);
     return input.lines.map((line, index) => ({
       partyId: line.partyId,
       // With bills, the line IS their sum: whatever the form added up is not trusted.

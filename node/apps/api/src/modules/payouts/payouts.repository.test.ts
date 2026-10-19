@@ -326,6 +326,35 @@ describe("PayoutsRepository (real PostgreSQL)", () => {
       expect(cleared.companyId).toBeNull();
     });
 
+    // Client, 19 Oct 2026 (UltraTech): a DH PATEL list showed DH PATEL INFRA's balance added in.
+    it("states a party's outstanding for the list's company only, at save and now", async () => {
+      const [infra] = await db
+        .insert(schema.companies)
+        .values({ name: "DH PATEL INFRA", invoicePrefix: "DHPI" })
+        .returning({ id: schema.companies.id });
+      await invoices.create(
+        createPurchaseInvoiceSchema.parse({
+          supplierInvoiceNo: "I1",
+          supplierId: alId,
+          companyId: infra!.id,
+          siteId,
+          documentDate: "2026-01-01T00:00:00.000Z",
+          items: [{ itemId, unitId, quantity: "1", unitPrice: "900.00" }],
+        }),
+        ACTOR,
+      );
+
+      const forDh = await repo.create(input([{ partyId: alId, amount: "10.00" }], { companyId }), ACTOR);
+      expect(forDh.lines[0]).toMatchObject({ outstandingAtSave: "2000.00", outstandingNow: "2000.00" });
+
+      const forInfra = await repo.create(input([{ partyId: alId, amount: "10.00" }], { companyId: infra!.id }), ACTOR);
+      expect(forInfra.lines[0]).toMatchObject({ outstandingAtSave: "900.00", outstandingNow: "900.00" });
+
+      // No company chosen: every company, as before.
+      const forAll = await repo.create(input([{ partyId: alId, amount: "10.00" }]), ACTOR);
+      expect(forAll.lines[0]).toMatchObject({ outstandingAtSave: "2900.00", outstandingNow: "2900.00" });
+    });
+
     it("is newest list date first, then newest typed, and pages without gaps or repeats", async () => {
       await make("2026-10-01", "old");
       await make("2026-10-05", "same day, first");
