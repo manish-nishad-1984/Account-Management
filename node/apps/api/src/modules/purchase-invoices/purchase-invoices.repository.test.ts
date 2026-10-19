@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { NotFoundException } from "@nestjs/common";
+import { ConflictException, NotFoundException } from "@nestjs/common";
 import { eq } from "drizzle-orm";
 import {
   createPurchaseInvoiceSchema,
@@ -31,9 +31,11 @@ describe("PurchaseInvoicesRepository (real PostgreSQL)", () => {
   let itemId: string;
   let unitId: number;
 
+  // A new bill number each time: one supplier's same bill may be entered only once.
+  let serial = 0;
   const input = (overrides: Record<string, unknown> = {}): CreatePurchaseInvoice =>
     createPurchaseInvoiceSchema.parse({
-      supplierInvoiceNo: "BB/154",
+      supplierInvoiceNo: `BB/T${++serial}`,
       supplierId,
       companyId,
       siteId,
@@ -203,9 +205,57 @@ describe("PurchaseInvoicesRepository (real PostgreSQL)", () => {
       expect(first.id).not.toBe(second.id);
     });
 
-    it("lets ONE supplier reuse a number, because nothing says they cannot", async () => {
-      await repo.create(input({ supplierInvoiceNo: "016" }), ACTOR);
-      await expect(repo.create(input({ supplierInvoiceNo: "016" }), ACTOR)).resolves.toBeDefined();
+    // Client, 19 Oct 2026: "entry duplicate thavi na joie".
+    describe("one bill is entered once", () => {
+      const refusal = (promise: Promise<unknown>) =>
+        promise.then(
+          () => {
+            throw new Error("it was saved");
+          },
+          (error: unknown) => error as ConflictException,
+        );
+
+      it("refuses the same supplier's bill number again in the same financial year, however it is typed", async () => {
+        const first = await repo.create(input({ supplierInvoiceNo: "BB/154", documentDate: "2026-05-10" }), ACTOR);
+        await db.update(schema.purchaseInvoices).set({ invoiceNo: "DHP/26-27/9" }).where(eqId(first.id));
+
+        const error = await refusal(repo.create(input({ supplierInvoiceNo: " bb/154 ", documentDate: "2027-03-31" }), ACTOR));
+        expect(error).toBeInstanceOf(ConflictException);
+        const body = error.getResponse() as { message: string; issues: { path: string; message: string }[] };
+        expect(body.issues[0]!.path).toBe("supplierInvoiceNo");
+        expect(body.message).toContain('Bill "BB/154" of AL BURHAN PIPES & SANITATION is already entered in 2026-27');
+        expect(body.message).toContain("our no. DHP/26-27/9, dated 10-05-2026");
+        expect(await repo.total(undefined, {})).toBe(1);
+      });
+
+      it("lets the same number in another financial year, from another supplier, or as a return", async () => {
+        await repo.create(input({ supplierInvoiceNo: "16", documentDate: "2024-05-31" }), ACTOR);
+        // UDAY SUPPLIERS' real case: numbering starts again each April.
+        await repo.create(input({ supplierInvoiceNo: "16", documentDate: "2025-06-30" }), ACTOR);
+        await repo.create(input({ supplierInvoiceNo: "16", documentDate: "2024-05-31", supplierId: otherSupplierId }), ACTOR);
+        await repo.create(input({ supplierInvoiceNo: "16", documentDate: "2024-05-31", invoiceType: "Purchase Return" }), ACTOR);
+        expect(await repo.total(undefined, {})).toBe(4);
+      });
+
+      it("refuses a second bill with the number and no date", async () => {
+        await repo.create(input({ supplierInvoiceNo: "X-1" }), ACTOR);
+        expect(await refusal(repo.create(input({ supplierInvoiceNo: "X-1" }), ACTOR))).toBeInstanceOf(ConflictException);
+      });
+
+      it("refuses an edit that would make a bill a copy of another, and lets a bill be saved as it is", async () => {
+        const first = await repo.create(input({ supplierInvoiceNo: "A-1", documentDate: "2026-05-10" }), ACTOR);
+        const second = await repo.create(input({ supplierInvoiceNo: "A-2", documentDate: "2026-05-10" }), ACTOR);
+
+        expect(await refusal(repo.update(second.id, patch({ supplierInvoiceNo: "a-1" }), ACTOR))).toBeInstanceOf(ConflictException);
+        await expect(repo.update(first.id, patch({ supplierInvoiceNo: "A-1", documentDate: "2026-05-11" }), ACTOR)).resolves.toBeDefined();
+      });
+
+      it("holds in the database too, for a write that skips the check", async () => {
+        const created = await repo.create(input({ supplierInvoiceNo: "Z-9", documentDate: "2026-05-10" }), ACTOR);
+        const [row] = await db.select().from(schema.purchaseInvoices).where(eqId(created.id));
+        const { id: _id, ...copy } = row!;
+        await expect(db.insert(schema.purchaseInvoices).values({ ...copy, supplierInvoiceNo: "z-9 " })).rejects.toThrow();
+      });
     });
 
     /**

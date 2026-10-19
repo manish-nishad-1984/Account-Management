@@ -31,9 +31,11 @@ describe("ItemPriceHistoryRepository (real PostgreSQL)", () => {
   let otherSupplierId: string;
   let companyId: string;
 
+  // A new bill number each time: one supplier's same bill may be entered only once.
+  let serial = 0;
   const invoice = (overrides: Record<string, unknown> = {}) =>
     createPurchaseInvoiceSchema.parse({
-      supplierInvoiceNo: "BB/154",
+      supplierInvoiceNo: `BB/${++serial}`,
       supplierId,
       companyId,
       siteId,

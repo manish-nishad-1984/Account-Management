@@ -165,8 +165,20 @@ describe("PurchaseInvoiceImportService (real PostgreSQL)", () => {
 
     const again = await service.preview(file);
     expect(again.errors[0]).toMatchObject({ row: 2, column: "Invoice no" });
-    expect(again.errors[0]!.message).toContain("already saved");
+    expect(again.errors[0]!.message).toContain("is already entered in");
     expect(await count()).toBe(1);
+  });
+
+  // 19 Oct 2026: the same rule as the form - per supplier and financial year, whatever the company.
+  it("refuses a bill already entered for another company in the same year, and takes it in another year", async () => {
+    await db.insert(schema.companies).values({ name: "DEMO", invoicePrefix: "DEMO" });
+    await service.import(await sheet([row({ ...BASE, "Invoice no": "E7", Quantity: "1", Rate: "1000" })]), ACTOR, true, { count: 1, total: "1000.00" });
+
+    const sameYear = await service.preview(await sheet([row({ ...BASE, "Invoice no": "e7", Company: "DEMO", Quantity: "1", Rate: "1000" })]));
+    expect(sameYear.errors.some((e) => e.message.includes('Bill "e7"') && e.message.includes("already entered"))).toBe(true);
+
+    const nextYear = await service.preview(await sheet([row({ ...BASE, "Invoice no": "E7", Date: "05-05-2099", Quantity: "1", Rate: "1000" })]));
+    expect(nextYear.errors.filter((e) => e.message.includes("already entered"))).toEqual([]);
   });
 
   it("reports every problem with its row: unknown names, bad dates, contradictions, too many decimals", async () => {

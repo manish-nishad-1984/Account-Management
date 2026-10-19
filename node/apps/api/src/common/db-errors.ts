@@ -60,6 +60,10 @@ const CONFLICT_MESSAGES: Record<string, { field: string; message: string }> = {
     field: "lines",
     message: "This party is already in the list",
   },
+  purchase_invoices_supplier_bill_fy_key: {
+    field: "supplierInvoiceNo",
+    message: "This bill of this supplier is already entered in the same financial year. The same bill cannot be entered twice",
+  },
   work_types_name_lower_key: {
     field: "name",
     message: "That work type already exists",

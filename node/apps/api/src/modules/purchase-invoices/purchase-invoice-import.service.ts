@@ -44,6 +44,22 @@ const headerOf = (key: ColumnKey): string => PURCHASE_INVOICE_IMPORT_COLUMNS.fin
 /** A figure as typed in Excel: "₹ 1,23,456.50" and "18%" read as 123456.50 and 18. */
 const figure = (text: string): string => text.replace(/[₹,%\s]/g, "");
 
+/** "2024-25" for a date from 1 April 2024 to 31 March 2025; the date is `YYYY-MM-DD…`. */
+const financialYearOf = (isoDate: string): string => {
+  const year = Number(isoDate.slice(0, 4));
+  const start = Number(isoDate.slice(5, 7)) >= 4 ? year : year - 1;
+  return `${start}-${String((start + 1) % 100).padStart(2, "0")}`;
+};
+
+/** One bill: supplier, bill number, financial year and kind, as `billNoKey` in the schema reads them. */
+const billKey = (supplierId: string, no: string, isoDate: string | null, invoiceType: string): string =>
+  [
+    supplierId,
+    norm(no),
+    isoDate ? financialYearOf(isoDate) : "no date",
+    invoiceType === "Purchase Return" || invoiceType === "Credit Note" ? "return" : "bill",
+  ].join("|");
+
 /** Whether two figures are the same amount however they were typed (`5` and `5.00`). */
 const sameFigure = (a: string, b: string): boolean => {
   const x = figure(a);
@@ -207,11 +223,24 @@ export class PurchaseInvoiceImportService extends BaseRepository {
     const supplierIds = [...new Set(supplierRows.map((s) => s.id))];
     const existing = supplierIds.length
       ? await this.db
-          .select({ supplierId: purchaseInvoices.supplierId, companyId: purchaseInvoices.companyId, no: purchaseInvoices.supplierInvoiceNo })
+          .select({
+            supplierId: purchaseInvoices.supplierId,
+            no: purchaseInvoices.supplierInvoiceNo,
+            invoiceNo: purchaseInvoices.invoiceNo,
+            documentDate: purchaseInvoices.documentDate,
+            invoiceType: purchaseInvoices.invoiceType,
+          })
           .from(purchaseInvoices)
           .where(and(inArray(purchaseInvoices.supplierId, supplierIds)))
       : [];
-    const saved = new Set(existing.map((e) => `${e.supplierId}|${e.companyId}|${norm(e.no ?? "")}`));
+    // The rule the invoice form and the database hold (`billNoKey` in the schema):
+    // one supplier, bill number, financial year and kind is one bill.
+    const savedBill = new Map(
+      existing.map((e) => [
+        billKey(e.supplierId, e.no ?? "", e.documentDate ? new Date(e.documentDate).toISOString() : null, e.invoiceType),
+        e,
+      ]),
+    );
 
     // ---- each invoice ---------------------------------------------------------
     const summaries: PurchaseInvoiceImportInvoice[] = [];
@@ -270,8 +299,14 @@ export class PurchaseInvoiceImportService extends BaseRepository {
         if (!documentDate) err(first.row, "date", `"${dateText}" is not a date. Write it as dd-mm-yyyy.`);
       }
 
-      if (supplier && company && saved.has(`${supplier.id}|${company.id}|${norm(first.invoiceNo)}`)) {
-        err(first.row, "invoiceNo", `Invoice "${first.invoiceNo}" of "${supplier.name}" for "${company.name}" is already saved. Importing it again would double it.`);
+      const already = supplier && documentDate ? savedBill.get(billKey(supplier.id, first.invoiceNo, documentDate, invoiceType)) : undefined;
+      if (supplier && already) {
+        err(
+          first.row,
+          "invoiceNo",
+          `Bill "${first.invoiceNo}" of "${supplier.name}" is already entered in ${financialYearOf(documentDate!)} ` +
+            `(our no. ${already.invoiceNo ?? "—"}). Importing it again would double it.`,
+        );
       }
 
       /**

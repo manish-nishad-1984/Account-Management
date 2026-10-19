@@ -1,5 +1,5 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { and, count, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { and, count, eq, ilike, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { invoiceTotal } from "@accountmanagement/domain";
 import type {
   CreatePurchaseInvoice,
@@ -23,6 +23,7 @@ import {
   suppliers,
   units,
 } from "../../db/schema";
+import { billIsReturn, billNoKey, billYearKey } from "../../db/schema/purchase-invoices";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
@@ -442,8 +443,9 @@ export class PurchaseInvoicesRepository extends BaseRepository {
    * Creates an invoice and its lines in ONE transaction.
    *
    * There is no number to issue — the number on a purchase invoice is the
-   * SUPPLIER's, typed in, and deliberately not checked for uniqueness. Two
-   * suppliers both numbering an invoice `016` is ordinary.
+   * SUPPLIER's, typed in. Two suppliers both numbering an invoice `016` is
+   * ordinary; ONE supplier's `016` twice in one financial year is the same bill
+   * entered twice, and is refused (`assertNotEntered`, 19 Oct 2026).
    */
   async create(input: CreatePurchaseInvoice & { isApproved?: boolean }, actorId: string): Promise<PurchaseInvoiceDetail> {
     const id = await writing(() => this.db.transaction((tx) => this.insertInvoice(tx, input, actorId)));
@@ -470,6 +472,62 @@ export class PurchaseInvoicesRepository extends BaseRepository {
     );
   }
 
+  /**
+   * REFUSES A BILL ALREADY ENTERED (client, 19 Oct 2026): the same supplier, bill
+   * number, financial year and kind — see `billNoKey` in the schema, whose unique
+   * index is the last word. This check runs first so the refusal can name the
+   * invoice that is already there, on the bill number field.
+   *
+   * Two saves of one bill at the same moment (a double click) take the same lock
+   * and run one after the other, so the second sees the first.
+   */
+  private async assertNotEntered(
+    tx: Database,
+    bill: { supplierId: string; supplierInvoiceNo: string | null | undefined; documentDate: Date | null; invoiceType: string | null | undefined },
+    exceptId: string | null,
+  ): Promise<void> {
+    const no = (bill.supplierInvoiceNo ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+    if (!no) return;
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`purchase-bill|${bill.supplierId}|${no}`}))`);
+
+    const at = bill.documentDate ? bill.documentDate.toISOString() : null;
+    const [found] = await tx
+      .select({
+        supplierInvoiceNo: purchaseInvoices.supplierInvoiceNo,
+        invoiceNo: purchaseInvoices.invoiceNo,
+        documentDate: purchaseInvoices.documentDate,
+        supplierName: suppliers.name,
+      })
+      .from(purchaseInvoices)
+      .innerJoin(suppliers, eq(purchaseInvoices.supplierId, suppliers.id))
+      .where(
+        and(
+          eq(purchaseInvoices.supplierId, bill.supplierId),
+          sql`${billNoKey(purchaseInvoices.supplierInvoiceNo)} = ${billNoKey(sql`${no}::text`)}`,
+          at === null
+            ? isNull(purchaseInvoices.documentDate)
+            : sql`${billYearKey(purchaseInvoices.documentDate)} = ${billYearKey(sql`${at}::timestamptz`)}`,
+          sql`${billIsReturn(purchaseInvoices.invoiceType)} = ${billIsReturn(sql`${bill.invoiceType ?? "Purchase"}::text`)}`,
+          exceptId ? ne(purchaseInvoices.id, exceptId) : undefined,
+        ),
+      )
+      .limit(1);
+    if (!found) return;
+
+    const date = found.documentDate ? iso(found.documentDate)!.slice(0, 10).split("-").reverse().join("-") : null;
+    const year = bill.documentDate
+      ? (() => {
+          const start = bill.documentDate.getUTCMonth() >= 3 ? bill.documentDate.getUTCFullYear() : bill.documentDate.getUTCFullYear() - 1;
+          return `${start}-${String((start + 1) % 100).padStart(2, "0")}`;
+        })()
+      : null;
+    const message =
+      `Bill "${found.supplierInvoiceNo}" of ${found.supplierName} is already entered` +
+      (year ? ` in ${year}` : "") +
+      ` (our no. ${found.invoiceNo ?? "—"}${date ? `, dated ${date}` : ""}). The same bill cannot be entered twice.`;
+    throw new ConflictException({ message, issues: [{ path: "supplierInvoiceNo", message }] });
+  }
+
   /** One invoice and its lines, inside the caller's transaction. */
   private async insertInvoice(
     tx: Parameters<Parameters<Database["transaction"]>[0]>[0],
@@ -481,6 +539,16 @@ export class PurchaseInvoicesRepository extends BaseRepository {
 
     const handle = tx as unknown as Database;
     await assertLocationAtSite(handle, header.siteLocationId, header.siteId);
+    await this.assertNotEntered(
+      handle,
+      {
+        supplierId: header.supplierId,
+        supplierInvoiceNo: header.supplierInvoiceNo,
+        documentDate: header.documentDate ? new Date(header.documentDate) : null,
+        invoiceType: header.invoiceType,
+      },
+      null,
+    );
 
     const [created] = await tx
       .insert(purchaseInvoices)
@@ -549,6 +617,41 @@ export class PurchaseInvoicesRepository extends BaseRepository {
 
         if (header.documentDate !== undefined) {
           patch.documentDate = header.documentDate ? new Date(header.documentDate) : null;
+        }
+
+        // A change to what names the bill must not make it a second copy of another.
+        if (
+          header.supplierId !== undefined ||
+          header.supplierInvoiceNo !== undefined ||
+          header.documentDate !== undefined ||
+          header.invoiceType !== undefined
+        ) {
+          const [stored] = await tx
+            .select({
+              supplierId: purchaseInvoices.supplierId,
+              supplierInvoiceNo: purchaseInvoices.supplierInvoiceNo,
+              documentDate: purchaseInvoices.documentDate,
+              invoiceType: purchaseInvoices.invoiceType,
+            })
+            .from(purchaseInvoices)
+            .where(eq(purchaseInvoices.id, id))
+            .limit(1);
+          if (!stored) throw new NotFoundException("Purchase invoice not found");
+          await this.assertNotEntered(
+            handle,
+            {
+              supplierId: header.supplierId ?? stored.supplierId,
+              supplierInvoiceNo: header.supplierInvoiceNo !== undefined ? header.supplierInvoiceNo : stored.supplierInvoiceNo,
+              documentDate:
+                header.documentDate !== undefined
+                  ? (patch.documentDate as Date | null)
+                  : stored.documentDate
+                    ? new Date(stored.documentDate)
+                    : null,
+              invoiceType: header.invoiceType ?? stored.invoiceType,
+            },
+            id,
+          );
         }
 
         const chargesChanged = tds !== undefined || roundOff !== undefined;

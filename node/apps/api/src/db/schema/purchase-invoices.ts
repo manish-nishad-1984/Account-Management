@@ -1,3 +1,4 @@
+import { sql, type SQL } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -6,13 +7,38 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { companies, sites } from "./users";
 import { items, suppliers, units } from "./masters";
 import { siteGroups } from "./site-groups";
 import { siteLocations } from "./site-locations";
 import { purchaseOrders } from "./purchase-orders";
+
+/**
+ * THE SAME BILL MAY NOT BE ENTERED TWICE (client, 19 Oct 2026): one supplier, one
+ * bill number, one financial year, one kind (a bill, or a return / credit note).
+ *
+ * The financial year is in the key because suppliers start numbering again each
+ * April: UDAY SUPPLIERS' bill "16" exists in 2024-25 and again in 2025-26, both
+ * real. Within a year the number is the supplier's own and does not repeat.
+ *
+ * The number is compared without case and with runs of spaces as one, so "bb/154"
+ * and "BB/154 " are the same bill. A bill with no date is not covered by the index
+ * (its year is unknown); the repository's own check covers it.
+ *
+ * Each expression is IMMUTABLE, as an index requires: the year is read in UTC,
+ * which is how a date is stored (midnight UTC of the day picked), and moved back
+ * three months so April to March share a year.
+ */
+export const billNoKey = (no: AnyPgColumn | SQL): SQL =>
+  sql`lower(regexp_replace(btrim(${no}), '[[:space:]]+', ' ', 'g'))`;
+export const billYearKey = (date: AnyPgColumn | SQL): SQL =>
+  sql`(extract(year from ((${date} at time zone 'UTC') - interval '3 months')))`;
+export const billIsReturn = (type: AnyPgColumn | SQL): SQL =>
+  sql`(${type} in ('Purchase Return', 'Credit Note'))`;
 
 /**
  * Purchase invoices — `SupplierInvoice` and `SupplierInvoiceDetail`.
@@ -65,9 +91,10 @@ export const purchaseInvoices = pgTable(
     /**
      * THE SUPPLIER'S OWN NUMBER — `BB/154`, `016`, `BE-2026-27-4756`.
      *
-     * Free text in whatever format the supplier uses, so NO UNIQUENESS IS
-     * ASSUMED, not across suppliers and not within one. There is deliberately no
-     * unique index here; `10-purchase-invoice.md` point 1 says the same.
+     * Free text in whatever format the supplier uses, so it is not unique across
+     * suppliers, nor across one supplier's years (numbering restarts each April).
+     * Unique per supplier, financial year and kind since 19 Oct 2026 — see
+     * `purchase_invoices_supplier_bill_fy_key` and `billNoKey` above.
      */
     supplierInvoiceNo: text("supplier_invoice_no"),
 
@@ -212,6 +239,15 @@ export const purchaseInvoices = pgTable(
     index("purchase_invoices_is_approved_idx").on(table.isApproved),
     index("purchase_invoices_document_date_idx").on(table.documentDate),
     index("purchase_invoices_created_at_idx").on(table.createdAt),
+    // ONE BILL IS ENTERED ONCE (client, 19 Oct 2026). See `billNoKey` below.
+    uniqueIndex("purchase_invoices_supplier_bill_fy_key")
+      .on(
+        table.supplierId,
+        billNoKey(table.supplierInvoiceNo),
+        billYearKey(table.documentDate),
+        billIsReturn(table.invoiceType),
+      )
+      .where(sql`btrim(${table.supplierInvoiceNo}) <> ''`),
   ],
 );
 

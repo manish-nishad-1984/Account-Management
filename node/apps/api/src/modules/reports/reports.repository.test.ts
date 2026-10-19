@@ -39,10 +39,11 @@ describe("ReportsRepository (real PostgreSQL)", () => {
   let itemId: string;
   let unitId: number;
 
-  /** An invoice whose TOTAL is exactly `amount`: no GST, no TDS, no rounding. */
+  /** An invoice whose TOTAL is exactly `amount`: no GST, no TDS, no rounding. A new bill number each time. */
+  let serial = 0;
   const invoiceFor = (amount: string, overrides: Record<string, unknown> = {}) =>
     createPurchaseInvoiceSchema.parse({
-      supplierInvoiceNo: "INV-1",
+      supplierInvoiceNo: `INV-${++serial}`,
       supplierId,
       companyId,
       siteId,
@@ -321,10 +322,9 @@ describe("ReportsRepository (real PostgreSQL)", () => {
     });
 
     /**
-     * The same guard keys ordinary invoices by their NUMBER alone, and
-     * `purchase_invoices` deliberately has no uniqueness on it — the schema note
-     * says two suppliers numbering an invoice `016` is ordinary, and so is one
-     * supplier reusing a number.
+     * The same guard keys ordinary invoices by their NUMBER alone. One supplier's
+     * number repeats in the next financial year (numbering restarts each April;
+     * within a year it is refused since 19 Oct 2026), and both bills are real.
      */
     it("counts two invoices that share a number, which the legacy guard skips", async () => {
       await invoices.create(
@@ -332,7 +332,7 @@ describe("ReportsRepository (real PostgreSQL)", () => {
         ACTOR,
       );
       await invoices.create(
-        invoiceFor("250.00", { supplierInvoiceNo: "016", documentDate: "2026-02-01T00:00:00.000Z" }),
+        invoiceFor("250.00", { supplierInvoiceNo: "016", documentDate: "2026-05-01T00:00:00.000Z" }),
         ACTOR,
       );
 
