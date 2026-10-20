@@ -178,7 +178,13 @@ export function parseRows(sheet: SheetData, index: Map<ItemSheetKey, number>): P
     const gstPercentRaw = stripDecoration(at(row.cells, "gstPercent"));
     const gstPercent = check("gstPercent", optionalPercent("GST percentage"), gstPercentRaw);
 
-    const gstAmountRaw = stripDecoration(at(row.cells, "gstAmount"));
+    // ROUNDED TO PAISE (client, 20 Oct 2026). A GST amount worked out by an Excel
+    // formula arrives as 71.10000000000001, or 68.585 - every row refused. It is a
+    // derived figure, so it is taken to the paise, half up, as the item form does.
+    const gstAmountTyped = stripDecoration(at(row.cells, "gstAmount"));
+    const gstAmountRaw = /^\d+\.\d{3,}$/.test(gstAmountTyped)
+      ? money.format(money.decimal(gstAmountTyped))
+      : gstAmountTyped;
     const gstAmountGiven = check("gstAmount", optionalMoney("GST amount"), gstAmountRaw);
 
     const hsn = check("hsnCode", hsnCodeSchema, at(row.cells, "hsnCode"));

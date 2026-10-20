@@ -132,6 +132,23 @@ describe("parseRows", () => {
     expect(rows[0]!.gstAmountDerived).toBe(false);
   });
 
+  // Client, 20 Oct 2026: a GST amount from an Excel formula refused every row.
+  it("takes a GST amount with more than two decimals to the paise, half up", () => {
+    const { rows, errors } = parse([
+      ["Float", "Nos", "395.00", "18", "71.10000000000001", ""],
+      ["Below", "Nos", "27.00", "18", "4.859999999999999", ""],
+      ["Tie", "Nos", "381.03", "18", "68.5854", ""],
+      ["Half", "Nos", "100.00", "18", "1.005", ""],
+    ]);
+    expect(errors).toEqual([]);
+    expect(rows.map((row) => row.gstAmount)).toEqual(["71.10", "4.86", "68.59", "1.01"]);
+  });
+
+  it("still refuses a price with more than two decimals", () => {
+    const { errors } = parse([["Item", "Nos", "395.123", "18", "", ""]]);
+    expect(errors[0]).toMatchObject({ column: "Price Per Unit" });
+  });
+
   it("reports every bad row, not just the first", () => {
     const { errors } = parse([
       ["", "Bag", "395.00", "", "", ""],
