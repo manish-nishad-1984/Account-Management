@@ -499,6 +499,7 @@ export function Spinner({ label = "Loading", className }: { label?: string; clas
 // The dialog and form controls live in their own files - this module is already
 // long - but are re-exported here so screens import from one place.
 export { Modal } from "./Modal";
+export { SelectSearchLayer } from "./SelectSearchLayer";
 export { FormDialog } from "./FormDialog";
 export { ConfirmDialog } from "./ConfirmDialog";
 export { SummaryStrip, type SummaryItem } from "./SummaryStrip";

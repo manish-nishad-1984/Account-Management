@@ -40,7 +40,7 @@ const APPROVAL_OPTIONS = [
 ];
 
 /** What the sheet holds, column for column — the screen's own columns, as text. */
-const EXPORT_COLUMNS: ExportColumn<PurchaseRequestRow>[] = [
+export const EXPORT_COLUMNS: ExportColumn<PurchaseRequestRow>[] = [
   { header: "Request", width: 18, value: (row) => row.prNo },
   { header: "Date", width: 12, value: (row) => exportDate(row.documentDate) },
   { header: "Item", width: 32, value: (row) => row.itemLabel },

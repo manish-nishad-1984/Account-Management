@@ -34,7 +34,7 @@ const STATUS_OPTIONS = [
 const Absent = () => <span className="text-slate-300">—</span>;
 
 /** What the sheet holds, column for column — the screen's own columns, as text. */
-const EXPORT_COLUMNS: ExportColumn<AgencyRow>[] = [
+export const EXPORT_COLUMNS: ExportColumn<AgencyRow>[] = [
   { header: "Agency name", width: 34, value: (row) => row.name },
   { header: "Work nature / services", width: 40, value: (row) => row.workTypes.map((type) => type.name).join(", ") },
   { header: "City", width: 20, value: (row) => row.cityName },

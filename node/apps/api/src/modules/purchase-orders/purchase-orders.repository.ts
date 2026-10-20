@@ -33,6 +33,7 @@ import { sanitiseTerms } from "../../common/sanitise-terms";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
+import { dateRangeWhere, type DateRangeFilter } from "../../common/date-range";
 import { nextDocumentNumber, purchaseOrderNumber } from "../../common/document-number";
 
 const SORTABLE = {
@@ -151,7 +152,8 @@ export class PurchaseOrdersRepository extends BaseRepository {
       supplierId,
       isApproved,
       isActive,
-    }: { siteId?: string; supplierId?: string; isApproved?: boolean; isActive?: boolean },
+      ...range
+    }: { siteId?: string; supplierId?: string; isApproved?: boolean; isActive?: boolean } & DateRangeFilter,
   ) {
     const where = [eq(purchaseOrders.isDeleted, false)];
 
@@ -167,6 +169,7 @@ export class PurchaseOrdersRepository extends BaseRepository {
     if (isActive !== undefined) {
       where.push(eq(purchaseOrders.isActive, isActive));
     }
+    where.push(...dateRangeWhere({ document: purchaseOrders.documentDate, entry: purchaseOrders.createdAt }, range));
 
     const match = this.searchFilter(search);
     if (match) {
@@ -177,7 +180,7 @@ export class PurchaseOrdersRepository extends BaseRepository {
 
   async list(
     query: ListQuery,
-    filters: { siteId?: string; supplierId?: string; isApproved?: boolean; isActive?: boolean } = {},
+    filters: { siteId?: string; supplierId?: string; isApproved?: boolean; isActive?: boolean } & DateRangeFilter = {},
   ): Promise<{ rows: PurchaseOrderListRow[]; nextCursor: string | null }> {
     const sortKey: PurchaseOrderSortKey =
       query.sortBy && query.sortBy in SORTABLE ? (query.sortBy as PurchaseOrderSortKey) : "poNo";
@@ -246,7 +249,7 @@ export class PurchaseOrdersRepository extends BaseRepository {
 
   async total(
     search?: string,
-    filters: { siteId?: string; supplierId?: string; isApproved?: boolean; isActive?: boolean } = {},
+    filters: { siteId?: string; supplierId?: string; isApproved?: boolean; isActive?: boolean } & DateRangeFilter = {},
   ): Promise<number> {
     const [row] = await this.db
       .select({ value: count() })

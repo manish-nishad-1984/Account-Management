@@ -40,6 +40,7 @@ import { ReportsRepository } from "../reports/reports.repository";
 import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { dateRangeFilterSchema, dateRangeOf } from "../../common/date-range";
 import { actorId } from "../../common/actor";
 import { approvalOnUpdate, approvedOnCreate } from "../../common/approval";
 import { readUploads } from "../../common/storage/multipart";
@@ -100,7 +101,7 @@ const filterSchema = z.object({
 /** A return or a credit note reduces what is owed; it is not a bill with a paid state. */
 const NOT_A_BILL = new Set(["Purchase Return", "Credit Note"]);
 
-const listRequestSchema = listQuerySchema.and(filterSchema);
+const listRequestSchema = listQuerySchema.and(filterSchema).and(dateRangeFilterSchema);
 
 @Controller("purchase-invoices")
 export class PurchaseInvoicesController {
@@ -130,6 +131,7 @@ export class PurchaseInvoicesController {
       supplierId: query.supplierId,
       invoiceType: query.invoiceType,
       isApproved: query.isApproved,
+      ...dateRangeOf(query),
     };
 
     const [page, total] = await Promise.all([

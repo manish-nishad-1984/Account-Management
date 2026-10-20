@@ -16,6 +16,7 @@ import {
   ClipboardList,
   Database,
   FileInput,
+  FileSpreadsheet,
   FileText,
   HandCoins,
   Banknote,
@@ -49,7 +50,19 @@ export interface NavItem {
   icon: LucideIcon;
   /** The .NET route this replaces, so the mapping stays traceable. */
   legacy?: string;
+  /** Shown when the user may view ANY of these, rather than one `permission`. */
+  anyOf?: readonly string[];
 }
+
+/**
+ * The screens whose lists the Excel export centre can put in a file. Its menu
+ * row shows for whoever may see at least one of them.
+ */
+export const EXPORTABLE_RIGHTS = [
+  "item", "supplier", "site", "group", "company", "client", "agency",
+  "purchase-request", "purchase-orders", "inward-challan", "inventory-inward",
+  "purchase-invoice", "sales-invoice", "income", "reports-payments", "payout",
+] as const;
 
 export interface NavSection {
   title: string;
@@ -145,6 +158,18 @@ export const NAV: NavSection[] = [
       // New (9 Oct 2026): per project, income against what has been billed and paid.
       { label: "Balance Sheet", to: "/reports/balance-sheet", icon: Scale, permission: "income", status: "ready" },
       { label: "Pending Outstanding", to: "/reports/pending-ledger", icon: Hourglass, permission: "reports-payments", status: "ready" },
+    ],
+  },
+  {
+    /*
+     * Every module's Excel in one file (client, 20 Oct 2026). No right of its
+     * own: it shows for whoever can see any screen it exports, offers only those
+     * sheets, and each list route checks that right again.
+     */
+    title: "Excel Export",
+    icon: FileSpreadsheet,
+    items: [
+      { label: "Excel Export", to: "/exports", icon: FileSpreadsheet, permission: "", anyOf: EXPORTABLE_RIGHTS, status: "ready" },
     ],
   },
   {

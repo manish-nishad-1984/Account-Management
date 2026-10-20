@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { money, optionalText, uuidId } from "./fields";
 import { rowCapabilitiesSchema } from "./pagination";
+import { dateRangeFilterSchema } from "./date-range";
 
 /**
  * Income (client request, 9 Oct 2026): money a project's client has paid us.
@@ -85,5 +86,5 @@ export const clientIncomeFilterSchema = z.object({
   siteId: z.string().uuid().optional(),
   companyId: z.string().uuid().optional(),
   clientId: z.string().uuid().optional(),
-});
+}).merge(dateRangeFilterSchema);
 export type ClientIncomeFilter = z.infer<typeof clientIncomeFilterSchema>;

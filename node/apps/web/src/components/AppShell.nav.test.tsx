@@ -60,7 +60,7 @@ describe("the sidebar", () => {
       "/suppliers",
     );
 
-    expect(railNames()).toEqual(["Dashboard", "Masters", "Invoicing", "Reports"]);
+    expect(railNames()).toEqual(["Dashboard", "Masters", "Invoicing", "Reports", "Excel Export"]);
     expect(rail().queryAllByRole("button")).toHaveLength(0);
   });
 
@@ -170,7 +170,7 @@ describe("the sidebar", () => {
     cleanup();
 
     renderShell(["purchase-invoice.view", "payout.view", "reports-payments.view"], "/payouts");
-    expect(railNames()).toEqual(["Invoicing", "Payout List", "Reports"]);
+    expect(railNames()).toEqual(["Invoicing", "Payout List", "Reports", "Excel Export"]);
     expect(rail().getByRole("link", { name: "Payout List" })).toHaveAttribute("href", "/payouts");
     expect(rail().getByRole("link", { name: "Payout List" })).toHaveAttribute("aria-current", "page");
   });
@@ -178,7 +178,7 @@ describe("the sidebar", () => {
   /** An empty section row with nothing behind it is worse than no row. */
   it("drops a section row when every screen in it is hidden", () => {
     renderShell(["supplier.view"], "/suppliers");
-    expect(railNames()).toEqual(["Masters"]);
+    expect(railNames()).toEqual(["Masters", "Excel Export"]);
   });
 
   it("draws the Dashboard as its own row, named after the screen", () => {
@@ -222,7 +222,7 @@ describe("the sidebar", () => {
   it("names every section in the rail, so nothing has to be hovered or opened to be read", () => {
     renderShell(["supplier.view", "purchase-invoice.view"], "/suppliers");
 
-    expect(railNames()).toEqual(["Masters", "Invoicing"]);
+    expect(railNames()).toEqual(["Masters", "Invoicing", "Excel Export"]);
   });
 
   it("shows nothing at all to a user with no permissions", () => {

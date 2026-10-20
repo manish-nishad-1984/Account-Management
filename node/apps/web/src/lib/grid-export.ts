@@ -5,6 +5,7 @@ import {
   formatExportDate,
   listResponseSchema,
   type GridExportRequest,
+  type GridWorkbookSheet,
 } from "@accountmanagement/contracts";
 import { apiRequest, postForBlob } from "./api-client";
 import { saveBlob } from "./download";
@@ -137,4 +138,27 @@ export async function downloadGridExcel<T>({
     buildExportRequest(rows, columns, sheetName, `${fileName}-${stamp}`),
   );
   saveBlob(blob, `${fileName}-${stamp}.xlsx`);
+}
+
+/**
+ * The server takes a request body of up to 8 MB. A workbook is the one export
+ * that can approach it, so it is measured here and refused with a sentence a
+ * person can act on, rather than failing at the server with a status code.
+ */
+export const WORKBOOK_MAX_BYTES = 7.5 * 1024 * 1024;
+
+/** One sheet of a workbook, from rows and the columns that say how each reads. */
+export function workbookSheet<T>(rows: T[], columns: ExportColumn<T>[], sheetName: string): GridWorkbookSheet {
+  const { fileName: _unused, ...sheet } = buildExportRequest(rows, columns, sheetName, "unused");
+  return sheet;
+}
+
+/** Several sheets in one `.xlsx` — the Excel export centre (client, 20 Oct 2026). */
+export async function downloadWorkbook(sheets: GridWorkbookSheet[], fileName: string): Promise<void> {
+  const body = { fileName, sheets };
+  if (new TextEncoder().encode(JSON.stringify(body)).length > WORKBOOK_MAX_BYTES) {
+    throw new Error("That is too much for one Excel file. Choose a shorter date range or fewer sheets, and export again.");
+  }
+  const blob = await postForBlob("/grid-exports/workbook", body);
+  saveBlob(blob, `${fileName}.xlsx`);
 }

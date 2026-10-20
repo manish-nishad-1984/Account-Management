@@ -30,6 +30,7 @@ import { ReportsRepository } from "../reports/reports.repository";
 import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { dateRangeFilterSchema, dateRangeOf } from "../../common/date-range";
 import { actorId } from "../../common/actor";
 import type { AccessTokenClaims } from "../auth/token.service";
 
@@ -64,7 +65,7 @@ const filterSchema = z.object({
   siteId: z.string().uuid().optional(),
 });
 
-const listRequestSchema = listQuerySchema.and(filterSchema);
+const listRequestSchema = listQuerySchema.and(filterSchema).and(dateRangeFilterSchema);
 
 @Controller("payments")
 export class PaymentsController {
@@ -92,6 +93,7 @@ export class PaymentsController {
       partyId: query.partyId,
       companyId: query.companyId,
       siteId: query.siteId,
+      ...dateRangeOf(query),
     };
 
     const [page, total] = await Promise.all([

@@ -11,6 +11,7 @@ import type {
   UpdateSalesInvoice,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
+import { dateRangeWhere, type DateRangeFilter } from "../../common/date-range";
 import {
   companies,
   items,
@@ -131,16 +132,17 @@ export class SalesInvoicesRepository extends BaseRepository {
       customerId,
       isApproved,
       invoiceType,
+      ...range
     }: {
       siteId?: string;
       companyId?: string;
       customerId?: string;
       isApproved?: boolean;
       invoiceType?: string;
-    },
+    } & DateRangeFilter,
   ) {
     // No `is_deleted` term — `SalesInvoice` has no soft-delete column.
-    const where = [];
+    const where = [...dateRangeWhere({ document: salesInvoices.documentDate, entry: salesInvoices.createdAt }, range)];
 
     if (siteId) {
       where.push(eq(salesInvoices.siteId, siteId));
@@ -173,7 +175,7 @@ export class SalesInvoicesRepository extends BaseRepository {
       customerId?: string;
       isApproved?: boolean;
       invoiceType?: string;
-    } = {},
+    } & DateRangeFilter = {},
   ): Promise<{ rows: SalesInvoiceListRow[]; nextCursor: string | null }> {
     const sortKey: SalesInvoiceSortKey =
       query.sortBy && query.sortBy in SORTABLE
@@ -254,7 +256,7 @@ export class SalesInvoicesRepository extends BaseRepository {
       customerId?: string;
       isApproved?: boolean;
       invoiceType?: string;
-    } = {},
+    } & DateRangeFilter = {},
   ): Promise<number> {
     const where = this.baseFilters(search, filters);
     const [row] = await this.db

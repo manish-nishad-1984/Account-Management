@@ -30,6 +30,7 @@ import { PayoutsRepository } from "./payouts.repository";
 import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { dateRangeFilterSchema, dateRangeOf, type DateRangeFilter } from "../../common/date-range";
 import { actorId } from "../../common/actor";
 import type { AccessTokenClaims } from "../auth/token.service";
 
@@ -41,7 +42,7 @@ const SUBJECT = "payout";
 
 /** The site in the header's filter, or nothing for every site. */
 /** The list screen's one extra filter: the company the list was built for. */
-const listFilterSchema = listQuerySchema.extend({ companyId: z.string().uuid().optional() });
+const listFilterSchema = listQuerySchema.extend({ companyId: z.string().uuid().optional() }).merge(dateRangeFilterSchema);
 
 const outstandingQuerySchema = z.object({ siteId: z.string().uuid().optional(), companyId: z.string().uuid().optional() });
 
@@ -52,7 +53,7 @@ export class PayoutsController {
   @Get()
   @Permissions("payout.view")
   async list(
-    @Query(new ZodValidationPipe(listFilterSchema)) query: ListQuery & { companyId?: string },
+    @Query(new ZodValidationPipe(listFilterSchema)) query: ListQuery & { companyId?: string } & DateRangeFilter,
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<ListResponse<PayoutListRow>> {
     const granted = caller?.permissions ?? [];
@@ -63,8 +64,8 @@ export class PayoutsController {
       canApprove: hasPermission(granted, SUBJECT, "approve"),
     };
     const [page, total] = await Promise.all([
-      this.payouts.list(query, query.companyId),
-      this.payouts.total(query.search, query.companyId),
+      this.payouts.list(query, query.companyId, dateRangeOf(query)),
+      this.payouts.total(query.search, query.companyId, dateRangeOf(query)),
     ]);
     return { rows: page.rows.map((row) => ({ ...row, capabilities })), nextCursor: page.nextCursor, total };
   }

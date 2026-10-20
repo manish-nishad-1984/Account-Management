@@ -8,6 +8,7 @@ import type {
   SortDirection,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
+import { dateRangeWhere, type DateRangeFilter } from "../../common/date-range";
 import { clientIncomeAdjustments, clientIncomes, clients, companies, sites } from "../../db/schema";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
@@ -66,6 +67,7 @@ export class ClientIncomesRepository extends BaseRepository {
     if (filter.siteId) where.push(eq(clientIncomes.siteId, filter.siteId));
     if (filter.companyId) where.push(eq(clientIncomes.companyId, filter.companyId));
     if (filter.clientId) where.push(eq(clientIncomes.clientId, filter.clientId));
+    where.push(...dateRangeWhere({ document: clientIncomes.incomeDate, documentIsDate: true, entry: clientIncomes.createdAt }, filter));
     if (search) {
       const pattern = `%${search}%`;
       where.push(

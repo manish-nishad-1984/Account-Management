@@ -16,7 +16,7 @@ import { ClientIncomeFormDialog } from "./ClientIncomeFormDialog";
 const Absent = () => <span className="text-slate-300">—</span>;
 
 /** What the sheet holds, column for column — the screen's own columns, as text. */
-const EXPORT_COLUMNS: ExportColumn<ClientIncomeRow>[] = [
+export const EXPORT_COLUMNS: ExportColumn<ClientIncomeRow>[] = [
   { header: "Date", width: 12, value: (row) => exportDate(row.incomeDate) },
   { header: "Client", width: 30, value: (row) => row.clientName },
   { header: "Project", width: 26, value: (row) => row.siteName },

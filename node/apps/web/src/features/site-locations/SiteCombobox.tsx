@@ -132,7 +132,7 @@ export function SiteCombobox({
                 onMouseEnter={() => setActive(index)}
                 className={clsx(
                   "cursor-pointer px-3 py-2",
-                  index === active ? "bg-brand-50 text-brand-900" : "text-slate-700",
+                  index === active ? "bg-brand-600 text-white" : "text-slate-700",
                   site.id === value && "font-medium",
                 )}
               >

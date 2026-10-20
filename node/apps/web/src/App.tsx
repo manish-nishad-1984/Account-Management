@@ -3,6 +3,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { PlaceholderPage } from "./components/PlaceholderPage";
+import { SelectSearchLayer } from "./components/ui/SelectSearchLayer";
 import { RequireAuth } from "./components/RequireAuth";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { SiteScopeProvider } from "./contexts/SiteScopeContext";
@@ -32,6 +33,7 @@ import { PermissionsPage } from "./features/users/PermissionsPage";
 import { PaymentsPage } from "./features/payments/PaymentsPage";
 import { LedgerPage } from "./features/reports/LedgerPage";
 import { PendingLedgerPage } from "./features/reports/PendingLedgerPage";
+import { ExportCentrePage } from "./features/exports/ExportCentrePage";
 import { DocumentLayoutsPage } from "./features/document-templates/DocumentLayoutsPage";
 import { PrintDocumentPage } from "./features/document-templates/PrintDocumentPage";
 import { createQueryClient } from "./lib/query-client";
@@ -71,6 +73,7 @@ const IMPLEMENTED: Record<string, React.ComponentType> = {
   "/reports/balance-sheet": BalanceSheetPage,
   "/reports/ledger": LedgerPage,
   "/reports/pending-ledger": PendingLedgerPage,
+  "/exports": ExportCentrePage,
   "/settings/document-layouts": DocumentLayoutsPage,
 };
 
@@ -121,6 +124,8 @@ function ScopedShell({ children }: { children: React.ReactNode }) {
 export function App() {
   return (
     <LucideProvider strokeWidth={1.5}>
+    {/* A search box in every dropdown of the application; see the component. */}
+    <SelectSearchLayer />
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider onSessionEnd={() => queryClient.clear()}>

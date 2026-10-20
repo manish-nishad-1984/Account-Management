@@ -12,6 +12,7 @@ import { items, purchaseRequests, sites, units } from "../../db/schema";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
+import { dateRangeWhere, type DateRangeFilter } from "../../common/date-range";
 import { nextDocumentNumber, purchaseRequestNumber } from "../../common/document-number";
 
 const SORTABLE = {
@@ -113,7 +114,7 @@ export class PurchaseRequestsRepository extends BaseRepository {
 
   async list(
     query: ListQuery,
-    filters: { siteId?: string; isApproved?: boolean } = {},
+    filters: { siteId?: string; isApproved?: boolean } & DateRangeFilter = {},
   ): Promise<{ rows: PurchaseRequestListRow[]; nextCursor: string | null }> {
     const sortKey: PurchaseRequestSortKey =
       query.sortBy && query.sortBy in SORTABLE
@@ -181,9 +182,10 @@ export class PurchaseRequestsRepository extends BaseRepository {
    */
   private baseFilters(
     search: string | undefined,
-    { siteId, isApproved }: { siteId?: string; isApproved?: boolean },
+    { siteId, isApproved, ...range }: { siteId?: string; isApproved?: boolean } & DateRangeFilter,
   ) {
     const where = [eq(purchaseRequests.isDeleted, false)];
+    where.push(...dateRangeWhere({ document: purchaseRequests.documentDate, entry: purchaseRequests.createdAt }, range));
 
     if (siteId) {
       where.push(eq(purchaseRequests.siteId, siteId));
@@ -201,7 +203,7 @@ export class PurchaseRequestsRepository extends BaseRepository {
 
   async total(
     search?: string,
-    filters: { siteId?: string; isApproved?: boolean } = {},
+    filters: { siteId?: string; isApproved?: boolean } & DateRangeFilter = {},
   ): Promise<number> {
     const [row] = await this.db
       .select({ value: count() })

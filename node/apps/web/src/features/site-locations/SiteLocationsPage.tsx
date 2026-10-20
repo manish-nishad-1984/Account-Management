@@ -16,7 +16,7 @@ import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
 
 /** What the sheet holds, column for column — the screen's own columns, as text. */
-const EXPORT_COLUMNS: ExportColumn<SiteLocationRow>[] = [
+export const EXPORT_COLUMNS: ExportColumn<SiteLocationRow>[] = [
   { header: "Site", width: 30, value: (row) => row.siteName },
   { header: "Locations", width: 10, align: "right", value: (row) => row.locationCount },
   { header: "With address", width: 14, align: "right", value: (row) => row.addressCount },

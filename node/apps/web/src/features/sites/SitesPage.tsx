@@ -13,7 +13,7 @@ import { useMasterScreen } from "../../lib/use-master-screen";
 const Absent = () => <span className="text-slate-300">—</span>;
 
 /** What the sheet holds, column for column — the screen's own columns, as text. */
-const EXPORT_COLUMNS: ExportColumn<SiteRow>[] = [
+export const EXPORT_COLUMNS: ExportColumn<SiteRow>[] = [
   { header: "Site", width: 30, value: (row) => row.name },
   { header: "Contact person", width: 26, value: (row) => row.contactPersonName },
   { header: "Contact phone", width: 26, value: (row) => row.contactPersonPhoneNo },

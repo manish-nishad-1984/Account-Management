@@ -29,7 +29,7 @@ const SORTABLE = ["listDate"] as const;
 const Absent = () => <span className="text-slate-300">—</span>;
 
 /** What the sheet holds, column for column — the screen's own columns, as text. */
-const EXPORT_COLUMNS: ExportColumn<PayoutListRow>[] = [
+export const EXPORT_COLUMNS: ExportColumn<PayoutListRow>[] = [
   { header: "Date", width: 12, value: (row) => exportDate(row.listDate) },
   { header: "Title", width: 30, value: (row) => row.title },
   { header: "Company", width: 28, value: (row) => row.companyName },

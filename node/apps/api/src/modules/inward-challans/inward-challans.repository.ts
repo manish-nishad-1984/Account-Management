@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { and, count, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
+import { and, count, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { receiverLabel } from "@accountmanagement/contracts";
 import type {
   ChallanReceiver,
@@ -11,6 +11,7 @@ import type {
   UpdateInwardChallan,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
+import { dateRangeWhere, type DateRangeFilter } from "../../common/date-range";
 import {
   inwardChallanDocuments,
   inwardChallans,
@@ -144,8 +145,7 @@ export class InwardChallansRepository extends BaseRepository {
 
     // `GetItemInWordList` accepts startDate and enddate and the screen never
     // sends them, so the capability exists in the source and is unreachable.
-    if (filters.fromDate) where.push(gte(inwardChallans.documentDate, new Date(filters.fromDate)));
-    if (filters.toDate) where.push(lte(inwardChallans.documentDate, new Date(filters.toDate)));
+    where.push(...dateRangeWhere({ document: inwardChallans.documentDate, entry: inwardChallans.createdAt }, filters as DateRangeFilter));
 
     const match = this.searchFilter(search);
     if (match) where.push(match);

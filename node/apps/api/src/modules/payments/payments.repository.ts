@@ -9,6 +9,7 @@ import type {
   UpdatePayment,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
+import { dateRangeWhere, type DateRangeFilter } from "../../common/date-range";
 import { companies, paymentAllocations, payments, siteLocations, sites, suppliers } from "../../db/schema";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
@@ -45,7 +46,7 @@ export type PaymentSortKey = keyof typeof SORTABLE;
 /** A payment to record; `allocations` (the bills it names) may be left off. */
 export type NewPayment = Omit<CreatePayment, "allocations"> & Partial<Pick<CreatePayment, "allocations">>;
 
-export interface PaymentFilters {
+export interface PaymentFilters extends DateRangeFilter {
   direction?: PaymentDirection;
   partyId?: string;
   companyId?: string;
@@ -124,6 +125,7 @@ export class PaymentsRepository extends BaseRepository {
     if (options.siteId) {
       filters.push(eq(payments.siteId, options.siteId));
     }
+    filters.push(...dateRangeWhere({ document: payments.paymentDate, entry: payments.createdAt }, options));
     return filters;
   }
 

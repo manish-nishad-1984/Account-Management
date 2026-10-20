@@ -74,6 +74,25 @@ export function toLineRows(invoices: PurchaseInvoiceRow[], lines: PurchaseInvoic
   });
 }
 
+/** Every invoice the filters match, each followed by its lines — the sheet "with items". */
+export async function fetchInvoiceLineRows(
+  params: Partial<Pick<ListParams, "sortBy" | "sortDir" | "search">>,
+  filters: ListFilters,
+): Promise<InvoiceLineRow[]> {
+  const invoices = await fetchAllRows<PurchaseInvoiceRow>("purchase-invoices", params, filters);
+  const lines: PurchaseInvoiceExportLine[] = [];
+  for (let at = 0; at < invoices.length; at += PURCHASE_INVOICE_LINES_MAX_IDS) {
+    const ids = invoices.slice(at, at + PURCHASE_INVOICE_LINES_MAX_IDS).map((invoice) => invoice.id);
+    const page = await apiRequest("/purchase-invoices/lines", {
+      method: "POST",
+      body: { ids },
+      schema: purchaseInvoiceLinesResponseSchema,
+    });
+    lines.push(...page.lines);
+  }
+  return toLineRows(invoices, lines);
+}
+
 /**
  * "Export to Excel" on the purchase invoice list, two ways (client, 19 Oct 2026):
  * the invoices alone, one row each, as before; or WITH ITEMS, one row per line.
@@ -119,21 +138,10 @@ export function InvoiceExportButton({
         });
         return;
       }
-      const invoices = await fetchAllRows<PurchaseInvoiceRow>("purchase-invoices", params, filters);
-      const lines: PurchaseInvoiceExportLine[] = [];
-      for (let at = 0; at < invoices.length; at += PURCHASE_INVOICE_LINES_MAX_IDS) {
-        const ids = invoices.slice(at, at + PURCHASE_INVOICE_LINES_MAX_IDS).map((invoice) => invoice.id);
-        const page = await apiRequest("/purchase-invoices/lines", {
-          method: "POST",
-          body: { ids },
-          schema: purchaseInvoiceLinesResponseSchema,
-        });
-        lines.push(...page.lines);
-      }
       await downloadGridExcel<InvoiceLineRow>({
         resource: "purchase-invoices",
         columns: WITH_ITEMS_COLUMNS,
-        rows: toLineRows(invoices, lines),
+        rows: await fetchInvoiceLineRows(params, filters),
         sheetName: "Purchase Invoice Items",
         fileName: "Purchase-Invoices-with-Items",
       });
@@ -145,7 +153,7 @@ export function InvoiceExportButton({
   };
 
   const choice =
-    "block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-brand-50 hover:text-brand-700";
+    "group block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-brand-600 hover:text-white focus-visible:bg-brand-600 focus-visible:text-white focus-visible:outline-none";
 
   return (
     <span ref={box} className="relative inline-flex items-center gap-2">
@@ -165,11 +173,11 @@ export function InvoiceExportButton({
         <div role="menu" className="absolute right-0 top-full z-30 mt-1 w-56 overflow-hidden rounded-lg bg-white py-1 shadow-pop ring-1 ring-slate-200">
           <button type="button" role="menuitem" className={choice} onClick={() => void run(false)}>
             Invoices only
-            <span className="block text-xs text-slate-500">One row per invoice</span>
+            <span className="block text-xs text-slate-500 group-hover:text-brand-100 group-focus-visible:text-brand-100">One row per invoice</span>
           </button>
           <button type="button" role="menuitem" className={choice} onClick={() => void run(true)}>
             With items
-            <span className="block text-xs text-slate-500">One row per item of each invoice</span>
+            <span className="block text-xs text-slate-500 group-hover:text-brand-100 group-focus-visible:text-brand-100">One row per item of each invoice</span>
           </button>
         </div>
       )}

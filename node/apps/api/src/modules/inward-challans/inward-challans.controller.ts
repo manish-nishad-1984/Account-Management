@@ -15,6 +15,7 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
+  DATE_BASES,
   createInwardChallanSchema,
   hasPermission,
   listQuerySchema,
@@ -54,6 +55,7 @@ const filterSchema = z.object({
   itemId: z.string().uuid().optional(),
   fromDate: z.string().optional(),
   toDate: z.string().optional(),
+  dateBasis: z.enum(DATE_BASES).optional(),
   isApproved: z
     .enum(["true", "false"])
     .optional()
@@ -90,6 +92,7 @@ export class InwardChallansController {
       isApproved: query.isApproved,
       fromDate: query.fromDate,
       toDate: query.toDate,
+      dateBasis: query.dateBasis,
     };
 
     const [page, totals] = await Promise.all([

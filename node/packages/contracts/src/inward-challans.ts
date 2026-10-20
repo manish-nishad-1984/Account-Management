@@ -2,6 +2,7 @@ import { z } from "zod";
 import { listResponseSchema, rowCapabilitiesSchema, type ListResponse } from "./pagination";
 import { optionalDate, optionalText, optionalUuidId, quantity, uuidId } from "./fields";
 import { attachmentSchema, type Attachment } from "./attachments";
+import { DATE_BASES } from "./date-range";
 
 /**
  * Inward challans — `ItemInword` in SQL Server, `/ItemInWord/ItemInWord`.
@@ -152,6 +153,7 @@ export const inwardChallanFilterSchema = z.object({
   isApproved: z.boolean().optional(),
   fromDate: z.string().optional(),
   toDate: z.string().optional(),
+  dateBasis: z.enum(DATE_BASES).optional(),
 });
 export type InwardChallanFilters = z.infer<typeof inwardChallanFilterSchema>;
 

@@ -5,6 +5,7 @@ import {
   GridExportController,
   safeFileName,
   safeSheetName,
+  uniqueSheetNames,
 } from "./grid-export.controller";
 
 /** A reply that records what was sent, the way the real one would be called. */
@@ -95,6 +96,42 @@ describe("names", () => {
     expect(safeFileName("../etc/passwd")).toBe("etc-passwd");
     expect(safeFileName('a"b\r\nc')).toBe("a-b-c");
     expect(safeFileName("///")).toBe("export");
+  });
+});
+
+describe("workbook", () => {
+  it("puts each sheet in one file, with its header held and filter arrows on it", async () => {
+    const { reply, headers, bytes } = fakeReply();
+    const columns = [
+      { header: "Name", width: 20, align: "left" as const },
+      { header: "Amount", width: 14, align: "right" as const },
+    ];
+    await new GridExportController().workbook(
+      {
+        fileName: "Account Book export",
+        sheets: [
+          { sheetName: "Items", columns, rows: [["Cement", "410.00"]] },
+          { sheetName: "Payments", columns, rows: [["SHAH ENTERPRISE", "1000.00"], ["Short"]] },
+          { sheetName: "payments", columns, rows: [] },
+        ],
+      },
+      reply,
+    );
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(bytes() as never);
+    expect(workbook.worksheets.map((sheet) => sheet.name)).toEqual(["Items", "Payments", "payments (2)"]);
+    const payments = workbook.worksheets[1]!;
+    expect(payments.getRow(2).getCell(2).value).toBe(1000);
+    expect(payments.getRow(3).getCell(2).value ?? "").toBe("");
+    expect(payments.views[0]).toMatchObject({ state: "frozen", ySplit: 1 });
+    expect(payments.autoFilter).toBeTruthy();
+    expect(String(headers["Content-Disposition"])).toContain("Account-Book-export.xlsx");
+  });
+
+  it("names repeated sheets apart, within Excel's 31 characters", () => {
+    expect(uniqueSheetNames(["A", "a", "A"])).toEqual(["A", "a (2)", "A (3)"]);
+    expect(uniqueSheetNames(["x".repeat(40), "x".repeat(40)])[1]).toBe(`${"x".repeat(27)} (2)`);
   });
 });
 

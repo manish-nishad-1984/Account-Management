@@ -12,6 +12,7 @@ import type {
   UpdatePayoutList,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
+import { dateRangeWhere, type DateRangeFilter } from "../../common/date-range";
 import {
   companies,
   paymentAllocations,
@@ -229,8 +230,9 @@ export class PayoutsRepository extends BaseRepository {
   }
 
   /** Live lists; the search matches the title or any party's name on the list. */
-  private where(search: string | undefined, companyId?: string): SQL[] {
+  private where(search: string | undefined, companyId?: string, range: DateRangeFilter = {}): SQL[] {
     const where: SQL[] = [sql`l.is_deleted = false`];
+    where.push(...dateRangeWhere({ document: sql`l.list_date`, documentIsDate: true, entry: sql`l.created_at` }, range));
     if (companyId) {
       where.push(sql`l.company_id = ${companyId}::uuid`);
     }
@@ -251,8 +253,8 @@ export class PayoutsRepository extends BaseRepository {
    * cannot express a two-column key. The cursor value is `date|created_at` as
    * text, cast back in SQL for an exact round trip, compared as a row.
    */
-  async list(query: ListQuery, companyId?: string): Promise<{ rows: Omit<PayoutListRow, "capabilities">[]; nextCursor: string | null }> {
-    const where = this.where(query.search, companyId);
+  async list(query: ListQuery, companyId?: string, range: DateRangeFilter = {}): Promise<{ rows: Omit<PayoutListRow, "capabilities">[]; nextCursor: string | null }> {
+    const where = this.where(query.search, companyId, range);
     if (query.cursor) {
       const cursor = decodeCursor(query.cursor);
       const [date, createdAt] = cursor.value.split("|");
@@ -282,10 +284,10 @@ export class PayoutsRepository extends BaseRepository {
     };
   }
 
-  async total(search?: string, companyId?: string): Promise<number> {
+  async total(search?: string, companyId?: string, range: DateRangeFilter = {}): Promise<number> {
     const [row] = rawRows<{ n: number }>(
       await this.db.execute(
-        sql`select count(*)::int as n from ${payoutLists} l where ${sql.join(this.where(search, companyId), sql` and `)}`,
+        sql`select count(*)::int as n from ${payoutLists} l where ${sql.join(this.where(search, companyId, range), sql` and `)}`,
       ),
     );
     return row?.n ?? 0;

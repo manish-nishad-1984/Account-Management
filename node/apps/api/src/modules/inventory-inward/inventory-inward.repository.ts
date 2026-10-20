@@ -8,6 +8,7 @@ import type {
   UpdateInventoryInward,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
+import { dateRangeWhere, type DateRangeFilter } from "../../common/date-range";
 import { inventoryInward, items, sites, units } from "../../db/schema";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
@@ -101,9 +102,10 @@ export class InventoryInwardRepository extends BaseRepository {
    */
   private baseFilters(
     search: string | undefined,
-    { siteId, isApproved }: { siteId?: string; isApproved?: boolean },
+    { siteId, isApproved, ...range }: { siteId?: string; isApproved?: boolean } & DateRangeFilter,
   ) {
     const where = [eq(inventoryInward.isDeleted, false)];
+    where.push(...dateRangeWhere({ document: inventoryInward.documentDate, entry: inventoryInward.createdAt }, range));
 
     if (siteId) {
       where.push(or(eq(inventoryInward.siteId, siteId), isNull(inventoryInward.siteId))!);
@@ -121,7 +123,7 @@ export class InventoryInwardRepository extends BaseRepository {
 
   async list(
     query: ListQuery,
-    filters: { siteId?: string; isApproved?: boolean } = {},
+    filters: { siteId?: string; isApproved?: boolean } & DateRangeFilter = {},
   ): Promise<{ rows: InventoryInwardListRow[]; nextCursor: string | null }> {
     const sortKey: InventoryInwardSortKey =
       query.sortBy && query.sortBy in SORTABLE
@@ -181,7 +183,7 @@ export class InventoryInwardRepository extends BaseRepository {
 
   async total(
     search?: string,
-    filters: { siteId?: string; isApproved?: boolean } = {},
+    filters: { siteId?: string; isApproved?: boolean } & DateRangeFilter = {},
   ): Promise<number> {
     const [row] = await this.db
       .select({ value: count() })

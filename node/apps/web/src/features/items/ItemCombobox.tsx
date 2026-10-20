@@ -333,7 +333,7 @@ export function ItemCombobox({
               onMouseEnter={() => setActive(index)}
               className={clsx(
                 "cursor-pointer px-3 py-2",
-                index === active ? "bg-brand-50 text-brand-900" : "text-slate-700",
+                index === active ? "bg-brand-600 text-white" : "text-slate-700",
                 item.id === itemId && "font-medium",
               )}
             >
@@ -353,7 +353,7 @@ export function ItemCombobox({
               onMouseEnter={() => setActive(items.length)}
               className={clsx(
                 "cursor-pointer border-t border-slate-100 px-3 py-2",
-                active === items.length ? "bg-amber-50 text-amber-900" : "text-slate-600",
+                active === items.length ? "bg-amber-600 text-white" : "text-slate-600",
               )}
             >
               Use “{typed}” as a typed name

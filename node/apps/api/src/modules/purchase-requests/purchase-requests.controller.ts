@@ -31,6 +31,7 @@ import { PurchaseRequestsRepository } from "./purchase-requests.repository";
 import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { dateRangeFilterSchema, dateRangeOf } from "../../common/date-range";
 import { actorId } from "../../common/actor";
 import { approvalOnUpdate, approvedOnCreate } from "../../common/approval";
 import type { AccessTokenClaims } from "../auth/token.service";
@@ -61,7 +62,7 @@ const filterSchema = z.object({
     .transform((value) => (value === undefined ? undefined : value === "true")),
 });
 
-const listRequestSchema = listQuerySchema.and(filterSchema);
+const listRequestSchema = listQuerySchema.and(filterSchema).and(dateRangeFilterSchema);
 
 @Controller("purchase-requests")
 export class PurchaseRequestsController {
@@ -81,7 +82,7 @@ export class PurchaseRequestsController {
       canApprove: hasPermission(granted, SUBJECT, "approve"),
     };
 
-    const filters = { siteId: query.siteId, isApproved: query.isApproved };
+    const filters = { siteId: query.siteId, isApproved: query.isApproved, ...dateRangeOf(query) };
 
     const [page, total] = await Promise.all([
       this.requests.list(query, filters),

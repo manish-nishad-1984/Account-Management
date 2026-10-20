@@ -23,7 +23,7 @@ import { useDeletePayment, usePaymentList } from "./api";
 const Absent = () => <span className="text-slate-300">—</span>;
 
 /** What the sheet holds, column for column — the screen's own columns, as text. */
-const EXPORT_COLUMNS: ExportColumn<PaymentRow>[] = [
+export const EXPORT_COLUMNS: ExportColumn<PaymentRow>[] = [
   { header: "Date", width: 12, value: (row) => exportDate(row.paymentDate) },
   { header: "Type", width: 16, value: (row) => (row.kind === "opening_balance" ? "Opening balance" : "Payment") },
   { header: "Party", width: 30, value: (row) => row.partyName },

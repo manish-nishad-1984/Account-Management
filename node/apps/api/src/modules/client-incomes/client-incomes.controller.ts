@@ -26,6 +26,7 @@ import { ClientIncomesRepository } from "./client-incomes.repository";
 import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
+import { dateRangeOf } from "../../common/date-range";
 import { actorId } from "../../common/actor";
 import type { AccessTokenClaims } from "../auth/token.service";
 
@@ -50,7 +51,7 @@ export class ClientIncomesController {
       canDelete: hasPermission(granted, SUBJECT, "delete"),
       canApprove: false,
     };
-    const filter = { siteId: query.siteId, companyId: query.companyId, clientId: query.clientId };
+    const filter = { siteId: query.siteId, companyId: query.companyId, clientId: query.clientId, ...dateRangeOf(query) };
     const [page, total, totalAmount] = await Promise.all([
       this.incomes.list(query, filter),
       this.incomes.total(query.search, filter),

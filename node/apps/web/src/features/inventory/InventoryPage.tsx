@@ -29,7 +29,7 @@ import { formatDate, formatQuantity } from "../../lib/format";
 const Absent = () => <span className="text-slate-300">—</span>;
 
 /** What the sheet holds, column for column — the screen's own columns, as text. */
-const EXPORT_COLUMNS: ExportColumn<InventoryInwardRow>[] = [
+export const EXPORT_COLUMNS: ExportColumn<InventoryInwardRow>[] = [
   { header: "Item", width: 34, value: (row) => row.itemName },
   { header: "Details", width: 30, value: (row) => row.details },
   { header: "Date", width: 12, value: (row) => exportDate(row.documentDate) },

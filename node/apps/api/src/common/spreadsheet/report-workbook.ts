@@ -78,12 +78,36 @@ export async function writeReportWorkbook(
   sheetName: string,
   blocks: ReportSheetBlock[],
 ): Promise<Buffer> {
+  return writeReportWorkbookSheets([{ name: sheetName, blocks }]);
+}
+
+/**
+ * Several sheets in one file, for the Excel export centre (client, 20 Oct 2026).
+ * A sheet that is one table with its header on the first row keeps that header
+ * on screen while scrolling and has Excel's filter arrows on it.
+ */
+export async function writeReportWorkbookSheets(
+  sheets: { name: string; blocks: ReportSheetBlock[] }[],
+): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Account Book";
   workbook.created = new Date();
 
-  const sheet = workbook.addWorksheet(sheetName);
+  for (const { name, blocks } of sheets) {
+    const sheet = workbook.addWorksheet(name);
+    fillSheet(sheet, blocks);
+    const only = blocks.length === 1 ? blocks[0] : undefined;
+    if (sheets.length > 1 && only?.kind === "table" && only.columns.length > 0) {
+      sheet.views = [{ state: "frozen", ySplit: 1 }];
+      sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: only.columns.length } };
+    }
+  }
 
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer as ArrayBuffer);
+}
+
+function fillSheet(sheet: ExcelJS.Worksheet, blocks: ReportSheetBlock[]): void {
   // Column widths come from the FIRST table block. A workbook has one set of
   // column widths whatever its blocks want, and the table is what people read.
   const firstTable = blocks.find((block) => block.kind === "table");
@@ -123,7 +147,4 @@ export async function writeReportWorkbook(
 
     sheet.addRow([]);
   }
-
-  const buffer = await workbook.xlsx.writeBuffer();
-  return Buffer.from(buffer as ArrayBuffer);
 }

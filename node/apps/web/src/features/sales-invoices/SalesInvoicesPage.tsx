@@ -54,7 +54,7 @@ const isReturn = (type: string) =>
   type === "Sales Return" || type === "Credit Note";
 
 /** What the sheet holds, column for column — the screen's own columns, as text. */
-const EXPORT_COLUMNS: ExportColumn<SalesInvoiceRow>[] = [
+export const EXPORT_COLUMNS: ExportColumn<SalesInvoiceRow>[] = [
   { header: "Invoice", width: 20, value: (row) => row.salesInvoiceNo },
   { header: "Date", width: 12, value: (row) => exportDate(row.documentDate) },
   { header: "Their ref", width: 20, value: (row) => row.customerInvoiceNo },

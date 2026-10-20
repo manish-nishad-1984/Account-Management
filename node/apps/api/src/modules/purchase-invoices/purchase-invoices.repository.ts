@@ -13,6 +13,7 @@ import type {
   UpdatePurchaseInvoice,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
+import { dateRangeWhere, type DateRangeFilter } from "../../common/date-range";
 import {
   companies,
   items,
@@ -181,18 +182,19 @@ export class PurchaseInvoicesRepository extends BaseRepository {
       supplierId,
       isApproved,
       invoiceType,
+      ...range
     }: {
       siteId?: string;
       companyId?: string;
       supplierId?: string;
       isApproved?: boolean;
       invoiceType?: string;
-    },
+    } & DateRangeFilter,
   ) {
     // NO `is_deleted` TERM. `SupplierInvoice` has no soft-delete column and the
     // list screen has no Active/All filter — see the schema comment. Deleting an
     // invoice deletes it.
-    const where = [];
+    const where = [...dateRangeWhere({ document: purchaseInvoices.documentDate, entry: purchaseInvoices.createdAt }, range)];
 
     if (siteId) {
       where.push(eq(purchaseInvoices.siteId, siteId));
@@ -225,7 +227,7 @@ export class PurchaseInvoicesRepository extends BaseRepository {
       supplierId?: string;
       isApproved?: boolean;
       invoiceType?: string;
-    } = {},
+    } & DateRangeFilter = {},
   ): Promise<{ rows: PurchaseInvoiceListRow[]; nextCursor: string | null }> {
     const sortKey: PurchaseInvoiceSortKey =
       query.sortBy && query.sortBy in SORTABLE
@@ -312,7 +314,7 @@ export class PurchaseInvoicesRepository extends BaseRepository {
       supplierId?: string;
       isApproved?: boolean;
       invoiceType?: string;
-    } = {},
+    } & DateRangeFilter = {},
   ): Promise<number> {
     const where = this.baseFilters(search, filters);
     const [row] = await this.db

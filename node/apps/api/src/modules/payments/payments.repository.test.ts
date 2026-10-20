@@ -180,6 +180,33 @@ describe("PaymentsRepository (real PostgreSQL)", () => {
       expect(await repo.total("nothing here")).toBe(0);
     });
 
+    /**
+     * The export centre's date range (client, 20 Oct 2026): by the payment's own
+     * date, or by the day it was entered — in India, so 1 a.m. IST on the 1st is
+     * the 1st, though it is still the 31st in UTC.
+     */
+    it("counts a date range by the payment's date or by the day it was entered", async () => {
+      await repo.createMany(
+        [
+          input({ paymentDate: "2026-03-31", description: "march" }),
+          input({ paymentDate: "2026-04-01", description: "april first" }),
+          input({ paymentDate: "2026-04-30", description: "april last" }),
+        ],
+        ACTOR,
+      );
+      await db.update(schema.payments).set({ createdAt: new Date("2026-04-30T19:30:00Z") }); // 1 May, 01:00 IST
+
+      const april = { fromDate: "2026-04-01", toDate: "2026-04-30" };
+      expect(await repo.total(undefined, april)).toBe(2);
+      expect(await repo.total(undefined, { ...april, dateBasis: "document" })).toBe(2);
+      expect(await repo.total(undefined, { fromDate: "2026-04-01" })).toBe(2);
+      expect(await repo.total(undefined, { toDate: "2026-03-31" })).toBe(1);
+
+      expect(await repo.total(undefined, { ...april, dateBasis: "entry" })).toBe(0);
+      expect(await repo.total(undefined, { fromDate: "2026-05-01", toDate: "2026-05-01", dateBasis: "entry" })).toBe(3);
+      expect((await repo.list(query(), { ...april })).rows.map((row) => row.description).sort()).toEqual(["april first", "april last"]);
+    });
+
     it("pages by the keyset, and the second page continues the first", async () => {
       await repo.createMany(
         Array.from({ length: 5 }, (_unused, n) => input({ amount: `${100 + n}.00` })),

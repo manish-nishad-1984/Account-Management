@@ -202,7 +202,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     return NAV.map((section) => ({
       ...section,
       items: section.items.filter(
-        (item) => !item.permission || hasPermission(granted, item.permission, "view"),
+        (item) =>
+          item.anyOf
+            ? item.anyOf.some((right) => hasPermission(granted, right, "view"))
+            : !item.permission || hasPermission(granted, item.permission, "view"),
       ),
     })).filter((section) => section.items.length > 0);
   }, [user?.permissions]);

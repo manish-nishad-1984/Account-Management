@@ -36,3 +36,24 @@ export const gridExportRequestSchema = z.object({
   rows: z.array(z.array(z.string().max(2000))).max(GRID_EXPORT_MAX_ROWS),
 });
 export type GridExportRequest = z.infer<typeof gridExportRequestSchema>;
+
+/**
+ * Several sheets in ONE file (client, 20 Oct 2026: the Excel export centre —
+ * tick what you want, get one workbook). Each sheet is what a single export
+ * would have been; the limits are on the whole file, so a workbook is no bigger
+ * than the largest single export.
+ */
+export const GRID_WORKBOOK_MAX_SHEETS = 30;
+
+export const gridWorkbookSheetSchema = gridExportRequestSchema.omit({ fileName: true });
+export type GridWorkbookSheet = z.infer<typeof gridWorkbookSheetSchema>;
+
+export const gridWorkbookRequestSchema = z
+  .object({
+    fileName: z.string().trim().min(1).max(80),
+    sheets: z.array(gridWorkbookSheetSchema).min(1).max(GRID_WORKBOOK_MAX_SHEETS),
+  })
+  .refine((body) => body.sheets.reduce((sum, sheet) => sum + sheet.rows.length, 0) <= GRID_EXPORT_MAX_ROWS * 3, {
+    message: "Too many rows for one file. Narrow the dates or choose fewer sheets.",
+  });
+export type GridWorkbookRequest = z.infer<typeof gridWorkbookRequestSchema>;

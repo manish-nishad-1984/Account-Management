@@ -58,7 +58,7 @@ const ACTIVE_OPTIONS = [
 ];
 
 /** What the sheet holds, column for column — the screen's own columns, as text. */
-const EXPORT_COLUMNS: ExportColumn<PurchaseOrderRow>[] = [
+export const EXPORT_COLUMNS: ExportColumn<PurchaseOrderRow>[] = [
   { header: "Order", width: 18, value: (row) => row.poNo },
   { header: "Date", width: 12, value: (row) => exportDate(row.documentDate) },
   { header: "Buyer's ref", width: 20, value: (row) => row.buyersPurchaseNo },
