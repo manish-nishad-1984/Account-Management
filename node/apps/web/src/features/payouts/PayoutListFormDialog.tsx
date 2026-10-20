@@ -29,6 +29,7 @@ import { PartyLedgerDialog } from "./PartyLedgerDialog";
 import { PartyBillFilterDialog } from "./PartyBillFilterDialog";
 import { AgeBadge } from "./AgeBadge";
 import { PartPaid } from "./PartPaid";
+import { HistoryButton } from "../audit/HistoryDialog";
 import { AmountField } from "./AmountField";
 import { fromPaise, sumAmounts, toPaise } from "./decimal";
 import { formatListDate } from "./message";
@@ -586,6 +587,7 @@ export function PayoutListFormDialog({
             <Button variant="outline" icon={Copy} onClick={() => void share.copy(saved)}>
               Copy text
             </Button>
+            <HistoryButton entity="payout-list" entityId={saved.id} title={saved.title ?? formatListDate(saved.listDate)} />
           </>
           )}
         </>

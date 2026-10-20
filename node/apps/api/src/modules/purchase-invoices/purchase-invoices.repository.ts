@@ -1,6 +1,7 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, count, eq, ilike, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { invoiceTotal } from "@accountmanagement/domain";
+import { diffFacts } from "@accountmanagement/contracts";
 import type {
   CreatePurchaseInvoice,
   ListQuery,
@@ -24,6 +25,8 @@ import {
   units,
 } from "../../db/schema";
 import { billIsReturn, billNoKey, billYearKey } from "../../db/schema/purchase-invoices";
+import { recordAudit } from "../../common/audit";
+import { purchaseInvoiceView } from "./purchase-invoice-audit";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
@@ -465,7 +468,7 @@ export class PurchaseInvoicesRepository extends BaseRepository {
       this.db.transaction(async (tx) => {
         const ids: string[] = [];
         for (const input of inputs) {
-          ids.push(await this.insertInvoice(tx, input, actorId));
+          ids.push(await this.insertInvoice(tx, input, actorId, "imported"));
         }
         return ids;
       }),
@@ -533,6 +536,7 @@ export class PurchaseInvoicesRepository extends BaseRepository {
     tx: Parameters<Parameters<Database["transaction"]>[0]>[0],
     input: CreatePurchaseInvoice & { isApproved?: boolean },
     actorId: string,
+    action: "created" | "imported" = "created",
   ): Promise<string> {
     const { items: lines, tds, roundOff, ...header } = input;
     const { totals, rows } = this.priced(lines, { tds: tds ?? undefined, roundOff: roundOff ?? undefined });
@@ -575,6 +579,14 @@ export class PurchaseInvoicesRepository extends BaseRepository {
         rows.map((row) => ({ ...row, purchaseInvoiceId: invoiceId, ...createdBy(actorId) })),
       );
 
+    await recordAudit(handle, {
+      entity: "purchase-invoice",
+      entityId: invoiceId,
+      action,
+      actorId,
+      view: (await purchaseInvoiceView(handle, invoiceId))!,
+    });
+
     return invoiceId;
   }
 
@@ -599,6 +611,7 @@ export class PurchaseInvoicesRepository extends BaseRepository {
     await writing(() =>
       this.db.transaction(async (tx) => {
         const handle = tx as unknown as Database;
+        const before = await purchaseInvoiceView(handle, id);
         const patch: Record<string, unknown> = {
           ...header,
           ...(await placementPatch(handle, header, async () => {
@@ -706,6 +719,15 @@ export class PurchaseInvoicesRepository extends BaseRepository {
         if (!updated) {
           throw new NotFoundException("Purchase invoice not found");
         }
+
+        await recordAudit(handle, {
+          entity: "purchase-invoice",
+          entityId: id,
+          action: "updated",
+          actorId,
+          before,
+          view: (await purchaseInvoiceView(handle, id))!,
+        });
       }),
     );
 
@@ -738,13 +760,24 @@ export class PurchaseInvoicesRepository extends BaseRepository {
     isApproved: boolean,
     actorId: string,
   ): Promise<PurchaseInvoiceDetail> {
-    const [updated] = await this.db
-      .update(purchaseInvoices)
-      .set({ isApproved, ...updatedBy(actorId) })
-      .where(eq(purchaseInvoices.id, id))
-      .returning({ id: purchaseInvoices.id });
+    const changed = await this.db.transaction(async (tx) => {
+      const handle = tx as unknown as Database;
+      const before = await purchaseInvoiceView(handle, id);
+      const [updated] = await tx
+        .update(purchaseInvoices)
+        .set({ isApproved, ...updatedBy(actorId) })
+        .where(eq(purchaseInvoices.id, id))
+        .returning({ id: purchaseInvoices.id });
+      if (!updated) return false;
+      const view = (await purchaseInvoiceView(handle, id))!;
+      // Stating the approval it already has is not an event.
+      if (diffFacts(before!.facts, view.facts).length > 0) {
+        await recordAudit(handle, { entity: "purchase-invoice", entityId: id, action: isApproved ? "approved" : "unapproved", actorId, before, view });
+      }
+      return true;
+    });
 
-    if (!updated) {
+    if (!changed) {
       throw new NotFoundException("Purchase invoice not found");
     }
     return this.findById(id);
@@ -755,18 +788,32 @@ export class PurchaseInvoicesRepository extends BaseRepository {
     if (ids.length === 0) {
       return 0;
     }
-    const updated = await this.db
-      .update(purchaseInvoices)
-      .set({ isApproved, ...updatedBy(actorId) })
-      .where(
-        and(
-          inArray(purchaseInvoices.id, ids),
-          eq(purchaseInvoices.isApproved, !isApproved),
-        ),
-      )
-      .returning({ id: purchaseInvoices.id });
+    return this.db.transaction(async (tx) => {
+      const handle = tx as unknown as Database;
+      const updated = await tx
+        .update(purchaseInvoices)
+        .set({ isApproved, ...updatedBy(actorId) })
+        .where(
+          and(
+            inArray(purchaseInvoices.id, ids),
+            eq(purchaseInvoices.isApproved, !isApproved),
+          ),
+        )
+        .returning({ id: purchaseInvoices.id });
 
-    return updated.length;
+      for (const { id } of updated) {
+        const view = (await purchaseInvoiceView(handle, id))!;
+        await recordAudit(handle, {
+          entity: "purchase-invoice",
+          entityId: id,
+          action: isApproved ? "approved" : "unapproved",
+          actorId,
+          before: { ...view, facts: view.facts.map(([field, value]): [string, string] => (field === "Approved" ? [field, isApproved ? "No" : "Yes"] : [field, value])) },
+          view,
+        });
+      }
+      return updated.length;
+    });
   }
 
   /**
@@ -774,12 +821,23 @@ export class PurchaseInvoicesRepository extends BaseRepository {
    * set, because the source has none. The lines go with it through the FK's
    * `on delete cascade`, which is correct here for exactly the reason it would
    * be wrong on a soft delete.
+   *
+   * WHAT IT WAS IS KEPT (20 Oct 2026): the invoice as it read, every line
+   * included, goes to the audit trail in the same transaction.
    */
-  async remove(id: string): Promise<void> {
-    const [removed] = await this.db
-      .delete(purchaseInvoices)
-      .where(eq(purchaseInvoices.id, id))
-      .returning({ id: purchaseInvoices.id });
+  async remove(id: string, actorId?: string): Promise<void> {
+    const removed = await this.db.transaction(async (tx) => {
+      const handle = tx as unknown as Database;
+      const view = await purchaseInvoiceView(handle, id);
+      const [row] = await tx
+        .delete(purchaseInvoices)
+        .where(eq(purchaseInvoices.id, id))
+        .returning({ id: purchaseInvoices.id });
+      if (row && view) {
+        await recordAudit(handle, { entity: "purchase-invoice", entityId: id, action: "deleted", actorId, view });
+      }
+      return row;
+    });
 
     if (!removed) {
       throw new NotFoundException("Purchase invoice not found");

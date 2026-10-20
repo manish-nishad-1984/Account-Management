@@ -5,6 +5,7 @@ import { FormDialog, FormSection, SelectField, TextField } from "../../component
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { ApiError } from "../../lib/api-client";
 import { usePayment, useUpdatePayment } from "./api";
+import { HistoryButton } from "../audit/HistoryDialog";
 
 const METHODS = ["Cash", "Cheque", "NEFT", "RTGS", "UPI", "Adjustment"];
 
@@ -114,6 +115,7 @@ export function PaymentEditDialog({
       submitLabel="Save changes"
       readOnly={readOnly}
       size="md"
+      footerStart={row ? <HistoryButton entity="payment" entityId={row.id} title={row.partyName} /> : undefined}
     >
       {detail.isLoading ? (
         <p className="py-8 text-center text-sm text-slate-500">Loading payment…</p>

@@ -26,6 +26,9 @@ import { decodeCursor, encodeCursor } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
 import { rawRows } from "../../common/raw-rows";
+import { recordAudit } from "../../common/audit";
+import { payoutListView } from "./payout-audit";
+import { paymentView } from "../payments/payment-audit";
 import { ReportsRepository } from "../reports/reports.repository";
 
 /** The most `balances` hands back in one page (MAX_PAGE_SIZE). */
@@ -379,7 +382,9 @@ export class PayoutsRepository extends BaseRepository {
             ...createdBy(actorId),
           })
           .returning({ id: payoutLists.id });
-        await this.writeLines(tx as unknown as Database, row!.id, lines);
+        const handle = tx as unknown as Database;
+        await this.writeLines(handle, row!.id, lines);
+        await recordAudit(handle, { entity: "payout-list", entityId: row!.id, action: "created", actorId, view: (await payoutListView(handle, row!.id))! });
         return row!.id;
       }),
     );
@@ -392,6 +397,8 @@ export class PayoutsRepository extends BaseRepository {
     const lines = await this.priced(input);
     await writing(() =>
       this.db.transaction(async (tx) => {
+        const handle = tx as unknown as Database;
+        const before = await payoutListView(handle, id);
         const [row] = await tx
           .update(payoutLists)
           .set({
@@ -407,7 +414,8 @@ export class PayoutsRepository extends BaseRepository {
         if (!row) {
           throw new NotFoundException("Payout list not found");
         }
-        await this.writeLines(tx as unknown as Database, id, lines);
+        await this.writeLines(handle, id, lines);
+        await recordAudit(handle, { entity: "payout-list", entityId: id, action: "updated", actorId, before, view: (await payoutListView(handle, id))! });
       }),
     );
     return this.findById(id);
@@ -416,11 +424,18 @@ export class PayoutsRepository extends BaseRepository {
   /** Soft delete: a list somebody sent on WhatsApp stays on record. */
   async remove(id: string, actorId: string): Promise<void> {
     await this.refuseIfConfirmed(id);
-    const [row] = await this.db
-      .update(payoutLists)
-      .set({ isDeleted: true, ...updatedBy(actorId) })
-      .where(and(eq(payoutLists.id, id), eq(payoutLists.isDeleted, false)))
-      .returning({ id: payoutLists.id });
+    const row = await this.db.transaction(async (tx) => {
+      const handle = tx as unknown as Database;
+      const [removed] = await tx
+        .update(payoutLists)
+        .set({ isDeleted: true, ...updatedBy(actorId) })
+        .where(and(eq(payoutLists.id, id), eq(payoutLists.isDeleted, false)))
+        .returning({ id: payoutLists.id });
+      if (removed) {
+        await recordAudit(handle, { entity: "payout-list", entityId: id, action: "deleted", actorId, view: (await payoutListView(handle, id))! });
+      }
+      return removed;
+    });
     if (!row) {
       throw new NotFoundException("Payout list not found");
     }
@@ -589,6 +604,9 @@ export class PayoutsRepository extends BaseRepository {
 
     await writing(() =>
       this.db.transaction(async (tx) => {
+        const handle = tx as unknown as Database;
+        const before = await payoutListView(handle, id);
+        const madePayments: string[] = [];
         for (const [key, group] of groups) {
           const extra = biggest.get(group.partyId) === key ? (extraByParty.get(group.partyId) ?? 0n) : 0n;
           const [made] = await tx
@@ -617,6 +635,7 @@ export class PayoutsRepository extends BaseRepository {
               amount: fromPaise(entry.paid),
             })),
           );
+          madePayments.push(made!.id);
         }
 
         // What was paid of EVERY bill on the list, 0 for the ones left out.
@@ -648,6 +667,11 @@ export class PayoutsRepository extends BaseRepository {
           .update(payoutLists)
           .set({ status: "confirmed", confirmedAt: new Date(), confirmedBy: actorId, ...updatedBy(actorId) })
           .where(eq(payoutLists.id, id));
+
+        for (const paymentId of madePayments) {
+          await recordAudit(handle, { entity: "payment", entityId: paymentId, action: "created", actorId, view: (await paymentView(handle, paymentId))! });
+        }
+        await recordAudit(handle, { entity: "payout-list", entityId: id, action: "confirmed", actorId, before, view: (await payoutListView(handle, id))! });
       }),
     );
     return this.findById(id);
@@ -666,11 +690,17 @@ export class PayoutsRepository extends BaseRepository {
     }
     await writing(() =>
       this.db.transaction(async (tx) => {
+        const handle = tx as unknown as Database;
+        const before = await payoutListView(handle, id);
         const made = await tx
           .select({ id: payments.id })
           .from(payments)
           .where(and(eq(payments.sourcePayoutListId, id), eq(payments.isDeleted, false)));
         const ids = made.map((row) => row.id);
+        // Each payment as it was, bills it settled included, before they go.
+        for (const paymentId of ids) {
+          await recordAudit(handle, { entity: "payment", entityId: paymentId, action: "deleted", actorId, view: (await paymentView(handle, paymentId))! });
+        }
         if (ids.length > 0) {
           await tx.delete(paymentAllocations).where(inArray(paymentAllocations.paymentId, ids));
           await tx.update(payments).set({ isDeleted: true, ...updatedBy(actorId) }).where(inArray(payments.id, ids));
@@ -687,6 +717,7 @@ export class PayoutsRepository extends BaseRepository {
           .update(payoutLists)
           .set({ status: "draft", confirmedAt: null, confirmedBy: null, ...updatedBy(actorId) })
           .where(eq(payoutLists.id, id));
+        await recordAudit(handle, { entity: "payout-list", entityId: id, action: "reversed", actorId, before, view: (await payoutListView(handle, id))! });
       }),
     );
     return this.findById(id);

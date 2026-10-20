@@ -37,6 +37,7 @@ import {
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { todayInput } from "../../lib/dates";
 import { SavedDocumentPdfButton } from "../document-templates/DocumentActions";
+import { HistoryButton } from "../audit/HistoryDialog";
 import { SiteLocationAddresses } from "../sites/SiteLocationAddresses";
 import { SiteContactSelect } from "../sites/SiteContactSelect";
 
@@ -370,7 +371,12 @@ export function PurchaseInvoiceFormDialog({
       formError={formError}
       pending={pending}
       footerStart={
-        invoiceId !== null ? <SavedDocumentPdfButton documentType="purchase-invoice" id={invoiceId} dirty={isDirty} /> : undefined
+        invoiceId !== null ? (
+          <>
+            <SavedDocumentPdfButton documentType="purchase-invoice" id={invoiceId} dirty={isDirty} />
+            <HistoryButton entity="purchase-invoice" entityId={invoiceId} title={`Bill ${detail.data?.supplierInvoiceNo ?? ""}`} />
+          </>
+        ) : undefined
       }
       submitLabel={isEdit ? "Save changes" : "Add purchase invoice"}
       // Wider than the master dialogs, because the body is a data-entry grid.

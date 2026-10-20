@@ -281,7 +281,10 @@ export class PurchaseInvoicesController {
   @Delete(":id")
   @Permissions("purchase-invoice.delete")
   @HttpCode(204)
-  remove(@Param("id", ParseUUIDPipe) id: string): Promise<void> {
-    return this.invoices.remove(id);
+  remove(
+    @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() caller: AccessTokenClaims | undefined,
+  ): Promise<void> {
+    return this.invoices.remove(id, actorId(caller));
   }
 }

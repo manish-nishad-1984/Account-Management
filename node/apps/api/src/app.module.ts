@@ -32,6 +32,7 @@ import { PayoutsModule } from "./modules/payouts/payouts.module";
 import { ClientsModule } from "./modules/clients/clients.module";
 import { ClientIncomesModule } from "./modules/client-incomes/client-incomes.module";
 import { BalanceSheetModule } from "./modules/balance-sheet/balance-sheet.module";
+import { AuditModule } from "./modules/audit/audit.module";
 
 const env = loadEnv();
 
@@ -75,6 +76,7 @@ const env = loadEnv();
     ClientsModule,
     ClientIncomesModule,
     BalanceSheetModule,
+    AuditModule,
   ],
   providers: [
     // Order matters: authenticate, then authorise.

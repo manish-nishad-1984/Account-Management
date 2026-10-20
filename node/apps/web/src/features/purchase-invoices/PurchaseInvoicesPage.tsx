@@ -5,7 +5,8 @@ import {
   PURCHASE_INVOICE_SORT_FIELDS,
   type PurchaseInvoiceRow,
 } from "@accountmanagement/contracts";
-import { Check, Plus, Undo2, Upload } from "lucide-react";
+import { Check, Plus, Trash2, Undo2, Upload } from "lucide-react";
+import { DeletedRecordsDialog } from "../audit/HistoryDialog";
 import { DataGrid, RowActions } from "../../components/DataGrid";
 import { InvoiceExportButton } from "./InvoiceExportButton";
 import {
@@ -84,6 +85,7 @@ const EXPORT_COLUMNS: ExportColumn<PurchaseInvoiceRow>[] = [
 export function PurchaseInvoicesPage() {
   const canAdd = usePermission("purchase-invoice", "add");
   const [invoiceImportOpen, setInvoiceImportOpen] = useState(false);
+  const [deletedOpen, setDeletedOpen] = useState(false);
   const screen = useMasterScreen<PurchaseInvoiceRow>({
     // `documentDate` is nullable and therefore cannot be a keyset sort column —
     // see the contract. `createdAt` is NOT NULL and is the closest honest proxy
@@ -389,6 +391,9 @@ export function PurchaseInvoicesPage() {
         actions={
           <>
             <InvoiceExportButton params={screen.listParams} filters={exportFilters} invoiceColumns={EXPORT_COLUMNS} />
+            <Button variant="secondary" icon={Trash2} onClick={() => setDeletedOpen(true)}>
+              Deleted
+            </Button>
             {canAdd && (
               <Button variant="secondary" icon={Upload} onClick={() => setInvoiceImportOpen(true)}>
                 Import invoices
@@ -415,6 +420,12 @@ export function PurchaseInvoicesPage() {
       />
 
       <InvoiceImportDialog open={invoiceImportOpen} onClose={() => setInvoiceImportOpen(false)} />
+      <DeletedRecordsDialog
+        entity="purchase-invoice"
+        open={deletedOpen}
+        title="Deleted purchase invoices"
+        onClose={() => setDeletedOpen(false)}
+      />
 
       <PurchaseInvoiceFormDialog
         open={screen.isFormOpen}

@@ -14,6 +14,8 @@ import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/key
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
 import { rawRows } from "../../common/raw-rows";
+import { recordAudit } from "../../common/audit";
+import { paymentView } from "./payment-audit";
 import { fromPaise, toPaise } from "../balance-sheet/balance-sheet.service";
 
 /**
@@ -242,6 +244,17 @@ export class PaymentsRepository extends BaseRepository {
           })),
         );
         if (named.length > 0) await tx.insert(paymentAllocations).values(named);
+
+        const handle = tx as unknown as Database;
+        for (const payment of made) {
+          await recordAudit(handle, {
+            entity: "payment",
+            entityId: payment.id,
+            action: "created",
+            actorId,
+            view: (await paymentView(handle, payment.id))!,
+          });
+        }
         return made;
       }),
     );
@@ -257,13 +270,18 @@ export class PaymentsRepository extends BaseRepository {
 
     const row = await writing(() =>
       this.db.transaction(async (tx) => {
+        const handle = tx as unknown as Database;
+        const before = await paymentView(handle, id);
         const [updated] = await tx
           .update(payments)
           .set(patch)
           .where(and(eq(payments.id, id), eq(payments.isDeleted, false)))
           .returning(DETAIL_COLUMNS);
         if (updated && input.amount !== undefined) {
-          await this.fitAllocations(tx as unknown as Database, id, input.amount);
+          await this.fitAllocations(handle, id, input.amount);
+        }
+        if (updated) {
+          await recordAudit(handle, { entity: "payment", entityId: id, action: "updated", actorId, before, view: (await paymentView(handle, id))! });
         }
         return updated;
       }),
@@ -319,11 +337,18 @@ export class PaymentsRepository extends BaseRepository {
    * that says why the balance moved.
    */
   async remove(id: string, actorId: string): Promise<void> {
-    const [row] = await this.db
-      .update(payments)
-      .set({ isDeleted: true, ...updatedBy(actorId) })
-      .where(and(eq(payments.id, id), eq(payments.isDeleted, false)))
-      .returning({ id: payments.id });
+    const row = await this.db.transaction(async (tx) => {
+      const handle = tx as unknown as Database;
+      const [removed] = await tx
+        .update(payments)
+        .set({ isDeleted: true, ...updatedBy(actorId) })
+        .where(and(eq(payments.id, id), eq(payments.isDeleted, false)))
+        .returning({ id: payments.id });
+      if (removed) {
+        await recordAudit(handle, { entity: "payment", entityId: id, action: "deleted", actorId, view: (await paymentView(handle, id))! });
+      }
+      return removed;
+    });
 
     if (!row) {
       throw new NotFoundException("Payment not found");

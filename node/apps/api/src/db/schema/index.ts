@@ -16,3 +16,4 @@ export * from "./agencies";
 export * from "./payouts";
 export * from "./clients";
 export * from "./balance-sheets";
+export * from "./audit";
