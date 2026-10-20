@@ -7,6 +7,7 @@ import { todayInput } from "../../lib/dates";
 import { fromPaise, toPaise } from "./decimal";
 import { formatListDate } from "./message";
 import { AgeBadge, ageInDays } from "./AgeBadge";
+import { PartPaid } from "./PartPaid";
 
 export interface FilterableBill {
   key: string;
@@ -16,6 +17,8 @@ export interface FilterableBill {
   pending: string;
   /** An invoice, or the party's opening balance. */
   source?: "invoice" | "opening_balance";
+  /** The bill's own total; with it, a bill paid in part says so. */
+  billAmount?: string;
 }
 
 /** The date part of an ISO date or timestamp, to compare as text. */
@@ -405,6 +408,9 @@ export function PartyBillFilterDialog({
                 <td className="px-2 py-1.5 font-medium text-slate-700">
                   {bill.displayNo}
                   {bill.source === "opening_balance" && <span className="ml-2 text-xs font-normal text-slate-500">Opening balance</span>}
+                  <span className="font-normal">
+                    <PartPaid billAmount={bill.billAmount} pending={bill.pending} />
+                  </span>
                 </td>
                 <td className="whitespace-nowrap px-2 py-1.5 text-slate-600">{bill.documentDate ? formatListDate(bill.documentDate) : "—"}</td>
                 <td className="px-2 py-1.5">

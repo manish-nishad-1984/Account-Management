@@ -242,6 +242,28 @@ describe("PayoutListFormDialog - bills", () => {
     expect(within(dialog).getByText(/2 of 2 bills will be ticked/i)).toBeInTheDocument();
   });
 
+  // Client, 19 Oct 2026: a bill paid in part must say so, not look like a small bill.
+  it("marks a bill paid in part, under the party and in the filter", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation((input: RequestInfo | URL) =>
+      Promise.resolve(
+        json(
+          /outstanding$/.test(String(input))
+            ? { ...OWED, rows: [{ ...OWED.rows[0]!, invoices: [{ ...bill("d1", "BE-1", "9056.00", "2026-08-01"), amount: "47471.00" }, bill("d2", "BE-2", "40000.00", "2026-09-01")] }] }
+            : {},
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    open();
+    await user.click(await screen.findByRole("button", { name: /show the bills of ambica/i }));
+    expect(screen.getByText("Part paid")).toBeInTheDocument();
+    expect(screen.getByText("38,415.00 paid of 47,471.00")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^filter the bills of ambica steel traders by date$/i }));
+    const dialog = await filterPopup();
+    expect(within(dialog).getAllByText("Part paid")).toHaveLength(1);
+  });
+
   it("Cancel on the filter changes nothing", async () => {
     const user = userEvent.setup();
     open();

@@ -28,6 +28,7 @@ import { ConfirmPayoutDialog } from "./ConfirmPayoutDialog";
 import { PartyLedgerDialog } from "./PartyLedgerDialog";
 import { PartyBillFilterDialog } from "./PartyBillFilterDialog";
 import { AgeBadge } from "./AgeBadge";
+import { PartPaid } from "./PartPaid";
 import { AmountField } from "./AmountField";
 import { fromPaise, sumAmounts, toPaise } from "./decimal";
 import { formatListDate } from "./message";
@@ -69,6 +70,8 @@ const FIELDS: readonly string[] = ["listDate", "title", "budget", "note"];
 interface Bill extends Omit<PayoutPendingInvoice, "pending" | "amount"> {
   key: string;
   pending: string;
+  /** The bill's own total, to show a bill paid in part (19 Oct 2026). Absent for a saved bill no longer offered. */
+  billAmount?: string;
 }
 
 const billKey = (bill: { source: string; documentId: string }) => `${bill.source}:${bill.documentId}`;
@@ -259,7 +262,7 @@ export function PayoutListFormDialog({
     const savedBy = new Map((detail.data?.lines ?? []).map((line) => [line.partyId, line]));
     /** The offered bills, then any saved bill that has since been paid, so an edit never drops one unseen. */
     const billsOf = (offered: PayoutPendingInvoice[], saved: PayoutLine | undefined): Bill[] => {
-      const out: Bill[] = offered.map(({ amount: _amount, ...bill }) => ({ ...bill, key: billKey(bill) }));
+      const out: Bill[] = offered.map(({ amount, ...bill }) => ({ ...bill, billAmount: amount, key: billKey(bill) }));
       const have = new Set(out.map((bill) => bill.key));
       for (const bill of saved?.invoices ?? []) {
         const key = billKey(bill);
@@ -910,6 +913,7 @@ export function PayoutListFormDialog({
                                         .join(" · ")}
                                     </span>
                                     <AgeBadge documentDate={bill.documentDate} />
+                                    <PartPaid billAmount={bill.billAmount} pending={bill.pending} />
                                     {bill.pending === "0" && (
                                       <span className="ml-2 text-xs text-amber-700">paid since this list was saved</span>
                                     )}
