@@ -10,6 +10,7 @@ import { useCompanyOptions } from "../purchase-orders/api";
 import { useClientsOfSite } from "../clients/api";
 import { AmountField } from "../payouts/AmountField";
 import { useClientIncome, useCreateClientIncome, useUpdateClientIncome } from "./api";
+import { confirmRemoveRow } from "../../components/ui/confirm";
 
 /**
  * Record income (9 Oct 2026): money a project's client has paid.
@@ -198,7 +199,11 @@ export function ClientIncomeFormDialog({
                   icon={Trash2}
                   tone="destructive"
                   size="sm"
-                  onClick={() => setLines(lines.filter((one) => one.key !== line.key))}
+                  onClick={() =>
+                    void confirmRemoveRow(`${kind.toLowerCase()} ${index + 1}`).then(
+                      (yes) => yes && setLines(lines.filter((one) => one.key !== line.key)),
+                    )
+                  }
                 />
               </div>
             ))}

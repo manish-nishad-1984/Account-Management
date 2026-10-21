@@ -195,6 +195,7 @@ describe("InwardChallanFormDialog — attachments on a new challan", () => {
 
     await userEvent.upload(screen.getByLabelText("Choose files to attach"), file("scan.pdf"));
     await userEvent.click(screen.getByRole("button", { name: "Remove scan.pdf" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Remove" }));
 
     expect(screen.queryByText("scan.pdf")).not.toBeInTheDocument();
 

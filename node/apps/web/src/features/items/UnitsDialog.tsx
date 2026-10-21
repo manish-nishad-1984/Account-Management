@@ -10,6 +10,7 @@ import {
 } from "../../components/ui";
 import { ApiError } from "../../lib/api-client";
 import { useAllUnits, useCreateUnit, useDeleteUnit, useUpdateUnit } from "./api";
+import { askConfirm } from "../../components/ui/confirm";
 
 /**
  * Units of measure, managed from the Items screen rather than as a master of
@@ -64,6 +65,8 @@ export function UnitsDialog({ open, onClose }: { open: boolean; onClose: () => v
   };
 
   const askRemove = async (unit: UnitRow) => {
+    const yes = await askConfirm({ title: `Delete the unit "${unit.name}"?`, body: "It cannot be undone. A unit that items use is refused." });
+    if (!yes) return;
     setError(null);
     try {
       await remove.mutateAsync(unit.id);

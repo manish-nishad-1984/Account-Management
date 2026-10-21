@@ -7,6 +7,7 @@ import type { AuthenticatedUser } from "@accountmanagement/contracts";
 import { AuthContext } from "../contexts/AuthContext";
 import { StaticSiteScope, type SiteScope } from "../contexts/SiteScopeContext";
 import { StaticRecordLayout, type RecordLayout } from "../contexts/RecordLayoutContext";
+import { ConfirmHost } from "../components/ui/confirm";
 
 /**
  * Renders a screen with a signed-in user, so permission-gated UI can be tested.
@@ -70,7 +71,10 @@ export function renderWithAuth(
               provider, so it costs real time to place. Inert for screens with no
               links, so it belongs here rather than in each test that needs it.
             */}
-            <MemoryRouter>{node}</MemoryRouter>
+            <MemoryRouter>
+              {node}
+              <ConfirmHost />
+            </MemoryRouter>
           </StaticRecordLayout>
         </StaticSiteScope>
       </AuthContext.Provider>

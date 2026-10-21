@@ -14,6 +14,7 @@ import { CONTROL_BASE, ringFor } from "../../components/ui/fields";
 import { useSiteList } from "../sites/api";
 import { useSaveSiteLocations, useSiteLocations } from "./api";
 import { SiteCombobox } from "./SiteCombobox";
+import { confirmRemoveRow } from "../../components/ui/confirm";
 
 /**
  * A site's locations, each with the address deliveries to it go to — the Site
@@ -267,8 +268,12 @@ export function SiteLocationFormDialog({
                   tone="destructive"
                   size="md"
                   onClick={() =>
-                    setPairs((current) =>
-                      current.length === 1 ? [newRow()] : current.filter((d) => d.key !== row.key),
+                    void confirmRemoveRow(`location ${index + 1}`).then(
+                      (yes) =>
+                        yes &&
+                        setPairs((current) =>
+                          current.length === 1 ? [newRow()] : current.filter((d) => d.key !== row.key),
+                        ),
                     )
                   }
                   disabled={!target}

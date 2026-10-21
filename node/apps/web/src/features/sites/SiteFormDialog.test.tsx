@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SiteFormDialog } from "./SiteFormDialog";
@@ -85,7 +85,25 @@ describe("SiteFormDialog contacts", () => {
 
     await user.click(screen.getByRole("button", { name: /add contact/i }));
     await user.click(screen.getByRole("button", { name: "Remove contact 1" }));
+    await user.click(await screen.findByRole("button", { name: "Remove" }));
     expect(screen.queryByLabelText("Contact 1 name")).not.toBeInTheDocument();
     expect(screen.getByText(/no contacts yet/i)).toBeInTheDocument();
+  });
+
+  it("asks before removing: Cancel keeps the row, and Escape closes only the question", async () => {
+    const user = userEvent.setup();
+    open();
+
+    await user.click(screen.getByRole("button", { name: /add contact/i }));
+    await user.click(screen.getByRole("button", { name: "Remove contact 1" }));
+    const question = await screen.findByRole("dialog", { name: "Remove contact 1?" });
+    await user.click(within(question).getByRole("button", { name: "Cancel" }));
+    expect(screen.getByLabelText("Contact 1 name")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Remove contact 1" }));
+    await screen.findByRole("dialog", { name: "Remove contact 1?" });
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Remove contact 1?" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Contact 1 name")).toBeInTheDocument();
   });
 });

@@ -19,6 +19,7 @@ import { applyServerErrors, unshownValidationMessage } from "../../lib/crud";
 import { text } from "../../lib/form-values";
 import { useAgency, useCities, useCreateAgency, useStates, useUpdateAgency } from "./api";
 import { WorkTypePicker } from "./WorkTypePicker";
+import { confirmRemoveRow } from "../../components/ui/confirm";
 
 /**
  * Add / edit an agency, in the sections of the client's mockup: basic
@@ -302,7 +303,7 @@ export function AgencyFormDialog({
                     icon={Trash2}
                     tone="destructive"
                     size="md"
-                    onClick={() => remove(index)}
+                    onClick={() => void confirmRemoveRow(`contact ${index + 1}`).then((yes) => yes && remove(index))}
                   />
                 </div>
               ))}

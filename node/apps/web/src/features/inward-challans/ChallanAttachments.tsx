@@ -20,6 +20,7 @@ import {
   useAttachChallanDocuments,
   useDetachChallanDocument,
 } from "./api";
+import { askConfirm, confirmRemoveRow } from "../../components/ui/confirm";
 
 /**
  * The attachment list on a saved challan: add, download, remove.
@@ -94,6 +95,11 @@ export function ChallanAttachments({
   };
 
   const onRemove = async (document: InwardChallanDocument) => {
+    const yes = await askConfirm({
+      title: "Delete this attachment?",
+      body: `"${document.documentName}" will be removed from the challan for good.`,
+    });
+    if (!yes) return;
     setError(null);
     setBusyId(document.id);
     try {
@@ -241,7 +247,7 @@ export function QueuedAttachments({
                 icon={Trash2}
                 tone="destructive"
                 size="sm"
-                onClick={() => onChange(files.filter((_, i) => i !== index))}
+                onClick={() => void confirmRemoveRow(`"${file.name}"`).then((yes) => yes && onChange(files.filter((_, i) => i !== index)))}
                 className="shrink-0"
               />
             </li>

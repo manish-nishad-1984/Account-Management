@@ -19,6 +19,7 @@ import { todayInput } from "../../lib/dates";
 import { formatDate, formatMoney } from "../../lib/format";
 import { usePendingLedger } from "../reports/api";
 import { AmountField } from "../payouts/AmountField";
+import { confirmRemoveRow } from "../../components/ui/confirm";
 
 /**
  * The Payment Actions repeater, from `/Report/ReportDetails` panel 3.
@@ -414,7 +415,9 @@ export function PaymentFormDialog({
                       tone="destructive"
                       size="sm"
                       onClick={() =>
-                        setRows((current) => current.filter((one) => one.key !== row.key))
+                        void confirmRemoveRow(`row ${index + 1}`).then(
+                          (yes) => yes && setRows((current) => current.filter((one) => one.key !== row.key)),
+                        )
                       }
                     />
                   )}

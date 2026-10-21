@@ -26,6 +26,7 @@ import {
   useUpdateSite,
   type AddressDraft,
 } from "./api";
+import { confirmRemoveRow } from "../../components/ui/confirm";
 
 /**
  * The site form.
@@ -241,7 +242,7 @@ export function SiteFormDialog({
                     icon={Trash2}
                     tone="destructive"
                     size="md"
-                    onClick={() => removeContact(index)}
+                    onClick={() => void confirmRemoveRow(`contact ${index + 1}`).then((yes) => yes && removeContact(index))}
                   />
                 </div>
               ))}
@@ -325,7 +326,9 @@ export function SiteFormDialog({
                         tone="destructive"
                         size="md"
                         onClick={() =>
-                          setDrafts((current) => current.filter((_row, at) => at !== index))
+                          void confirmRemoveRow(`delivery address ${index + 1}`).then(
+                            (yes) => yes && setDrafts((current) => current.filter((_row, at) => at !== index)),
+                          )
                         }
                       />
                     </div>

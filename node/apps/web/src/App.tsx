@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { PlaceholderPage } from "./components/PlaceholderPage";
 import { SelectSearchLayer } from "./components/ui/SelectSearchLayer";
+import { ConfirmHost } from "./components/ui/confirm";
 import { RequireAuth } from "./components/RequireAuth";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { SiteScopeProvider } from "./contexts/SiteScopeContext";
@@ -126,6 +127,8 @@ export function App() {
     <LucideProvider strokeWidth={1.5}>
     {/* A search box in every dropdown of the application; see the component. */}
     <SelectSearchLayer />
+    {/* The one "are you sure?" dialog that askConfirm opens. */}
+    <ConfirmHost />
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider onSessionEnd={() => queryClient.clear()}>

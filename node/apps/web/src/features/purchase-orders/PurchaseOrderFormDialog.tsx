@@ -53,6 +53,7 @@ import { TermsField } from "./TermsField";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { todayInput } from "../../lib/dates";
 import { SavedDocumentPreviewButton } from "../document-templates/DocumentPreviewDialog";
+import { confirmRemoveRow } from "../../components/ui/confirm";
 
 /**
  * The purchase order form.
@@ -678,7 +679,7 @@ export function PurchaseOrderFormDialog({
                             icon={Trash2}
                             tone="destructive"
                             size="sm"
-                            onClick={() => remove(index)}
+                            onClick={() => void confirmRemoveRow(`line ${index + 1}`).then((yes) => yes && remove(index))}
                             disabled={fields.length === 1}
                           />
                         </div>

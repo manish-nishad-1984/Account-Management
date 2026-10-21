@@ -10,6 +10,7 @@ import {
 import { ItemCombobox } from "../items/ItemCombobox";
 import { AddItemLink, useItemIntoLine } from "../items/AddItemLink";
 import { formatMoney, formatQuantity } from "../../lib/format";
+import { confirmRemoveRow } from "../../components/ui/confirm";
 
 /**
  * The line-item grid, shared by the purchase and sales invoice forms.
@@ -379,7 +380,7 @@ export function InvoiceLineGrid({
                         icon={Trash2}
                         tone="destructive"
                         size="sm"
-                        onClick={() => onRemove(index)}
+                        onClick={() => void confirmRemoveRow(`line ${index + 1}`).then((yes) => yes && onRemove(index))}
                         disabled={fields.length === 1}
                       />
                     </div>

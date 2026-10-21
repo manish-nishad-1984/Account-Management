@@ -230,6 +230,9 @@ describe("ChallanAttachments", () => {
       renderWithAuth(<ChallanAttachments challanId={CHALLAN} documents={[document_()]} />);
 
       await userEvent.click(screen.getByRole("button", { name: "Remove weighbridge.pdf" }));
+      // Asked first (client, 21 Oct 2026), and only a yes deletes.
+      expect(await screen.findByRole("dialog", { name: /delete this attachment/i })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Delete" }));
 
       await waitFor(() => {
         const call = vi

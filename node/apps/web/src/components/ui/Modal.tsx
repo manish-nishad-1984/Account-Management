@@ -24,6 +24,15 @@ import { IconButton } from "./icon-button";
  * The .NET screens use Bootstrap modals with none of this except Escape.
  */
 
+/**
+ * The dialogs open now, oldest first. Only the TOP one answers Escape and Tab: a
+ * confirmation opened over a form ("Remove line 3?") must close itself on
+ * Escape, not the form beneath it with everything typed into it. Each dialog
+ * listens on `document`, and a listener there cannot stop the others, so each
+ * checks it is on top instead.
+ */
+const openStack: symbol[] = [];
+
 const FOCUSABLE =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -66,6 +75,8 @@ export function Modal({
     if (!open) return;
 
     previouslyFocused.current = document.activeElement as HTMLElement | null;
+    const me = Symbol("modal");
+    openStack.push(me);
 
     // The first focusable control, not the panel itself: a form should open with
     // the cursor in its first field.
@@ -73,6 +84,7 @@ export function Modal({
     (first ?? panel.current)?.focus();
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (openStack[openStack.length - 1] !== me) return;
       if (event.key === "Escape") {
         event.stopPropagation();
         onCloseRef.current();
@@ -105,6 +117,7 @@ export function Modal({
 
     return () => {
       document.removeEventListener("keydown", onKeyDown, true);
+      openStack.splice(openStack.indexOf(me), 1);
       document.body.style.overflow = previousOverflow;
       previouslyFocused.current?.focus();
     };
