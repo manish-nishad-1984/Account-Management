@@ -5,6 +5,8 @@ import { DOCUMENT_TYPES, presetLayout, type DocumentType } from "@accountmanagem
 import { Alert, Button } from "../../components/ui";
 import { describeLoadError } from "../../lib/load-error";
 import { usePrintBundle } from "./api";
+import { AMOUNTS_PARAM, withoutAmounts } from "./render/without-amounts";
+import { AmountsToggle } from "./AmountsToggle";
 import { DocumentRenderer, DocumentStyles, pageSizeMm } from "./render/DocumentRenderer";
 import { LetterheadSpaceControl, useLetterheadSpace } from "./letterhead";
 
@@ -38,10 +40,13 @@ export function PrintDocumentPage() {
   const templateId = chosen ?? bundle.data?.defaultTemplateId ?? BUILT_IN;
   const template = templates.find((t) => t.id === templateId);
 
-  const layout = useMemo(
-    () => template?.layout ?? presetLayout("classic", documentType ?? "sales-invoice"),
-    [template, documentType],
-  );
+  // A purchase order without its amounts: `?amounts=no` (client, 22 Oct 2026).
+  const canHideAmounts = documentType === "purchase-order";
+  const showAmounts = !(canHideAmounts && search.get(AMOUNTS_PARAM) === "no");
+  const layout = useMemo(() => {
+    const chosenLayout = template?.layout ?? presetLayout("classic", documentType ?? "sales-invoice");
+    return showAmounts ? chosenLayout : withoutAmounts(chosenLayout);
+  }, [template, documentType, showAmounts]);
   const page = pageSizeMm(layout.page);
   // Room left for a letterhead, over and above the margin; remembered in this browser.
   const [space, setSpace] = useLetterheadSpace();
@@ -99,13 +104,38 @@ export function PrintDocumentPage() {
         </span>
         <span className="flex-1" />
         <LetterheadSpaceControl space={space} onChange={setSpace} />
+        {canHideAmounts && (
+          <AmountsToggle
+            showAmounts={showAmounts}
+            onChange={(show) =>
+              setSearch(
+                (current) => {
+                  const next = new URLSearchParams(current);
+                  if (show) next.delete(AMOUNTS_PARAM);
+                  else next.set(AMOUNTS_PARAM, "no");
+                  return next;
+                },
+                { replace: true },
+              )
+            }
+          />
+        )}
         <label htmlFor="print-template" className="text-xs font-medium text-slate-600">
           Layout
         </label>
         <select
           id="print-template"
           value={template ? template.id : BUILT_IN}
-          onChange={(event) => setSearch({ template: event.target.value }, { replace: true })}
+          onChange={(event) =>
+            setSearch(
+              (current) => {
+                const next = new URLSearchParams(current);
+                next.set("template", event.target.value);
+                return next;
+              },
+              { replace: true },
+            )
+          }
           disabled={!bundle.data}
           className="h-8 rounded-md border-0 bg-white px-2.5 pr-8 text-sm text-slate-800 ring-1 ring-inset ring-slate-300 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
         >

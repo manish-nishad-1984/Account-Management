@@ -208,3 +208,30 @@ export const TERMS_TAG_REPLACEMENTS: Readonly<Record<string, string>> = {
  * judgement about content.
  */
 export const TERMS_MAX_LENGTH = 20_000;
+
+/**
+ * TERMS TEMPLATES PEOPLE SAVE THEMSELVES (client, 22 Oct 2026: "custom, and a
+ * template added by name").
+ *
+ * The three above stay as they are, in code: every order that names them keeps
+ * meaning the same text. These are kept in the database, each under the name it
+ * was saved with, and an order that loaded one records its id.
+ */
+export const savedTermsTemplateSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  html: z.string(),
+  updatedAt: z.string().nullable(),
+});
+export type SavedTermsTemplate = z.infer<typeof savedTermsTemplateSchema>;
+
+export const savedTermsTemplateListSchema = z.object({ rows: z.array(savedTermsTemplateSchema) });
+
+export const saveTermsTemplateSchema = z.object({
+  name: z.string().trim().min(1, "Give the template a name").max(80, "Keep the name under 80 characters"),
+  html: z.string().trim().min(1, "There are no terms to save").max(TERMS_MAX_LENGTH),
+});
+export type SaveTermsTemplate = z.infer<typeof saveTermsTemplateSchema>;
+
+/** What an order records it started from: a built-in template's key, or a saved one's id. */
+export const termsTemplateRef = z.union([termsTemplateKey, z.string().uuid()]);

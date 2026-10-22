@@ -492,6 +492,102 @@ describe("PurchaseOrderFormDialog", () => {
     });
   });
 
+  /** Terms saved under a name of the client's own (22 Oct 2026). */
+  describe("saved terms templates", () => {
+    const TEMPLATE = "77777777-7777-4777-8777-777777777777";
+    const STEEL = { id: TEMPLATE, name: "Steel supply", html: "<p>1. Freight extra</p>", updatedAt: "2026-10-22T00:00:00.000Z" };
+
+    /** The form's usual routes, and the templates: GET lists, POST and PATCH save. */
+    const withTemplates = (rows: unknown[]) => {
+      const usual = vi.mocked(globalThis.fetch).getMockImplementation()!;
+      vi.mocked(globalThis.fetch).mockImplementation((input, init) => {
+        const url = new URL(String(input), "http://localhost");
+        if (url.pathname.endsWith("/terms-templates") || url.pathname.includes("/terms-templates/")) {
+          const method = (init as RequestInit | undefined)?.method ?? "GET";
+          if (method === "GET") return Promise.resolve(new Response(JSON.stringify({ rows }), { status: 200, headers: { "Content-Type": "application/json" } }));
+          const body = JSON.parse(String((init as RequestInit).body)) as { name: string; html: string };
+          return Promise.resolve(
+            new Response(JSON.stringify({ id: TEMPLATE, name: body.name, html: body.html, updatedAt: null }), {
+              status: method === "POST" ? 201 : 200,
+              headers: { "Content-Type": "application/json" },
+            }),
+          );
+        }
+        return usual(input, init);
+      });
+    };
+    const templateCalls = () =>
+      vi
+        .mocked(globalThis.fetch)
+        .mock.calls.filter(([input, init]) => String(input).includes("/terms-templates") && ((init as RequestInit | undefined)?.method ?? "GET") !== "GET")
+        .map(([input, init]) => ({ url: String(input), method: (init as RequestInit).method, body: JSON.parse(String((init as RequestInit).body)) }));
+
+    it("loads a saved template by its name", async () => {
+      const user = userEvent.setup();
+      withTemplates([STEEL]);
+      open();
+      await screen.findByRole("table");
+
+      await user.selectOptions(await screen.findByLabelText("Saved templates"), "Steel supply");
+      expect(screen.getByRole("textbox", { name: /terms and conditions/i })).toHaveTextContent("1. Freight extra");
+      expect(screen.getByLabelText("Saved templates")).toHaveValue(TEMPLATE);
+    });
+
+    it("saves the terms on the order under a name", async () => {
+      const user = userEvent.setup();
+      withTemplates([]);
+      open();
+      await screen.findByRole("table");
+
+      await user.click(screen.getByRole("textbox", { name: /terms and conditions/i }));
+      await user.keyboard("Payment in 30 days");
+      await user.click(screen.getByRole("button", { name: /save as template/i }));
+      const dialog = await screen.findByRole("dialog", { name: /save terms as a template/i });
+      await user.type(within(dialog).getByLabelText(/template name/i), "Cement supply");
+      await user.click(within(dialog).getByRole("button", { name: "Save template" }));
+
+      await waitFor(() => expect(templateCalls()).toHaveLength(1));
+      expect(templateCalls()[0]).toMatchObject({ method: "POST", body: { name: "Cement supply" } });
+      expect(templateCalls()[0]!.body.html).toContain("Payment in 30 days");
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: /save terms as a template/i })).not.toBeInTheDocument());
+    });
+
+    it("asks before replacing a saved template of the same name, and then updates it", async () => {
+      const user = userEvent.setup();
+      withTemplates([STEEL]);
+      open();
+      await screen.findByRole("table");
+      await screen.findByLabelText("Saved templates");
+
+      await user.click(screen.getByRole("textbox", { name: /terms and conditions/i }));
+      await user.keyboard("New steel terms");
+      await user.click(screen.getByRole("button", { name: /save as template/i }));
+      const dialog = await screen.findByRole("dialog", { name: /save terms as a template/i });
+      await user.type(within(dialog).getByLabelText(/template name/i), "steel SUPPLY");
+      await user.click(within(dialog).getByRole("button", { name: "Save template" }));
+
+      const question = await screen.findByRole("dialog", { name: /replace "steel supply"/i });
+      await user.click(within(question).getByRole("button", { name: "Replace" }));
+      await waitFor(() => expect(templateCalls()).toHaveLength(1));
+      expect(templateCalls()[0]).toMatchObject({ method: "PATCH", body: { name: "steel SUPPLY" } });
+      expect(templateCalls()[0]!.url).toContain(`/terms-templates/${TEMPLATE}`);
+    });
+
+    it("will not save a template with no name", async () => {
+      const user = userEvent.setup();
+      withTemplates([]);
+      open();
+      await screen.findByRole("table");
+      await user.click(screen.getByRole("textbox", { name: /terms and conditions/i }));
+      await user.keyboard("Some terms");
+      await user.click(screen.getByRole("button", { name: /save as template/i }));
+      const dialog = await screen.findByRole("dialog", { name: /save terms as a template/i });
+      await user.click(within(dialog).getByRole("button", { name: "Save template" }));
+      expect(await within(dialog).findByText("Give the template a name.")).toBeInTheDocument();
+      expect(templateCalls()).toHaveLength(0);
+    });
+  });
+
   /**
    * The rules of 15 Sep 2026: billing is the site's own address and is shown,
    * not typed; shipping is ONE of the site's addresses; the location is one of

@@ -7,6 +7,8 @@ import { describeLoadError } from "../../lib/load-error";
 import { usePrintBundle } from "./api";
 import { DocumentRenderer, DocumentStyles } from "./render/DocumentRenderer";
 import { LetterheadSpaceControl, useLetterheadSpace } from "./letterhead";
+import { AMOUNTS_PARAM, withoutAmounts } from "./render/without-amounts";
+import { AmountsToggle } from "./AmountsToggle";
 
 const BUILT_IN = "built-in";
 
@@ -39,15 +41,22 @@ export function DocumentPreviewDialog({
   const [pdfError, setPdfError] = useState<string | null>(null);
   // Room for a letterhead, remembered in this browser; the PDF and the print page both use it.
   const [space, setSpace] = useLetterheadSpace();
+  // A purchase order prints with its amounts, or without them for the site's copy.
+  const canHideAmounts = documentType === "purchase-order";
+  const [showAmounts, setShowAmounts] = useState(true);
 
   const templates = bundle.data?.templates ?? [];
   const templateId = chosen ?? bundle.data?.defaultTemplateId ?? BUILT_IN;
   const template = templates.find((t) => t.id === templateId);
-  const layout = useMemo(() => template?.layout ?? presetLayout("classic", documentType), [template, documentType]);
+  const layout = useMemo(() => {
+    const chosenLayout = template?.layout ?? presetLayout("classic", documentType);
+    return canHideAmounts && !showAmounts ? withoutAmounts(chosenLayout) : chosenLayout;
+  }, [template, documentType, canHideAmounts, showAmounts]);
 
   const close = () => {
     setChosen(null);
     setPdfError(null);
+    setShowAmounts(true);
     onClose();
   };
 
@@ -81,7 +90,7 @@ export function DocumentPreviewDialog({
             Download PDF
           </Button>
           {allowPrint && id && (
-            <Button icon={Printer} onClick={() => navigate(`/print/${documentType}/${id}`)} disabled={!bundle.data}>
+            <Button icon={Printer} onClick={() => navigate(`/print/${documentType}/${id}${canHideAmounts && !showAmounts ? `?${AMOUNTS_PARAM}=no` : ""}`)} disabled={!bundle.data}>
               Print
             </Button>
           )}
@@ -89,8 +98,9 @@ export function DocumentPreviewDialog({
       }
     >
       <DocumentStyles />
-      <div className="mb-3">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
         <LetterheadSpaceControl space={space} onChange={setSpace} />
+        {canHideAmounts && <AmountsToggle showAmounts={showAmounts} onChange={setShowAmounts} />}
       </div>
       {templates.length > 0 && (
         <div className="mb-3 flex items-center gap-2">

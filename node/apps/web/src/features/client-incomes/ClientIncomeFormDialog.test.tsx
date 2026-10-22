@@ -53,6 +53,32 @@ describe("ClientIncomeFormDialog", () => {
       scope: { siteId: SITE, siteName: "Akwada", sites: [{ id: SITE, name: "Akwada" }] },
     });
 
+  /**
+   * ALWAYS A POPUP (client, 22 Oct 2026). With the full-page record layout the
+   * form opened as a page and the list or balance sheet behind it scrolled away.
+   */
+  it("opens as a popup whatever layout records open in", async () => {
+    for (const layout of ["page", "split", "modal"] as const) {
+      const view = renderWithAuth(<ClientIncomeFormDialog open incomeId={null} onClose={() => {}} />, {
+        permissions: ["income.view", "income.add"],
+        scope: { siteId: SITE, siteName: "Akwada", sites: [{ id: SITE, name: "Akwada" }] },
+        layout,
+      });
+      expect(await screen.findByRole("dialog", { name: "Record income" })).toBeInTheDocument();
+      view.unmount();
+    }
+  });
+
+  it("starts on the project it is given and keeps it fixed, though the header shows every site", async () => {
+    renderWithAuth(<ClientIncomeFormDialog open incomeId={null} onClose={() => {}} defaultSiteId={SITE} defaultCompanyId={COMPANY} />, {
+      permissions: ["income.view", "income.add"],
+      scope: { siteId: null, siteName: null, sites: [{ id: SITE, name: "Akwada" }], canSelectAll: true },
+    });
+    expect(await screen.findByText("Akwada")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Project")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText(/^Company/)).toHaveValue(COMPANY));
+  });
+
   it("takes the project from the header and offers only that project's clients", async () => {
     open();
     expect(await screen.findByText("Akwada")).toBeInTheDocument();

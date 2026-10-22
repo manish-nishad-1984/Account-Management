@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
 import { PurchaseOrdersController } from "./purchase-orders.controller";
 import { PurchaseOrdersRepository } from "./purchase-orders.repository";
+import { TermsTemplatesController } from "./terms-templates.controller";
+import { TermsTemplatesRepository } from "./terms-templates.repository";
 
 /**
  * Purchase orders — the first header-with-lines document, and the first that
@@ -11,8 +13,8 @@ import { PurchaseOrdersRepository } from "./purchase-orders.repository";
  * list screen, not through its own idea of what "pending" means.
  */
 @Module({
-  controllers: [PurchaseOrdersController],
-  providers: [PurchaseOrdersRepository],
+  controllers: [PurchaseOrdersController, TermsTemplatesController],
+  providers: [PurchaseOrdersRepository, TermsTemplatesRepository],
   exports: [PurchaseOrdersRepository],
 })
 export class PurchaseOrdersModule {}

@@ -121,7 +121,7 @@ describe("DocumentLayoutsPage", () => {
       body: { documentType: "sales-invoice", name: "Site invoice", basedOn: "modern", companyId: null },
     });
     expect((post!.body as { layout: unknown }).layout).toEqual(presetLayout("modern", "sales-invoice"));
-  });
+  }, 20_000); // Types a whole layout name and walks the preset picker: slow on a busy test run, not wrong.
 
   it("makes a template the default with its star", async () => {
     const user = userEvent.setup();

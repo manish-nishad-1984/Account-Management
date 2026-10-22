@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { rowCapabilitiesSchema } from "./pagination";
-import { TERMS_MAX_LENGTH, termsTemplateKey } from "./purchase-order-terms";
+import { TERMS_MAX_LENGTH, termsTemplateRef } from "./purchase-order-terms";
 import {
   money,
   optionalDate,
@@ -182,7 +182,7 @@ export const purchaseOrderDetailSchema = purchaseOrderRowSchema
     paymentTerms: z.string().nullable(),
 
     /** Which of the three boilerplate templates the terms started from. */
-    termsTemplate: termsTemplateKey.nullable(),
+    termsTemplate: termsTemplateRef.nullable(),
 
     /** Carried from the source and never applied to the totals. */
     totalDiscount: z.string().nullable(),
@@ -286,7 +286,7 @@ export const createPurchaseOrderSchema = z.object({
    */
   terms: optionalText(TERMS_MAX_LENGTH),
   /** Null when the terms were typed from scratch rather than from a template. */
-  termsTemplate: termsTemplateKey.nullable().optional().default(null),
+  termsTemplate: termsTemplateRef.nullable().optional().default(null),
   description: optionalText(2000),
 
   items: z

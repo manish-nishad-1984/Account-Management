@@ -4,19 +4,22 @@ import {
   listResponseSchema,
   purchaseOrderDetailSchema,
   purchaseOrderRowSchema,
+  savedTermsTemplateListSchema,
+  savedTermsTemplateSchema,
   supplierRowSchema,
   type CompanyRow,
   type CreatePurchaseOrder,
   type ListResponse,
   type PurchaseOrderDetail,
   type PurchaseOrderRow,
+  type SaveTermsTemplate,
   type SupplierRow,
   type UpdatePurchaseOrder,
 } from "@accountmanagement/contracts";
 import { useListResource, type ListFilters, type ListParams } from "../../lib/list-query";
 import { useScopedSiteId } from "../../contexts/SiteScopeContext";
 import { useCreateResource, useDeleteResource, useUpdateResource } from "../../lib/crud";
-import { apiRequest } from "../../lib/api-client";
+import { apiRequest, deleteRequest } from "../../lib/api-client";
 
 const RESOURCE = "purchase-orders";
 
@@ -105,3 +108,35 @@ export const useCompanyOptions = () =>
         signal,
       }),
   });
+
+/** Terms and conditions saved by name (client, 22 Oct 2026). */
+const TERMS = "terms-templates";
+
+export const useSavedTermsTemplates = (enabled = true) =>
+  useQuery({
+    queryKey: [TERMS],
+    enabled,
+    queryFn: ({ signal }) => apiRequest(`/${TERMS}`, { schema: savedTermsTemplateListSchema, signal }),
+  });
+
+/** Saves under a new name, or — with an id — replaces that template's name and text. */
+export const useSaveTermsTemplate = () => {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id?: string; body: SaveTermsTemplate }) =>
+      apiRequest(id ? `/${TERMS}/${id}` : `/${TERMS}`, {
+        method: id ? "PATCH" : "POST",
+        body,
+        schema: savedTermsTemplateSchema,
+      }),
+    onSuccess: () => client.invalidateQueries({ queryKey: [TERMS] }),
+  });
+};
+
+export const useDeleteTermsTemplate = () => {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteRequest(`/${TERMS}/${id}`),
+    onSuccess: () => client.invalidateQueries({ queryKey: [TERMS] }),
+  });
+};

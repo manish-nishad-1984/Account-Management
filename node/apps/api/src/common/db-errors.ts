@@ -48,6 +48,10 @@ const CONFLICT_MESSAGES: Record<string, { field: string; message: string }> = {
     field: "name",
     message: "An item with this name already exists",
   },
+  terms_templates_name_lower_key: {
+    field: "name",
+    message: "A terms template with this name already exists",
+  },
   units_name_lower_key: {
     field: "name",
     message: "A unit with this name already exists",

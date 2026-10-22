@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { MinusCircle, PlusCircle, Trash2, Wallet } from "lucide-react";
 import { createClientIncomeSchema } from "@accountmanagement/contracts";
@@ -61,6 +61,13 @@ export function ClientIncomeFormDialog({
   onSaved?: () => void;
 }) {
   const queryClient = useQueryClient();
+  /*
+   * Ids of this form's own. It opens over screens with fields of the same name —
+   * the balance sheet's Company filter — and two "field-company" ids put this
+   * form's label on the page's dropdown behind it.
+   */
+  const uid = useId();
+  const idOf = (name: string) => `${uid}-${name}`;
   const isEdit = incomeId !== null;
   const scope = useSiteScope();
   const detail = useClientIncome(open && isEdit ? incomeId : null);
@@ -194,6 +201,7 @@ export function ClientIncomeFormDialog({
             {lines.map((line, index) => (
               <div key={line.key} className="grid grid-cols-[10rem_1fr_auto] items-start gap-2">
                 <AmountField
+                  id={idOf(`${kind}-amount-${index}`)}
                   label={`${kind} amount ${index + 1}`}
                   labelHidden
                   inputMode="decimal"
@@ -202,6 +210,7 @@ export function ClientIncomeFormDialog({
                   onValue={(raw) => setLines(lines.map((one) => (one.key === line.key ? { ...one, amount: raw } : one)))}
                 />
                 <TextField
+                  id={idOf(`${kind}-remark-${index}`)}
                   label={`${kind} remark ${index + 1}`}
                   labelHidden
                   placeholder={`${kind} remark`}
@@ -241,6 +250,9 @@ export function ClientIncomeFormDialog({
       pending={create.isPending || update.isPending}
       submitLabel={isEdit ? "Save changes" : "Save income"}
       size="xl"
+      // Always a popup (client, 22 Oct 2026): as a full page it scrolled away from
+      // the list or the balance sheet it was opened from.
+      popup
     >
       {isEdit && detail.isLoading ? (
         <p className="py-8 text-center text-sm text-slate-500">Loading income…</p>
@@ -256,6 +268,7 @@ export function ClientIncomeFormDialog({
               </div>
             ) : (
               <SelectField
+                id={idOf("project")}
                 label="Project"
                 required
                 placeholder="Choose…"
@@ -268,6 +281,7 @@ export function ClientIncomeFormDialog({
               />
             )}
             <SelectField
+              id={idOf("company")}
               label="Company"
               required
               hint="The company the money came into"
@@ -277,6 +291,7 @@ export function ClientIncomeFormDialog({
               options={(companies.data?.rows ?? []).map((company) => ({ value: company.id, label: company.name }))}
             />
             <SelectField
+              id={idOf("client")}
               label="Client"
               required
               placeholder={siteId ? (clientRows.length === 0 && !clients.isLoading ? "No client linked to this project" : "Choose…") : "Choose the project first"}
@@ -286,6 +301,7 @@ export function ClientIncomeFormDialog({
               options={clientRows.map((client) => ({ value: client.id, label: client.name }))}
             />
             <TextField
+              id={idOf("date")}
               label="Date received"
               type="date"
               required
@@ -293,6 +309,7 @@ export function ClientIncomeFormDialog({
               onChange={(event) => setIncomeDate(event.target.value)}
             />
             <AmountField
+              id={idOf("amount")}
               label="Amount"
               required
               inputMode="decimal"
@@ -307,6 +324,7 @@ export function ClientIncomeFormDialog({
 
           <FormSection title="Payment details" columns={3}>
             <SelectField
+              id={idOf("method")}
               label="Method"
               placeholder="—"
               value={method}
@@ -314,12 +332,14 @@ export function ClientIncomeFormDialog({
               options={METHODS.map((one) => ({ value: one, label: one }))}
             />
             <TextField
+              id={idOf("reference")}
               label="Reference"
               placeholder="Cheque / UTR no."
               value={referenceNo}
               onChange={(event) => setReferenceNo(event.target.value)}
             />
             <TextAreaField
+              id={idOf("note")}
               label="Note"
               rows={1}
               value={note}
