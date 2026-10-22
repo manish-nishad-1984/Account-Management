@@ -9,6 +9,7 @@ import { EXPORT_COLUMNS as INVENTORY_COLUMNS } from "../inventory/InventoryPage"
 import { EXPORT_COLUMNS as CHALLAN_COLUMNS } from "../inward-challans/InwardChallansPage";
 import { EXPORT_COLUMNS as PAYMENT_COLUMNS } from "../payments/PaymentsPage";
 import { EXPORT_COLUMNS as PAYOUT_COLUMNS } from "../payouts/PayoutListsPage";
+import { WITH_DETAILS_COLUMNS as PAYOUT_DETAIL_COLUMNS, fetchPayoutDetailRows } from "../payouts/PayoutExportButton";
 import { EXPORT_COLUMNS as PURCHASE_INVOICE_COLUMNS } from "../purchase-invoices/PurchaseInvoicesPage";
 import { WITH_ITEMS_COLUMNS, fetchInvoiceLineRows } from "../purchase-invoices/InvoiceExportButton";
 import { EXPORT_COLUMNS as ORDER_COLUMNS } from "../purchase-orders/PurchaseOrdersPage";
@@ -128,6 +129,21 @@ export const EXPORT_DATASETS: ExportDataset[] = [
   listDataset({ key: "income", group: "Invoices & payments", label: "Income", hint: "Client income with additions and deductions", permission: "income", dateLabel: "Income date", bySite: true, byCompany: true, resource: "client-incomes", columns: INCOME_COLUMNS, sheetName: "Income" }),
   listDataset({ key: "payments", group: "Invoices & payments", label: "Payments", hint: "Payments, receipts and opening balances", permission: "reports-payments", dateLabel: "Payment date", bySite: true, byCompany: true, resource: "payments", columns: PAYMENT_COLUMNS, sheetName: "Payments" }),
   listDataset({ key: "payout-lists", group: "Invoices & payments", label: "Payout lists", hint: "Saved payout lists and their totals", permission: "payout", dateLabel: "List date", byCompany: true, resource: "payout-lists", columns: PAYOUT_COLUMNS, sheetName: "Payout lists" }),
+  {
+    key: "payout-list-details",
+    group: "Invoices & payments",
+    label: "Payout list details",
+    hint: "Every party and bill of each payout list",
+    permission: "payout",
+    dateLabel: "List date",
+    byCompany: true,
+    sheet: async (choices) =>
+      workbookSheet(
+        await fetchPayoutDetailRows({}, filtersFor({ dateLabel: "List date", byCompany: true }, choices)),
+        PAYOUT_DETAIL_COLUMNS,
+        "Payout list details",
+      ),
+  },
 ];
 
 /** One-click sets, so the common exports need no thinking. */

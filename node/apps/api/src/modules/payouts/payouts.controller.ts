@@ -16,11 +16,14 @@ import {
   createPayoutListSchema,
   hasPermission,
   listQuerySchema,
+  payoutDetailRequestSchema,
   updatePayoutListSchema,
   type ConfirmPayoutList,
   type CreatePayoutList,
   type ListQuery,
   type ListResponse,
+  type PayoutDetailRequest,
+  type PayoutDetailResponse,
   type PayoutListDetail,
   type PayoutListRow,
   type PayoutOutstandingResponse,
@@ -77,6 +80,16 @@ export class PayoutsController {
     @Query(new ZodValidationPipe(outstandingQuerySchema)) query: { siteId?: string; companyId?: string },
   ): Promise<PayoutOutstandingResponse> {
     return this.payouts.outstanding(query.siteId, query.companyId);
+  }
+
+  /** "Export to Excel" with details: the parties and bills of the lists named. */
+  @Post("lines")
+  @Permissions("payout.view")
+  @HttpCode(200)
+  async lines(
+    @Body(new ZodValidationPipe(payoutDetailRequestSchema)) body: PayoutDetailRequest,
+  ): Promise<PayoutDetailResponse> {
+    return { lines: await this.payouts.linesOf(body.ids) };
   }
 
   @Get(":id")

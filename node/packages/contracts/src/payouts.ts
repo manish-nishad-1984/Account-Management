@@ -128,6 +128,27 @@ export const payoutInvoiceSchema = z.object({
 });
 export type PayoutInvoice = z.infer<typeof payoutInvoiceSchema>;
 
+/**
+ * "Export to Excel" with details (client, 22 Oct 2026): every party of the lists
+ * named, each with its bills and its list's id, read in one request.
+ */
+export const PAYOUT_DETAIL_MAX_IDS = 1000;
+export const payoutDetailRequestSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(PAYOUT_DETAIL_MAX_IDS),
+});
+export type PayoutDetailRequest = z.infer<typeof payoutDetailRequestSchema>;
+export const payoutExportLineSchema = z.object({
+  payoutListId: z.string(),
+  partyId: z.string(),
+  partyName: z.string(),
+  amount: z.string(),
+  extraPaid: z.string().nullable(),
+  invoices: z.array(payoutInvoiceSchema),
+});
+export type PayoutExportLine = z.infer<typeof payoutExportLineSchema>;
+export const payoutDetailResponseSchema = z.object({ lines: z.array(payoutExportLineSchema) });
+export type PayoutDetailResponse = z.infer<typeof payoutDetailResponseSchema>;
+
 export const payoutLineSchema = z.object({
   id: z.string(),
   partyId: z.string(),

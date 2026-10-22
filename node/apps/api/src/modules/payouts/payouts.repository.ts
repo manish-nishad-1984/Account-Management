@@ -4,6 +4,7 @@ import type {
   ConfirmPayoutList,
   CreatePayoutList,
   ListQuery,
+  PayoutExportLine,
   PayoutListDetail,
   PayoutListRow,
   PayoutInvoiceInput,
@@ -367,6 +368,53 @@ export class PayoutsRepository extends BaseRepository {
           .map(({ lineId: _lineId, source, ...rest }) => ({ source: source as "invoice" | "opening_balance", ...rest })),
       })),
     };
+  }
+
+  /**
+   * The parties and bills of many lists at once, for "Export to Excel" with
+   * details: what `findById` reads for one list, less what is owed now, which
+   * is a figure for the screen and not for a sheet of the past.
+   */
+  async linesOf(ids: readonly string[]): Promise<PayoutExportLine[]> {
+    if (ids.length === 0) return [];
+    const lines = await this.db
+      .select({
+        id: payoutListLines.id,
+        payoutListId: payoutListLines.payoutListId,
+        partyId: payoutListLines.partyId,
+        partyName: suppliers.name,
+        amount: sql<string>`${payoutListLines.amount}::text`,
+        extraPaid: sql<string | null>`${payoutListLines.extraPaid}::text`,
+      })
+      .from(payoutListLines)
+      .innerJoin(payoutLists, eq(payoutLists.id, payoutListLines.payoutListId))
+      .innerJoin(suppliers, eq(suppliers.id, payoutListLines.partyId))
+      .where(and(inArray(payoutListLines.payoutListId, [...ids]), eq(payoutLists.isDeleted, false)))
+      .orderBy(asc(payoutListLines.payoutListId), asc(payoutListLines.lineNumber));
+    if (lines.length === 0) return [];
+
+    const bills = await this.db
+      .select({
+        lineId: payoutListInvoices.payoutLineId,
+        source: payoutListInvoices.source,
+        documentId: payoutListInvoices.documentId,
+        displayNo: payoutListInvoices.displayNo,
+        documentDate: sql<string | null>`${payoutListInvoices.documentDate}::text`,
+        siteName: payoutListInvoices.siteName,
+        amount: sql<string>`${payoutListInvoices.amount}::text`,
+        paidAmount: sql<string | null>`${payoutListInvoices.paidAmount}::text`,
+        pendingAtSave: sql<string | null>`${payoutListInvoices.pendingAtSave}::text`,
+      })
+      .from(payoutListInvoices)
+      .innerJoin(payoutListLines, eq(payoutListLines.id, payoutListInvoices.payoutLineId))
+      .where(inArray(payoutListLines.payoutListId, [...ids]))
+      .orderBy(asc(payoutListInvoices.payoutLineId), asc(payoutListInvoices.lineNumber));
+
+    const byLine = new Map<string, PayoutExportLine["invoices"]>();
+    for (const { lineId, source, ...rest } of bills) {
+      byLine.set(lineId, [...(byLine.get(lineId) ?? []), { source: source as "invoice" | "opening_balance", ...rest }]);
+    }
+    return lines.map(({ id, ...line }) => ({ ...line, invoices: byLine.get(id) ?? [] }));
   }
 
   async create(input: CreatePayoutList, actorId: string): Promise<PayoutListDetail> {

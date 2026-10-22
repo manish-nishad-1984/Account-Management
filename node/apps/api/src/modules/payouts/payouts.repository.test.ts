@@ -448,6 +448,36 @@ describe("PayoutsRepository (real PostgreSQL)", () => {
       expect(created.total).toBe(expected);
     });
 
+    /** "Export to Excel" with details (client, 22 Oct 2026). */
+    it("reads the parties and bills of several lists at once, for the Excel with details", async () => {
+      const { first } = await withBills();
+      const one = await repo.create(
+        input([
+          {
+            partyId: alId,
+            amount: "10.00",
+            invoices: [{ source: first.source, documentId: first.documentId, displayNo: first.displayNo, siteName: first.siteName, amount: "10.00", pending: first.pending }],
+          },
+          { partyId: shahId, amount: "50.00" },
+        ] as never),
+        ACTOR,
+      );
+      const two = await repo.create(input([{ partyId: shahId, amount: "20.00" }]), ACTOR);
+      const gone = await repo.create(input([{ partyId: alId, amount: "5.00" }]), ACTOR);
+      await repo.remove(gone.id, ACTOR);
+
+      const lines = await repo.linesOf([one.id, two.id, gone.id]);
+      const ofOne = lines.filter((line) => line.payoutListId === one.id);
+      expect(ofOne.map((line) => [line.partyName, line.amount, line.invoices.length])).toEqual([
+        ["AL BURHAN PIPES", "10.00", 1],
+        ["SHAH ENTERPRISE", "50.00", 0],
+      ]);
+      expect(ofOne[0]!.invoices[0]).toMatchObject({ displayNo: first.displayNo, amount: "10.00", siteName: first.siteName });
+      expect(lines.filter((line) => line.payoutListId === two.id).map((line) => line.amount)).toEqual(["20.00"]);
+      // A deleted list is not exported.
+      expect(lines.some((line) => line.payoutListId === gone.id)).toBe(false);
+    });
+
     it("replaces the bills when the list is edited, and keeps a list with none as it was", async () => {
       const { first } = await withBills();
       const created = await repo.create(

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { PayoutListRow } from "@accountmanagement/contracts";
 import { Copy, Eye, Image as ImageIcon, Plus } from "lucide-react";
-import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
+import { DataGrid, RowActions } from "../../components/DataGrid";
 import { exportAmount, exportDate, type ExportColumn } from "../../lib/grid-export";
 import { Badge, Button, ConfirmDialog, IconButton, PageHeader, SelectField } from "../../components/ui";
 import { useCompanyOptions } from "../purchase-orders/api";
@@ -11,6 +11,7 @@ import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
 import { useDeletePayoutList, usePayoutLists } from "./api";
 import { PayoutListFormDialog } from "./PayoutListFormDialog";
+import { PayoutExportButton } from "./PayoutExportButton";
 import { formatListDate } from "./message";
 import { PayoutImageDialog, ShareNotice, usePayoutSharing } from "./share";
 
@@ -221,14 +222,7 @@ export function PayoutListsPage() {
         }
         actions={
           <>
-            <ExportExcelButton<PayoutListRow>
-              resource="payout-lists"
-              params={screen.listParams}
-              filters={filterValues}
-              columns={EXPORT_COLUMNS}
-              sheetName="Payout lists"
-              fileName="Payout-lists"
-            />
+            <PayoutExportButton params={screen.listParams} filters={filterValues} listColumns={EXPORT_COLUMNS} />
             {canAdd && (
               <Button icon={Plus} onClick={screen.openCreate}>
                 New payout list

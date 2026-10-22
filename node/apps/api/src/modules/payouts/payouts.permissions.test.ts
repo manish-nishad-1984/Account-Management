@@ -17,6 +17,7 @@ describe("payout list permissions", () => {
     ["list", "payout.view"],
     ["outstanding", "payout.view"],
     ["findOne", "payout.view"],
+    ["lines", "payout.view"],
     ["create", "payout.add"],
     ["update", "payout.edit"],
     ["remove", "payout.delete"],
