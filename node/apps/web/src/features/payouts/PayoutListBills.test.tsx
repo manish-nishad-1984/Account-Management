@@ -264,6 +264,45 @@ describe("PayoutListFormDialog - bills", () => {
     expect(within(dialog).getAllByText("Part paid")).toHaveLength(1);
   });
 
+  /** Client, 22 Oct 2026: what is left on a part-paid bill stays pending; the party's tick leaves it out. */
+  it("leaves a part-paid bill unticked when the party is ticked, and ticks it on its own", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation((input: RequestInfo | URL) =>
+      Promise.resolve(
+        json(
+          /outstanding$/.test(String(input))
+            ? { ...OWED, rows: [{ ...OWED.rows[0]!, invoices: [{ ...bill("d1", "BE-1", "16.00", "2026-08-01"), amount: "1416.00" }, bill("d2", "BE-2", "40000.00", "2026-09-01")] }] }
+            : {},
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    open();
+    await user.click(await screen.findByLabelText("Pay Ambica Steel Traders"));
+
+    expect(screen.getByLabelText("Pay bill BE-1 of Ambica Steel Traders")).not.toBeChecked();
+    expect(screen.getByLabelText("Pay bill BE-2 of Ambica Steel Traders")).toBeChecked();
+    expect(screen.getByText("Total").parentElement).toHaveTextContent("40,000.00");
+
+    await user.click(screen.getByLabelText("Pay bill BE-1 of Ambica Steel Traders"));
+    expect(screen.getByLabelText("Amount for bill BE-1")).toHaveValue("16.00");
+  });
+
+  it("ticks a part-paid bill with the party when it is all the party owes", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation((input: RequestInfo | URL) =>
+      Promise.resolve(
+        json(
+          /outstanding$/.test(String(input))
+            ? { ...OWED, rows: [{ ...OWED.rows[0]!, outstanding: "16.00", invoices: [{ ...bill("d1", "BE-1", "16.00", "2026-08-01"), amount: "1416.00" }] }] }
+            : {},
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    open();
+    await user.click(await screen.findByLabelText("Pay Ambica Steel Traders"));
+    expect(screen.getByLabelText("Pay bill BE-1 of Ambica Steel Traders")).toBeChecked();
+  });
+
   it("Cancel on the filter changes nothing", async () => {
     const user = userEvent.setup();
     open();

@@ -28,7 +28,7 @@ import { ConfirmPayoutDialog } from "./ConfirmPayoutDialog";
 import { PartyLedgerDialog } from "./PartyLedgerDialog";
 import { PartyBillFilterDialog } from "./PartyBillFilterDialog";
 import { AgeBadge } from "./AgeBadge";
-import { PartPaid } from "./PartPaid";
+import { PartPaid, isPartPaid } from "./PartPaid";
 import { HistoryButton } from "../audit/HistoryDialog";
 import { AmountField } from "./AmountField";
 import { fromPaise, sumAmounts, toPaise } from "./decimal";
@@ -321,6 +321,10 @@ export function PayoutListFormDialog({
    * THE PARTY'S TICK is "all of it": ticking pays every pending bill in full
    * (and opens them so the owner sees what he has chosen), unticking clears the
    * party. Part-way, with some bills ticked, it clears them.
+   *
+   * A BILL PAID IN PART stays as it is (client, 22 Oct 2026): what is left on it
+   * shows as pending and is not swept into the next list by the party's tick. It
+   * is ticked on its own, or by the party's tick when it is all the party owes.
    */
   const toggle = (row: BuilderRow) => {
     const dropBills = (current: Record<string, Record<string, string>>) => {
@@ -335,7 +339,9 @@ export function PayoutListFormDialog({
       setBills(dropBills);
       return;
     }
-    const payable = row.bills.filter((bill) => (toPaise(bill.pending) ?? 0n) > 0n);
+    const open = row.bills.filter((bill) => (toPaise(bill.pending) ?? 0n) > 0n);
+    const whole = open.filter((bill) => !isPartPaid(bill.billAmount, bill.pending));
+    const payable = whole.length > 0 ? whole : open;
     if (payable.length > 0) {
       setBills((current) => ({
         ...current,
