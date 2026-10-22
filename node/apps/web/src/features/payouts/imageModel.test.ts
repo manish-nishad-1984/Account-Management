@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildImageRows } from "./imageModel";
+import { buildImageRows, buildPayoutSheet } from "./imageModel";
 import { buildPayoutMessage } from "./message";
 
 const bill = (displayNo: string, amount: string) => ({
@@ -35,6 +35,19 @@ describe("the payout list picture", () => {
     expect(rows[1]).toMatchObject({ left: "AL BURHAN", right: "Rs 75,000.00" });
     expect(rows[rows.length - 1]).toMatchObject({ kind: "total", left: "Total (2 parties)", right: "Rs 75,700.00" });
     expect(JSON.stringify(rows)).not.toMatch(/BE-1|SURAT|Friday/);
+  });
+
+  /** Excel of one list, as the picture shows it (client, 22 Oct 2026). */
+  it("makes the same rows in Excel: company and date on top, party and amount, total last, no serial number", () => {
+    const sheet = buildPayoutSheet({ ...list, companyName: "DH PATEL" });
+    expect(sheet.columns.map((column) => column.header)).toEqual(["DH PATEL - Payout list", "05 Oct 2026"]);
+    expect(sheet.rows).toEqual([
+      ["AL BURHAN", "75000.00"],
+      ["SHAH", "700.00"],
+      ["Total (2 parties)", "75700.00"],
+    ]);
+    expect(sheet.fileName).toBe("Payout list DH PATEL 05 Oct 2026");
+    expect(JSON.stringify(sheet)).not.toMatch(/BE-1|SURAT|Friday/);
   });
 
   it("the text message still carries the bills", () => {

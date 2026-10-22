@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { CheckCircle2, ChevronDown, ChevronRight, Copy, Eye, Filter, Image as ImageIcon, Search, Undo2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Copy, Eye, FileSpreadsheet, Filter, Image as ImageIcon, Search, Undo2 } from "lucide-react";
 import {
   createPayoutListSchema,
   type CreatePayoutList,
@@ -586,6 +586,9 @@ export function PayoutListFormDialog({
             </Button>
             <Button variant="outline" icon={Copy} onClick={() => void share.copy(saved)}>
               Copy text
+            </Button>
+            <Button variant="outline" icon={FileSpreadsheet} onClick={() => void share.exportExcel(saved)}>
+              Excel
             </Button>
             <HistoryButton entity="payout-list" entityId={saved.id} title={saved.title ?? formatListDate(saved.listDate)} />
           </>

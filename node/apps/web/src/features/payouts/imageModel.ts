@@ -1,4 +1,4 @@
-import type { PayoutListDetail } from "@accountmanagement/contracts";
+import type { GridExportRequest, PayoutListDetail } from "@accountmanagement/contracts";
 import { formatListDate, rupees } from "./message";
 import { sumAmounts } from "./decimal";
 
@@ -39,4 +39,30 @@ export function buildImageRows(
     right: rupees(sumAmounts(detail.lines.map((line) => line.amount))),
   });
   return rows;
+}
+
+/**
+ * THE SAME LIST AS AN EXCEL SHEET, row for row with the picture (client,
+ * 22 Oct 2026): the company and "Payout list" with its date across the top, each
+ * party and its amount, the total last. No serial number. The amounts go in as
+ * figures, so the sheet adds up in Excel.
+ */
+export function buildPayoutSheet(
+  detail: Pick<PayoutListDetail, "listDate" | "lines"> & { companyName?: string | null },
+): GridExportRequest {
+  const company = detail.companyName?.trim();
+  const date = formatListDate(detail.listDate);
+  const parties = detail.lines.length;
+  return {
+    sheetName: "Payout list",
+    fileName: ["Payout list", company, date].filter(Boolean).join(" "),
+    columns: [
+      { header: company ? `${company} - Payout list` : "Payout list", width: 40, align: "left" },
+      { header: date, width: 18, align: "right" },
+    ],
+    rows: [
+      ...detail.lines.map((line) => [line.partyName, line.amount]),
+      [`Total (${parties} ${parties === 1 ? "party" : "parties"})`, sumAmounts(detail.lines.map((line) => line.amount))],
+    ],
+  };
 }

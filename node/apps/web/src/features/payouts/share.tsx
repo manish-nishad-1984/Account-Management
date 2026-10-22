@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import type { PayoutListDetail } from "@accountmanagement/contracts";
 import { Copy } from "lucide-react";
 import { Alert, Button, Modal } from "../../components/ui";
-import { ApiError } from "../../lib/api-client";
+import { ApiError, postForBlob } from "../../lib/api-client";
+import { saveBlob } from "../../lib/download";
+import { buildPayoutSheet } from "./imageModel";
 import { usePayoutDetailLoader } from "./api";
 import { renderPayoutImage } from "./image";
 import { buildPayoutMessage } from "./message";
@@ -156,7 +158,22 @@ export function usePayoutSharing() {
     [resolve],
   );
 
-  return { showImage, closeImage, copyImage, image, copy, prefetch: loader.prefetch, notice };
+  /** The list as an Excel file, the picture's rows and nothing more (client, 22 Oct 2026). */
+  const exportExcel = useCallback(
+    async (source: string | PayoutListDetail) => {
+      const detail = await resolve(source);
+      if (!detail) return;
+      try {
+        const sheet = buildPayoutSheet(detail);
+        saveBlob(await postForBlob("/grid-exports/xlsx", sheet), `${sheet.fileName}.xlsx`);
+      } catch (error) {
+        setNotice({ tone: "danger", text: error instanceof ApiError ? error.message : "Could not make the Excel file. Try again." });
+      }
+    },
+    [resolve],
+  );
+
+  return { showImage, closeImage, copyImage, image, copy, exportExcel, prefetch: loader.prefetch, notice };
 }
 
 export function ShareNotice({ notice }: { notice: Notice | null }) {

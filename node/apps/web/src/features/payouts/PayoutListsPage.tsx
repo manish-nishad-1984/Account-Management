@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { PayoutListRow } from "@accountmanagement/contracts";
-import { Copy, Eye, Image as ImageIcon, Plus } from "lucide-react";
+import { Copy, Eye, FileSpreadsheet, Image as ImageIcon, Plus } from "lucide-react";
 import { DataGrid, RowActions } from "../../components/DataGrid";
 import { exportAmount, exportDate, type ExportColumn } from "../../lib/grid-export";
 import { Badge, Button, ConfirmDialog, IconButton, PageHeader, SelectField } from "../../components/ui";
@@ -56,7 +56,7 @@ export function PayoutListsPage() {
   const share = usePayoutSharing();
 
   const { openEdit, askDelete } = screen;
-  const { showImage, copy, prefetch } = share;
+  const { showImage, copy, exportExcel, prefetch } = share;
 
   const columns = useMemo<ColumnDef<PayoutListRow, unknown>[]>(
     () => [
@@ -175,6 +175,13 @@ export function PayoutListsPage() {
                 className="size-9 lg:size-7"
               />
               <IconButton label={`Copy ${label} text`} icon={Copy} onClick={() => void copy(id)} className="size-9 lg:size-7" />
+              <IconButton
+                label={`Export ${label} to Excel`}
+                icon={FileSpreadsheet}
+                tone="operation"
+                onClick={() => void exportExcel(id)}
+                className="size-9 lg:size-7"
+              />
               <RowActions
                 capabilities={
                   row.original.status === "confirmed"
@@ -190,7 +197,7 @@ export function PayoutListsPage() {
         },
       },
     ],
-    [openEdit, askDelete, showImage, copy, prefetch],
+    [openEdit, askDelete, showImage, copy, exportExcel, prefetch],
   );
 
   // Whether the OPEN list may be changed comes from its row; a row that has
