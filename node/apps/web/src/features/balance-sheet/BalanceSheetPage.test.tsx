@@ -97,7 +97,11 @@ describe("the Balance Sheet", () => {
 
     const row = (await screen.findByText("AL BURHAN PIPES", { selector: "td" })).closest("tr")!;
     expect([...row.querySelectorAll("td")].map((cell) => cell.textContent)).toEqual(["01 Oct 2026", "AL BURHAN PIPES", "3,00,000.00"]);
+    expect(screen.getByLabelText("Paid total")).toHaveTextContent("3,50,000.00");
     await user.selectOptions(screen.getByLabelText("Filter by supplier"), "SHAH ENTERPRISE");
+    // The total follows the filter.
+    expect(screen.getByLabelText("Paid total")).toHaveTextContent("50,000.00");
+    expect(screen.getByText(/Total \(1 payment\)/)).toBeInTheDocument();
     expect(screen.queryByText("AL BURHAN PIPES", { selector: "td" })).not.toBeInTheDocument();
     expect(screen.getByText("SHAH ENTERPRISE", { selector: "td" })).toBeInTheDocument();
   });

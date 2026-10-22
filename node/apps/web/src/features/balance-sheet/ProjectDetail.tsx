@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { formatDate, formatMoney } from "../../lib/format";
+import { sumAmounts } from "../payouts/decimal";
 import { useBalanceSheetDetail, type BalanceSheetDetailFilters } from "./api";
 
 /**
@@ -29,6 +30,8 @@ export function ProjectDetail({
   const { incomes, suppliers } = detail.data;
   const parties = [...new Map(suppliers.map((one) => [one.partyId, one.partyName])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
   const shown = party === "" ? suppliers : suppliers.filter((one) => one.partyId === party);
+  // The total follows the filter (client, 22 Oct 2026).
+  const shownTotal = sumAmounts(shown.map((one) => one.amount));
   return (
     <div className="grid gap-4 px-4 py-3 md:grid-cols-2">
       <div>
@@ -104,6 +107,16 @@ export function ProjectDetail({
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr className="border-t border-slate-300">
+                <td colSpan={2} className="py-1 pr-3 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Total ({shown.length} {shown.length === 1 ? "payment" : "payments"})
+                </td>
+                <td aria-label="Paid total" className="tabular py-1 text-right font-semibold text-slate-900">
+                  {formatMoney(shownTotal)}
+                </td>
+              </tr>
+            </tfoot>
           </table>
         )}
       </div>
