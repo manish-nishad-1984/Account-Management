@@ -42,7 +42,10 @@ describe("PurchaseInvoiceImportService (real PostgreSQL)", () => {
     const [unit] = await db.insert(schema.units).values({ name: "Bag" }).returning();
     await db.insert(schema.items).values({ name: "Cement", unitId: unit!.id, pricePerUnit: "395.00" });
     const [site] = await db.insert(schema.sites).values({ name: "Akwada", isActive: true }).returning();
-    await db.insert(schema.siteLocations).values({ siteId: site!.id, name: "Block A" });
+    await db.insert(schema.siteLocations).values([
+      { siteId: site!.id, name: "Block A" },
+      { siteId: site!.id, name: "Store yard", address: "Survey 12, Akwada Road, Bhavnagar" },
+    ]);
     await db.insert(schema.suppliers).values([{ name: "SHAH ENTERPRISE", area: "x" }, { name: "AL BURHAN", area: "y" }]);
     await db.insert(schema.companies).values({ name: "DH PATEL", invoicePrefix: "DHP" });
   });
@@ -136,6 +139,25 @@ describe("PurchaseInvoiceImportService (real PostgreSQL)", () => {
     expect(saved).toMatchObject({ supplierInvoiceNo: "B1", totalAmount: "1311.00", tds: "100.00", roundOff: "-5.00", shippingAddress: "Plot 5", isApproved: true });
     expect(saved!.siteLocationId).not.toBeNull();
     expect((await db.select().from(schema.purchaseInvoiceItems)).length).toBe(2);
+  });
+
+  /** Client, 22 Oct 2026: a blank Location Address takes the location's own address. */
+  it("fills a blank Location Address from the location, and keeps one that was typed", async () => {
+    const file = await sheet([
+      row({ ...BASE, "Invoice no": "L1", Quantity: "1", Rate: "100", "Site location": "store yard" }),
+      row({ ...BASE, "Invoice no": "L2", Quantity: "1", Rate: "100", "Site location": "Store yard", "Location Address": "Gate 2" }),
+      row({ ...BASE, "Invoice no": "L3", Quantity: "1", Rate: "100", "Site location": "Block A" }),
+    ]);
+    const preview = await service.preview(file);
+    expect(preview.errors).toEqual([]);
+    await service.import(file, ACTOR, true, { count: preview.invoiceCount, total: preview.totals.total });
+
+    const saved = await db.select().from(schema.purchaseInvoices);
+    const address = (no: string) => saved.find((one) => one.supplierInvoiceNo === no)!.shippingAddress;
+    expect(address("L1")).toBe("Survey 12, Akwada Road, Bhavnagar");
+    expect(address("L2")).toBe("Gate 2");
+    // A location with no address of its own leaves it blank.
+    expect(address("L3") ?? "").toBe("");
   });
 
   it("refuses an invoice total that disagrees with the lines, and saves nothing", async () => {

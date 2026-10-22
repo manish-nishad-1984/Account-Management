@@ -190,7 +190,7 @@ export class PurchaseInvoiceImportService extends BaseRepository {
       this.db.select({ id: suppliers.id, name: suppliers.name }).from(suppliers).where(eq(suppliers.isDeleted, false)),
       this.db.select({ id: companies.id, name: companies.name }).from(companies).where(eq(companies.isDeleted, false)),
       this.db.select({ id: sites.id, name: sites.name }).from(sites).where(eq(sites.isDeleted, false)),
-      this.db.select({ id: siteLocations.id, siteId: siteLocations.siteId, name: siteLocations.name }).from(siteLocations).where(eq(siteLocations.isDeleted, false)),
+      this.db.select({ id: siteLocations.id, siteId: siteLocations.siteId, name: siteLocations.name, address: siteLocations.address }).from(siteLocations).where(eq(siteLocations.isDeleted, false)),
       this.db.select({ id: items.id, name: items.name, unitId: items.unitId }).from(items).where(eq(items.isDeleted, false)),
       this.db.select({ id: units.id, name: units.name }).from(units),
     ]);
@@ -279,9 +279,15 @@ export class PurchaseInvoiceImportService extends BaseRepository {
       const site = siteText ? one(siteBy, siteText, first.row, "site", "Site") : (err(first.row, "site", "Site is required."), null);
 
       let siteLocationId: string | null = null;
+      // LOCATION ADDRESS BLANK: the location's own address, as the form fills it
+      // when a location is picked (client, 22 Oct 2026).
+      let shippingAddress = shipping;
       if (locationText && site) {
         const hit = locationRows.filter((l) => l.siteId === site.id && norm(l.name) === norm(locationText));
-        if (hit.length === 1) siteLocationId = hit[0]!.id;
+        if (hit.length === 1) {
+          siteLocationId = hit[0]!.id;
+          if (!shippingAddress) shippingAddress = hit[0]!.address?.trim() ?? "";
+        }
         else err(first.row, "siteLocation", hit.length === 0 ? `"${locationText}" is not a location of site "${site.name}".` : `Site "${site.name}" has ${hit.length} locations named "${locationText}".`);
       }
 
@@ -371,7 +377,7 @@ export class PurchaseInvoiceImportService extends BaseRepository {
         siteLocationId,
         documentDate: documentDate ? `${documentDate}T00:00:00.000Z` : null,
         challanNo,
-        shippingAddress: shipping,
+        shippingAddress,
         tds: figure(tdsText),
         roundOff: figure(adjustmentText),
         items: lines,
