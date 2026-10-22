@@ -29,6 +29,7 @@ import {
   MapPin,
   Layers,
   Package,
+  Percent,
   Receipt,
   ScrollText,
   Settings,
@@ -158,6 +159,8 @@ export const NAV: NavSection[] = [
       // New (9 Oct 2026): per project, income against what has been billed and paid.
       { label: "Balance Sheet", to: "/reports/balance-sheet", icon: Scale, permission: "income", status: "ready" },
       { label: "Pending Outstanding", to: "/reports/pending-ledger", icon: Hourglass, permission: "reports-payments", status: "ready" },
+      // Input GST from the purchase bills, for the month's return (client, 22 Oct 2026).
+      { label: "GST Report", to: "/reports/gst", icon: Percent, permission: "purchase-invoice", status: "ready" },
     ],
   },
   {

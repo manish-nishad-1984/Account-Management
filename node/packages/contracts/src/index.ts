@@ -39,3 +39,4 @@ export * from "./purchase-invoice-import";
 export * from "./balance-sheets";
 export * from "./audit";
 export * from "./date-range";
+export * from "./gst-report";

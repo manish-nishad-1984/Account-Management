@@ -153,7 +153,8 @@ describe("the sidebar", () => {
     renderShell(["purchase-invoice.view"], "/purchase-invoices");
 
     expect(railNames()).toContain("Invoicing");
-    expect(railNames()).not.toContain("Reports");
+    // Reports shows for the GST Report alone, which reads purchase bills (22 Oct 2026).
+    expect(railNames()).toContain("Reports");
     expect(screen.queryByRole("link", { name: "Payments" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Ledger" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Pending Outstanding" })).not.toBeInTheDocument();
@@ -222,7 +223,7 @@ describe("the sidebar", () => {
   it("names every section in the rail, so nothing has to be hovered or opened to be read", () => {
     renderShell(["supplier.view", "purchase-invoice.view"], "/suppliers");
 
-    expect(railNames()).toEqual(["Masters", "Invoicing", "Excel Export"]);
+    expect(railNames()).toEqual(["Masters", "Invoicing", "Reports", "Excel Export"]);
   });
 
   it("shows nothing at all to a user with no permissions", () => {

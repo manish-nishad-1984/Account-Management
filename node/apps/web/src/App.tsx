@@ -35,6 +35,7 @@ import { PaymentsPage } from "./features/payments/PaymentsPage";
 import { LedgerPage } from "./features/reports/LedgerPage";
 import { PendingLedgerPage } from "./features/reports/PendingLedgerPage";
 import { ExportCentrePage } from "./features/exports/ExportCentrePage";
+import { GstReportPage } from "./features/reports/GstReportPage";
 import { DocumentLayoutsPage } from "./features/document-templates/DocumentLayoutsPage";
 import { PrintDocumentPage } from "./features/document-templates/PrintDocumentPage";
 import { createQueryClient } from "./lib/query-client";
@@ -75,6 +76,7 @@ const IMPLEMENTED: Record<string, React.ComponentType> = {
   "/reports/ledger": LedgerPage,
   "/reports/pending-ledger": PendingLedgerPage,
   "/exports": ExportCentrePage,
+  "/reports/gst": GstReportPage,
   "/settings/document-layouts": DocumentLayoutsPage,
 };
 
