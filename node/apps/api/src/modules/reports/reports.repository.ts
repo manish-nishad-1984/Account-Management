@@ -392,7 +392,8 @@ export class ReportsRepository extends BaseRepository {
   }
 
   /**
-   * The payments behind one project's PAID, one row each, newest first: the
+   * The payments behind one project's PAID, one row each, oldest first (client,
+   * 22 Oct 2026): the
    * same entries `expenseBySite` adds up, so the rows add up to that figure.
    */
   async supplierPayments(
@@ -406,7 +407,7 @@ export class ReportsRepository extends BaseRepository {
         from entries e
         join suppliers s on s.id = e.party_id
         where ${this.where(full)} and e.source_kind = 'payment'
-        order by e.document_date desc nulls last, e.created_at desc, e.document_id
+        order by e.document_date asc nulls first, e.created_at asc, e.document_id
       `),
     );
     return rows.map((row) => ({

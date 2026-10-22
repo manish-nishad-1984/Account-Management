@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Plus } from "lucide-react";
 import { formatDate, formatMoney } from "../../lib/format";
 import { useBalanceSheetDetail, type BalanceSheetDetailFilters } from "./api";
@@ -21,9 +22,13 @@ export function ProjectDetail({
   onAddIncome?: () => void;
 }) {
   const detail = useBalanceSheetDetail(siteId, filters);
+  // The supplier picked in the payments' header; "" for every supplier.
+  const [party, setParty] = useState("");
   if (detail.isLoading) return <p className="px-4 py-3 text-sm text-slate-500">Loading…</p>;
   if (!detail.data) return <p className="px-4 py-3 text-sm text-rose-700">Could not load this project.</p>;
   const { incomes, suppliers } = detail.data;
+  const parties = [...new Map(suppliers.map((one) => [one.partyId, one.partyName])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const shown = party === "" ? suppliers : suppliers.filter((one) => one.partyId === party);
   return (
     <div className="grid gap-4 px-4 py-3 md:grid-cols-2">
       <div>
@@ -69,16 +74,32 @@ export function ProjectDetail({
           <table className="w-full text-sm">
             <thead className="text-xs text-slate-500">
               <tr>
-                <th className="py-1 pr-3 text-left font-medium">Supplier</th>
                 <th className="py-1 pr-3 text-left font-medium">Date</th>
+                <th className="py-1 pr-3 text-left font-medium">
+                  {/* Filter by supplier, in the column's own header (client, 22 Oct 2026). */}
+                  <select
+                    aria-label="Filter by supplier"
+                    value={party}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(event) => setParty(event.target.value)}
+                    className="max-w-[16rem] rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs font-medium text-slate-700"
+                  >
+                    <option value="">Supplier (all)</option>
+                    {parties.map(([id, name]) => (
+                      <option key={id} value={id}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </th>
                 <th className="py-1 text-right font-medium">Paid amount</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {suppliers.map((one) => (
+              {shown.map((one) => (
                 <tr key={one.id}>
-                  <td className="py-1 pr-3 text-slate-800">{one.partyName}</td>
                   <td className="tabular py-1 pr-3 text-slate-600">{one.paymentDate ? formatDate(one.paymentDate) : "—"}</td>
+                  <td className="py-1 pr-3 text-slate-800">{one.partyName}</td>
                   <td className="tabular py-1 text-right font-medium text-slate-900">{formatMoney(one.amount)}</td>
                 </tr>
               ))}

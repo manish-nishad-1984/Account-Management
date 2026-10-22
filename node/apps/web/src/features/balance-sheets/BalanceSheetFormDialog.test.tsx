@@ -91,7 +91,7 @@ describe("BalanceSheetFormDialog", () => {
 
     await user.click(await screen.findByLabelText("Show Akwada Lake Front"));
     expect(await screen.findByText("GUJARAT JHM HOTEL")).toBeInTheDocument();
-    expect(screen.getByText("A.K. TIMBER TRADERS")).toBeInTheDocument();
+    expect(screen.getByText("A.K. TIMBER TRADERS", { selector: "td" })).toBeInTheDocument();
     const asked = vi.mocked(globalThis.fetch).mock.calls.map(([input]) => String(input)).find((url) => url.includes("/balance-sheet/site/s1"))!;
     expect(asked).toContain("incomeFrom=2026-10-01");
     expect(asked).toContain("invoiceFrom=2026-09-01");

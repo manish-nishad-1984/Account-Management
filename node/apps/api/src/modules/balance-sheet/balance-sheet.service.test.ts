@@ -193,6 +193,11 @@ describe("BalanceSheetService (real PostgreSQL)", () => {
     ]);
     expect(detail.suppliers.map((one) => [one.partyId, one.partyName, one.amount])).toEqual([[supplierId, "AL BURHAN PIPES", "150.00"]]);
     expect(detail.suppliers[0]!.paymentDate).not.toBeNull();
+
+    // Oldest payment first (client, 22 Oct 2026).
+    await pay(akwada, patel, "60.00", { paymentDate: "2026-01-05T00:00:00.000Z" });
+    const ordered = await service.detail(akwada, {});
+    expect(ordered.suppliers.map((one) => one.amount)).toEqual(["60.00", "150.00"]);
   });
 
   it("counts a saved sheet's income and its bills over their own dates in the detail too", async () => {

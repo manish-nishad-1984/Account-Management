@@ -47,7 +47,10 @@ describe("the Balance Sheet", () => {
         /\/balance-sheet\/site\//,
         {
           incomes: [{ id: "i1", incomeDate: "2026-10-05", clientName: "Shah Developers", companyName: "DH Patel", total: "900000.00" }],
-          suppliers: [{ id: "pay1", partyId: "p1", partyName: "AL BURHAN PIPES", paymentDate: "2026-10-08T00:00:00.000Z", amount: "300000.00" }],
+          suppliers: [
+            { id: "pay1", partyId: "p1", partyName: "AL BURHAN PIPES", paymentDate: "2026-10-01T00:00:00.000Z", amount: "300000.00" },
+            { id: "pay2", partyId: "p2", partyName: "SHAH ENTERPRISE", paymentDate: "2026-10-05T00:00:00.000Z", amount: "50000.00" },
+          ],
         },
       ],
       [/\/balance-sheet$/, sheet],
@@ -80,10 +83,23 @@ describe("the Balance Sheet", () => {
     await user.click(await screen.findByLabelText("Show Akwada Lake Front"));
 
     expect(await screen.findByText("Shah Developers")).toBeInTheDocument();
-    const payment = screen.getByText("AL BURHAN PIPES").closest("tr")!;
-    expect(payment).toHaveTextContent("08 Oct 2026");
+    const payment = screen.getByText("AL BURHAN PIPES", { selector: "td" }).closest("tr")!;
+    expect(payment).toHaveTextContent("01 Oct 2026");
     expect(payment).toHaveTextContent("3,00,000.00");
     expect(screen.queryByText("To pay")).not.toBeInTheDocument();
+  });
+
+  /** Date first, then supplier, and a supplier filter in the header (client, 22 Oct 2026). */
+  it("lists the payments date first and filters them by supplier from the header", async () => {
+    const user = userEvent.setup();
+    renderWithAuth(<BalanceSheetPage />, { permissions: ["reports-payments.view", "income.view"] });
+    await user.click(await screen.findByLabelText("Show Akwada Lake Front"));
+
+    const row = (await screen.findByText("AL BURHAN PIPES", { selector: "td" })).closest("tr")!;
+    expect([...row.querySelectorAll("td")].map((cell) => cell.textContent)).toEqual(["01 Oct 2026", "AL BURHAN PIPES", "3,00,000.00"]);
+    await user.selectOptions(screen.getByLabelText("Filter by supplier"), "SHAH ENTERPRISE");
+    expect(screen.queryByText("AL BURHAN PIPES", { selector: "td" })).not.toBeInTheDocument();
+    expect(screen.getByText("SHAH ENTERPRISE", { selector: "td" })).toBeInTheDocument();
   });
 
   /** Record income from the sheet (client, 22 Oct 2026), the open project kept. */
@@ -101,7 +117,7 @@ describe("the Balance Sheet", () => {
     const dialog = await screen.findByRole("dialog", { name: "Record income" });
     // The project is the row's and is fixed; the sheet behind stays open on it.
     expect(within(dialog).getByText("Akwada Lake Front")).toBeInTheDocument();
-    expect(screen.getByText("AL BURHAN PIPES")).toBeInTheDocument();
+    expect(screen.getByText("AL BURHAN PIPES", { selector: "td" })).toBeInTheDocument();
   });
 
   /**
