@@ -61,7 +61,11 @@ export const balanceSheetResponseSchema = z.object({
 });
 export type BalanceSheetResponse = z.infer<typeof balanceSheetResponseSchema>;
 
-/** What lies behind one project's row: its income entries and its suppliers. */
+/**
+ * What lies behind one project's row: its income entries and, beside them, the
+ * payments made to suppliers for it, one row each with its date (client,
+ * 22 Oct 2026: "sirf supplier, date, paid amount").
+ */
 export const balanceSheetDetailSchema = z.object({
   incomes: z.array(
     z.object({
@@ -74,11 +78,11 @@ export const balanceSheetDetailSchema = z.object({
   ),
   suppliers: z.array(
     z.object({
+      id: z.string(),
       partyId: z.string(),
       partyName: z.string(),
-      billed: z.string(),
-      paid: z.string(),
-      stillToPay: z.string(),
+      paymentDate: z.string().nullable(),
+      amount: z.string(),
     }),
   ),
 });

@@ -3,7 +3,8 @@ import { formatDate, formatMoney } from "../../lib/format";
 import { useBalanceSheetDetail, type BalanceSheetDetailFilters } from "./api";
 
 /**
- * What is behind one project's row: the income entries and the suppliers.
+ * What is behind one project's row: the income entries and, beside them, each
+ * payment made to a supplier: supplier, date and amount only (client, 22 Oct 2026).
  *
  * Shared by the Balance Sheet report and the saved Balance Sheets, so the two
  * open a project the same way (client, 22 Oct 2026: "all in one in balance
@@ -63,24 +64,22 @@ export function ProjectDetail({
       <div>
         <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Suppliers</h3>
         {suppliers.length === 0 ? (
-          <p className="text-sm text-slate-500">No supplier bills or payments.</p>
+          <p className="text-sm text-slate-500">No payments to suppliers.</p>
         ) : (
           <table className="w-full text-sm">
             <thead className="text-xs text-slate-500">
               <tr>
                 <th className="py-1 pr-3 text-left font-medium">Supplier</th>
-                <th className="py-1 text-right font-medium">Billed</th>
-                <th className="py-1 text-right font-medium">Paid</th>
-                <th className="py-1 text-right font-medium">To pay</th>
+                <th className="py-1 pr-3 text-left font-medium">Date</th>
+                <th className="py-1 text-right font-medium">Paid amount</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {suppliers.map((one) => (
-                <tr key={one.partyId}>
+                <tr key={one.id}>
                   <td className="py-1 pr-3 text-slate-800">{one.partyName}</td>
-                  <td className="tabular py-1 text-right text-slate-700">{formatMoney(one.billed)}</td>
-                  <td className="tabular py-1 text-right text-slate-700">{formatMoney(one.paid)}</td>
-                  <td className="tabular py-1 text-right font-medium text-slate-900">{formatMoney(one.stillToPay)}</td>
+                  <td className="tabular py-1 pr-3 text-slate-600">{one.paymentDate ? formatDate(one.paymentDate) : "—"}</td>
+                  <td className="tabular py-1 text-right font-medium text-slate-900">{formatMoney(one.amount)}</td>
                 </tr>
               ))}
             </tbody>

@@ -391,32 +391,30 @@ export class ReportsRepository extends BaseRepository {
     }));
   }
 
-  /** The same figures for ONE project, split by supplier: what is behind its row. */
-  async expenseBySupplier(
+  /**
+   * The payments behind one project's PAID, one row each, newest first: the
+   * same entries `expenseBySite` adds up, so the rows add up to that figure.
+   */
+  async supplierPayments(
     filter: Omit<ReportFilter, "direction">,
-  ): Promise<{ partyId: string; partyName: string; billed: string; paid: string }[]> {
+  ): Promise<{ id: string; partyId: string; partyName: string; paymentDate: string | null; amount: string }[]> {
     const full: ReportFilter = { ...filter, direction: "out" };
-    const rows = rawRows<{ party_id: string; party_name: string; billed: string; paid: string }>(
+    const rows = rawRows<{ document_id: string; party_id: string; party_name: string; document_date: unknown; amount: string }>(
       await this.db.execute(sql`
         with entries as (${this.entries(full)})
-        select e.party_id, s.name as party_name,
-          coalesce(sum(case
-            when e.source_kind = 'invoice' and e.effect = 'credit' then e.amount
-            when e.source_kind = 'invoice' and e.effect = 'debit' then -e.amount
-            else 0 end), 0)::text as billed,
-          coalesce(sum(case when e.source_kind = 'payment' then e.amount else 0 end), 0)::text as paid
+        select e.document_id, e.party_id, s.name as party_name, e.document_date, e.amount::text as amount
         from entries e
         join suppliers s on s.id = e.party_id
-        where ${this.where(full)} and e.source_kind in ('invoice', 'payment')
-        group by e.party_id, s.name
-        order by s.name
+        where ${this.where(full)} and e.source_kind = 'payment'
+        order by e.document_date desc nulls last, e.created_at desc, e.document_id
       `),
     );
     return rows.map((row) => ({
+      id: String(row.document_id),
       partyId: String(row.party_id),
       partyName: String(row.party_name),
-      billed: this.money(row.billed),
-      paid: this.money(row.paid),
+      paymentDate: row.document_date === null ? null : new Date(String(row.document_date)).toISOString(),
+      amount: this.money(row.amount),
     }));
   }
 

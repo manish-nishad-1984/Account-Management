@@ -182,7 +182,7 @@ describe("BalanceSheetService (real PostgreSQL)", () => {
     expect(kept.id).toBeDefined();
   });
 
-  it("shows what is behind a project: its income entries and its suppliers", async () => {
+  it("shows what is behind a project: its income entries and each payment to a supplier", async () => {
     await income(akwada, patel, "1000.00");
     await invoice(akwada, patel, "A-1", "400.00");
     await pay(akwada, patel, "150.00");
@@ -191,9 +191,8 @@ describe("BalanceSheetService (real PostgreSQL)", () => {
     expect(detail.incomes.map((one) => [one.clientName, one.companyName, one.total])).toEqual([
       ["Shah Developers", "DH Patel", "1000.00"],
     ]);
-    expect(detail.suppliers).toEqual([
-      { partyId: supplierId, partyName: "AL BURHAN PIPES", billed: "400.00", paid: "150.00", stillToPay: "250.00" },
-    ]);
+    expect(detail.suppliers.map((one) => [one.partyId, one.partyName, one.amount])).toEqual([[supplierId, "AL BURHAN PIPES", "150.00"]]);
+    expect(detail.suppliers[0]!.paymentDate).not.toBeNull();
   });
 
   it("counts a saved sheet's income and its bills over their own dates in the detail too", async () => {
@@ -209,10 +208,10 @@ describe("BalanceSheetService (real PostgreSQL)", () => {
       invoiceTo: "2026-10-31",
     });
     expect(detail.incomes.map((one) => one.total)).toEqual(["1000.00"]);
-    expect(detail.suppliers.map((one) => one.billed)).toEqual(["70.00"]);
+    expect(detail.suppliers).toEqual([]);
 
     const both = await service.detail(akwada, { fromDate: "2026-10-01", toDate: "2026-10-31" });
     expect(both.incomes.map((one) => one.total)).toEqual(["250.00"]);
-    expect(both.suppliers.map((one) => one.billed)).toEqual(["70.00"]);
+    expect(both.suppliers).toEqual([]);
   });
 });

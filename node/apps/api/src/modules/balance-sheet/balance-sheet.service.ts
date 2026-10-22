@@ -102,7 +102,7 @@ export class BalanceSheetService {
     return { rows, totals: present(total) };
   }
 
-  /** What is behind one project's row: its income entries and its suppliers. */
+  /** What is behind one project's row: its income entries and its supplier payments. */
   async detail(siteId: string, query: BalanceSheetDetailQuery): Promise<BalanceSheetDetail> {
     const range = (from: string | undefined, to: string | undefined) => ({
       siteId,
@@ -112,16 +112,8 @@ export class BalanceSheetService {
     });
     const [incomes, suppliers] = await Promise.all([
       this.incomes.incomeEntries(range(query.incomeFrom, query.incomeTo)),
-      this.reports.expenseBySupplier(range(query.invoiceFrom, query.invoiceTo)),
+      this.reports.supplierPayments(range(query.invoiceFrom, query.invoiceTo)),
     ]);
-    return {
-      incomes,
-      suppliers: suppliers
-        .filter((one) => toPaise(one.billed) !== 0n || toPaise(one.paid) !== 0n)
-        .map((one) => ({
-          ...one,
-          stillToPay: fromPaise(toPaise(one.billed) - toPaise(one.paid)),
-        })),
-    };
+    return { incomes, suppliers };
   }
 }

@@ -47,7 +47,7 @@ describe("the Balance Sheet", () => {
         /\/balance-sheet\/site\//,
         {
           incomes: [{ id: "i1", incomeDate: "2026-10-05", clientName: "Shah Developers", companyName: "DH Patel", total: "900000.00" }],
-          suppliers: [{ partyId: "p1", partyName: "AL BURHAN PIPES", billed: "500000.00", paid: "300000.00", stillToPay: "200000.00" }],
+          suppliers: [{ id: "pay1", partyId: "p1", partyName: "AL BURHAN PIPES", paymentDate: "2026-10-08T00:00:00.000Z", amount: "300000.00" }],
         },
       ],
       [/\/balance-sheet$/, sheet],
@@ -80,7 +80,10 @@ describe("the Balance Sheet", () => {
     await user.click(await screen.findByLabelText("Show Akwada Lake Front"));
 
     expect(await screen.findByText("Shah Developers")).toBeInTheDocument();
-    expect(screen.getByText("AL BURHAN PIPES")).toBeInTheDocument();
+    const payment = screen.getByText("AL BURHAN PIPES").closest("tr")!;
+    expect(payment).toHaveTextContent("08 Oct 2026");
+    expect(payment).toHaveTextContent("3,00,000.00");
+    expect(screen.queryByText("To pay")).not.toBeInTheDocument();
   });
 
   /** Record income from the sheet (client, 22 Oct 2026), the open project kept. */
