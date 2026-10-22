@@ -16,8 +16,16 @@ export interface BalanceSheetFilters {
   toDate?: string;
 }
 
+/** A project's detail; a saved sheet may give income and invoices their own dates. */
+export interface BalanceSheetDetailFilters extends Omit<BalanceSheetFilters, "siteId"> {
+  incomeFrom?: string;
+  incomeTo?: string;
+  invoiceFrom?: string;
+  invoiceTo?: string;
+}
+
 /** Only defined, non-empty values reach the URL. */
-const toSearch = (filters: BalanceSheetFilters): string => {
+const toSearch = (filters: BalanceSheetFilters | BalanceSheetDetailFilters): string => {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {
     if (value) search.set(key, value);
@@ -38,7 +46,7 @@ export const useBalanceSheet = (filters: BalanceSheetFilters, enabled = true) =>
   });
 
 /** One project's income entries and suppliers, fetched when its row is opened. */
-export const useBalanceSheetDetail = (siteId: string | null, filters: Omit<BalanceSheetFilters, "siteId">) =>
+export const useBalanceSheetDetail = (siteId: string | null, filters: BalanceSheetDetailFilters) =>
   useQuery({
     queryKey: [RESOURCE, "site", siteId, filters],
     enabled: siteId !== null,

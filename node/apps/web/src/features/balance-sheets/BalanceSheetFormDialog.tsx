@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Calculator } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Calculator, ChevronDown, ChevronRight, Plus } from "lucide-react";
 import {
+  hasPermission,
   createBalanceSheetSchema,
   type BalanceSheetPreview,
   type BalanceSheetRow,
@@ -8,6 +9,9 @@ import {
 import { ExportExcelButton } from "../../components/DataGrid";
 import { Alert, Button, FormDialog, FormSection, SelectField, TextField } from "../../components/ui";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
+import { useAuth } from "../../contexts/AuthContext";
+import { ProjectDetail } from "../balance-sheet/ProjectDetail";
+import { ClientIncomeFormDialog } from "../client-incomes/ClientIncomeFormDialog";
 import { ApiError } from "../../lib/api-client";
 import { formatMoney } from "../../lib/format";
 import { exportAmount, type ExportColumn } from "../../lib/grid-export";
@@ -72,6 +76,12 @@ export function BalanceSheetFormDialog({
   const [note, setNote] = useState("");
   const [generated, setGenerated] = useState<{ key: string; data: BalanceSheetPreview } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A project opened to its income and suppliers, as on the report, and income
+  // recorded from here (client, 22 Oct 2026: "all in one in balance sheet").
+  const [openSite, setOpenSite] = useState<string | null>(null);
+  const [addingIncome, setAddingIncome] = useState<{ siteId?: string } | null>(null);
+  const { user } = useAuth();
+  const canAddIncome = !readOnly && hasPermission(user?.permissions ?? [], "income", "add");
 
   /** The filters that decide the figures. Title and note do not. */
   const filterKey = (values: { companyId: string; siteId: string; incomeFrom: string; incomeTo: string; invoiceFrom: string; invoiceTo: string }) =>
@@ -81,6 +91,7 @@ export function BalanceSheetFormDialog({
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setOpenSite(null);
     preview.reset();
     if (!isEdit) {
       setTitle("");
@@ -178,6 +189,7 @@ export function BalanceSheetFormDialog({
   const exportRows: BalanceSheetRow[] = data ? [...data.rows, { siteId: null, siteName: "Total", ...data.totals }] : [];
 
   return (
+    <>
     <FormDialog
       open={open}
       onClose={onClose}
@@ -230,6 +242,11 @@ export function BalanceSheetFormDialog({
               <Button type="button" variant="secondary" icon={Calculator} onClick={() => void generate()} loading={preview.isPending}>
                 Generate
               </Button>
+              {canAddIncome && (
+                <Button type="button" variant="secondary" icon={Plus} onClick={() => setAddingIncome({})}>
+                  Add income
+                </Button>
+              )}
               {data && !current && (
                 <span className="text-xs text-amber-700">The filters changed. Generate again before saving.</span>
               )}
@@ -258,17 +275,52 @@ export function BalanceSheetFormDialog({
                       </td>
                     </tr>
                   )}
-                  {data.rows.map((row) => (
-                    <tr key={row.siteId ?? "none"}>
-                      <td className="px-3 py-1.5 font-medium text-slate-900">{row.siteName}</td>
-                      <Num value={row.income} />
-                      <Num value={row.billed} />
-                      <Num value={row.paid} />
-                      <Num value={row.stillToPay} />
-                      <Num value={row.cashBalance} strong />
-                      <Num value={row.projectResult} strong />
-                    </tr>
-                  ))}
+                  {data.rows.map((row) => {
+                    const isOpen = row.siteId !== null && openSite === row.siteId;
+                    return (
+                      <Fragment key={row.siteId ?? "none"}>
+                        <tr
+                          className={row.siteId ? "cursor-pointer hover:bg-slate-50" : undefined}
+                          onClick={() => row.siteId && setOpenSite(isOpen ? null : row.siteId)}
+                        >
+                          <td className="px-3 py-1.5 font-medium text-slate-900">
+                            <span className="inline-flex items-center gap-1.5">
+                              {row.siteId ? (
+                                <button
+                                  type="button"
+                                  aria-label={`${isOpen ? "Hide" : "Show"} ${row.siteName}`}
+                                  aria-expanded={isOpen}
+                                  className="text-slate-400"
+                                >
+                                  {isOpen ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                                </button>
+                              ) : (
+                                <span className="size-4" />
+                              )}
+                              {row.siteName}
+                            </span>
+                          </td>
+                          <Num value={row.income} />
+                          <Num value={row.billed} />
+                          <Num value={row.paid} />
+                          <Num value={row.stillToPay} />
+                          <Num value={row.cashBalance} strong />
+                          <Num value={row.projectResult} strong />
+                        </tr>
+                        {isOpen && row.siteId && (
+                          <tr className="bg-slate-50/60">
+                            <td colSpan={7}>
+                              <ProjectDetail
+                                siteId={row.siteId}
+                                filters={{ companyId, incomeFrom, incomeTo, invoiceFrom, invoiceTo }}
+                                onAddIncome={canAddIncome ? () => setAddingIncome({ siteId: row.siteId! }) : undefined}
+                              />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
                 <tfoot className="bg-slate-50">
                   <tr>
@@ -289,5 +341,18 @@ export function BalanceSheetFormDialog({
         </>
       )}
     </FormDialog>
+    {/* Outside the form: a submit inside it would bubble to this one through the portal. */}
+    <ClientIncomeFormDialog
+      open={addingIncome !== null}
+      incomeId={null}
+      defaultSiteId={addingIncome?.siteId}
+      defaultCompanyId={companyId || undefined}
+      // The figures on screen count income: work them out again with it.
+      onSaved={() => {
+        if (generated) void generate();
+      }}
+      onClose={() => setAddingIncome(null)}
+    />
+    </>
   );
 }

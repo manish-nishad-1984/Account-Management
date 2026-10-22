@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type {
   BalanceSheetDetail,
+  BalanceSheetDetailQuery,
   BalanceSheetQuery,
   BalanceSheetResponse,
   BalanceSheetRow,
@@ -102,11 +103,16 @@ export class BalanceSheetService {
   }
 
   /** What is behind one project's row: its income entries and its suppliers. */
-  async detail(siteId: string, query: Omit<BalanceSheetQuery, "siteId">): Promise<BalanceSheetDetail> {
-    const filter = { ...query, siteId };
+  async detail(siteId: string, query: BalanceSheetDetailQuery): Promise<BalanceSheetDetail> {
+    const range = (from: string | undefined, to: string | undefined) => ({
+      siteId,
+      companyId: query.companyId,
+      fromDate: from ?? query.fromDate,
+      toDate: to ?? query.toDate,
+    });
     const [incomes, suppliers] = await Promise.all([
-      this.incomes.incomeEntries(filter),
-      this.reports.expenseBySupplier(filter),
+      this.incomes.incomeEntries(range(query.incomeFrom, query.incomeTo)),
+      this.reports.expenseBySupplier(range(query.invoiceFrom, query.invoiceTo)),
     ]);
     return {
       incomes,

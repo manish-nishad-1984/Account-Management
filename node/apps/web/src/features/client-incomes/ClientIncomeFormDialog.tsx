@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { MinusCircle, PlusCircle, Trash2, Wallet } from "lucide-react";
 import { createClientIncomeSchema } from "@accountmanagement/contracts";
 import { Button, FormDialog, FormSection, IconButton, SelectField, TextAreaField, TextField } from "../../components/ui";
@@ -42,11 +43,24 @@ export function ClientIncomeFormDialog({
   open,
   incomeId,
   onClose,
+  defaultSiteId,
+  defaultCompanyId,
+  onSaved,
 }: {
   open: boolean;
   incomeId: string | null;
   onClose: () => void;
+  /**
+   * A new entry for THIS project, fixed — the balance sheet's "+ Add income" on a
+   * project row (client, 22 Oct 2026). Otherwise the header's project.
+   */
+  defaultSiteId?: string;
+  /** The company the sheet is filtered to, chosen to start with. */
+  defaultCompanyId?: string;
+  /** After a save, before the dialog closes. */
+  onSaved?: () => void;
 }) {
+  const queryClient = useQueryClient();
   const isEdit = incomeId !== null;
   const scope = useSiteScope();
   const detail = useClientIncome(open && isEdit ? incomeId : null);
@@ -73,8 +87,8 @@ export function ClientIncomeFormDialog({
     setError(null);
     if (!isEdit) {
       // The project is the header's; a user looking at every site chooses one.
-      setSiteId(scope.siteId ?? "");
-      setCompanyId("");
+      setSiteId(defaultSiteId ?? scope.siteId ?? "");
+      setCompanyId(defaultCompanyId ?? "");
       setClientId("");
       setIncomeDate(todayInput());
       setAmount("");
@@ -111,7 +125,7 @@ export function ClientIncomeFormDialog({
     () => scope.sites.find((site) => site.id === siteId)?.name ?? "",
     [scope.sites, siteId],
   );
-  const siteLocked = isEdit || scope.siteId !== null;
+  const siteLocked = isEdit || scope.siteId !== null || Boolean(defaultSiteId);
 
   const submit = async () => {
     setError(null);
@@ -147,6 +161,9 @@ export function ClientIncomeFormDialog({
       } else {
         await create.mutateAsync(parsed.data);
       }
+      // The balance sheets count income: the report and any project opened on it.
+      void queryClient.invalidateQueries({ queryKey: ["balance-sheet"] });
+      onSaved?.();
       onClose();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "The entry could not be saved.");

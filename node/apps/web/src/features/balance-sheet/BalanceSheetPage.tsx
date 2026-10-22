@@ -1,14 +1,17 @@
 import { Fragment, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
-import type { BalanceSheetRow } from "@accountmanagement/contracts";
+import { ChevronDown, ChevronRight, Plus } from "lucide-react";
+import { hasPermission, type BalanceSheetRow } from "@accountmanagement/contracts";
 import { ExportExcelButton } from "../../components/DataGrid";
-import { Alert, PageHeader, SelectField, TextField } from "../../components/ui";
+import { Alert, Button, PageHeader, SelectField, TextField } from "../../components/ui";
+import { useAuth } from "../../contexts/AuthContext";
 import { useScopedSiteId, useSiteScope } from "../../contexts/SiteScopeContext";
 import { ApiError } from "../../lib/api-client";
-import { formatDate, formatMoney } from "../../lib/format";
+import { formatMoney } from "../../lib/format";
 import { exportAmount, type ExportColumn } from "../../lib/grid-export";
 import { useCompanyOptions } from "../purchase-orders/api";
-import { useBalanceSheet, useBalanceSheetDetail, type BalanceSheetFilters } from "./api";
+import { useBalanceSheet, type BalanceSheetFilters } from "./api";
+import { ProjectDetail } from "./ProjectDetail";
+import { ClientIncomeFormDialog } from "../client-incomes/ClientIncomeFormDialog";
 
 /** The sheet the Export button writes: the rows on screen, then the Total. */
 const EXPORT_COLUMNS: ExportColumn<BalanceSheetRow>[] = [
@@ -41,64 +44,6 @@ const Plain = ({ value, className = "text-slate-700" }: { value: string; classNa
   <span className={`tabular block text-right ${className}`}>{formatMoney(value)}</span>
 );
 
-function Detail({ siteId, filters }: { siteId: string; filters: Omit<BalanceSheetFilters, "siteId"> }) {
-  const detail = useBalanceSheetDetail(siteId, filters);
-  if (detail.isLoading) return <p className="px-4 py-3 text-sm text-slate-500">Loading…</p>;
-  if (!detail.data) return <p className="px-4 py-3 text-sm text-rose-700">Could not load this project.</p>;
-  const { incomes, suppliers } = detail.data;
-  return (
-    <div className="grid gap-4 px-4 py-3 md:grid-cols-2">
-      <div>
-        <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Income received</h3>
-        {incomes.length === 0 ? (
-          <p className="text-sm text-slate-500">No income recorded.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <tbody className="divide-y divide-slate-100">
-              {incomes.map((one) => (
-                <tr key={one.id}>
-                  <td className="tabular py-1 pr-3 text-slate-600">{formatDate(one.incomeDate)}</td>
-                  <td className="py-1 pr-3 text-slate-800">
-                    {one.clientName} <span className="text-xs text-slate-500">· {one.companyName}</span>
-                  </td>
-                  <td className="tabular py-1 text-right font-medium text-slate-900">{formatMoney(one.total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-      <div>
-        <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Suppliers</h3>
-        {suppliers.length === 0 ? (
-          <p className="text-sm text-slate-500">No supplier bills or payments.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="text-xs text-slate-500">
-              <tr>
-                <th className="py-1 pr-3 text-left font-medium">Supplier</th>
-                <th className="py-1 text-right font-medium">Billed</th>
-                <th className="py-1 text-right font-medium">Paid</th>
-                <th className="py-1 text-right font-medium">To pay</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {suppliers.map((one) => (
-                <tr key={one.partyId}>
-                  <td className="py-1 pr-3 text-slate-800">{one.partyName}</td>
-                  <td className="tabular py-1 text-right text-slate-700">{formatMoney(one.billed)}</td>
-                  <td className="tabular py-1 text-right text-slate-700">{formatMoney(one.paid)}</td>
-                  <td className="tabular py-1 text-right font-medium text-slate-900">{formatMoney(one.stillToPay)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function BalanceSheetPage() {
   const scope = useSiteScope();
   const { siteId, isReady } = useScopedSiteId();
@@ -107,6 +52,11 @@ export function BalanceSheetPage() {
   const [toDate, setToDate] = useState("");
   const [open, setOpen] = useState<string | null>(null);
   const companies = useCompanyOptions();
+  const { user } = useAuth();
+  // Record income from the sheet itself (client, 22 Oct 2026): a dialog over the
+  // page, so the open project and the place on the page are kept.
+  const canAddIncome = hasPermission(user?.permissions ?? [], "income", "add");
+  const [addingIncome, setAddingIncome] = useState<{ siteId?: string } | null>(null);
 
   const filters = useMemo<BalanceSheetFilters>(
     () => ({ siteId, companyId, fromDate, toDate }),
@@ -140,7 +90,12 @@ export function BalanceSheetPage() {
         <div className="w-44">
           <TextField label="To" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
         </div>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-end gap-2">
+          {canAddIncome && (
+            <Button variant="secondary" icon={Plus} onClick={() => setAddingIncome({})}>
+              Add income
+            </Button>
+          )}
           <ExportExcelButton<BalanceSheetRow>
             resource="balance-sheet"
             columns={EXPORT_COLUMNS}
@@ -222,7 +177,11 @@ export function BalanceSheetPage() {
                   {isOpen && row.siteId && (
                     <tr className="bg-slate-50/60">
                       <td colSpan={7}>
-                        <Detail siteId={row.siteId} filters={detailFilters} />
+                        <ProjectDetail
+                          siteId={row.siteId}
+                          filters={detailFilters}
+                          onAddIncome={canAddIncome ? () => setAddingIncome({ siteId: row.siteId! }) : undefined}
+                        />
                       </td>
                     </tr>
                   )}
@@ -245,6 +204,14 @@ export function BalanceSheetPage() {
           )}
         </table>
       </div>
+
+      <ClientIncomeFormDialog
+        open={addingIncome !== null}
+        incomeId={null}
+        defaultSiteId={addingIncome?.siteId}
+        defaultCompanyId={companyId || undefined}
+        onClose={() => setAddingIncome(null)}
+      />
 
       <p className="mt-3 text-xs text-slate-500">
         Income is the Final Total of each entry. Billed is purchase invoices less returns; opening balances are not counted.

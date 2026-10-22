@@ -25,6 +25,19 @@ export const balanceSheetQuerySchema = z.object({
 });
 export type BalanceSheetQuery = z.infer<typeof balanceSheetQuerySchema>;
 
+/**
+ * One project's detail. A saved Balance Sheet counts income over one range of
+ * dates and bills and payments over another, so its detail may say both; when
+ * it does not, `fromDate`/`toDate` serve for both, as on the report.
+ */
+export const balanceSheetDetailQuerySchema = balanceSheetQuerySchema.omit({ siteId: true }).extend({
+  incomeFrom: z.string().optional(),
+  incomeTo: z.string().optional(),
+  invoiceFrom: z.string().optional(),
+  invoiceTo: z.string().optional(),
+});
+export type BalanceSheetDetailQuery = z.infer<typeof balanceSheetDetailQuerySchema>;
+
 const figures = {
   income: z.string(),
   billed: z.string(),

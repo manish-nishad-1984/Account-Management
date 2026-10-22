@@ -28,6 +28,14 @@ describe("BalanceSheetFormDialog", () => {
       const method = (init as RequestInit | undefined)?.method ?? "GET";
       if (url.endsWith("/companies")) return Promise.resolve(json(COMPANIES));
       if (url.endsWith("/balance-sheets/preview")) return Promise.resolve(json(PREVIEW));
+      if (url.includes("/balance-sheet/site/")) {
+        return Promise.resolve(
+          json({
+            incomes: [{ id: "i1", incomeDate: "2026-10-13", clientName: "GUJARAT JHM HOTEL", companyName: "DH PATEL", total: "1000000.00" }],
+            suppliers: [{ partyId: "p1", partyName: "A.K. TIMBER TRADERS", billed: "400000.00", paid: "300000.00", stillToPay: "100000.00" }],
+          }),
+        );
+      }
       if (method === "POST" && url.endsWith("/balance-sheets")) {
         return Promise.resolve(json({ id: "new", title: null, companyId: COMPANY, companyName: "DH PATEL", siteId: null, siteName: null, incomeFrom: null, incomeTo: null, invoiceFrom: null, invoiceTo: null, projectCount: 1, figures: FIGURES, createdByName: null, createdAt: "2026-10-14T00:00:00.000Z", updatedAt: null, updatedByName: null, note: null, rows: PREVIEW.rows }, 201));
       }
@@ -69,6 +77,27 @@ describe("BalanceSheetFormDialog", () => {
 
     await user.click(screen.getByRole("button", { name: /save balance sheet/i }));
     await waitFor(() => expect(calls().some((c) => c.method === "POST" && c.url.endsWith("/balance-sheets"))).toBe(true));
+  });
+
+  /** All in one (client, 22 Oct 2026): a project opens to its income and suppliers, over the sheet's own dates. */
+  it("opens a project to its income and suppliers, each over its own dates", async () => {
+    const user = userEvent.setup();
+    renderWithAuth(<BalanceSheetFormDialog open sheetId={null} onClose={vi.fn()} />, {
+      permissions: ["balance-sheets.view", "balance-sheets.add", "income.add"],
+    });
+    await user.type(screen.getByLabelText("Income from"), "2026-10-01");
+    await user.type(screen.getByLabelText("Invoice from"), "2026-09-01");
+    await user.click(screen.getByRole("button", { name: /^generate$/i }));
+
+    await user.click(await screen.findByLabelText("Show Akwada Lake Front"));
+    expect(await screen.findByText("GUJARAT JHM HOTEL")).toBeInTheDocument();
+    expect(screen.getByText("A.K. TIMBER TRADERS")).toBeInTheDocument();
+    const asked = vi.mocked(globalThis.fetch).mock.calls.map(([input]) => String(input)).find((url) => url.includes("/balance-sheet/site/s1"))!;
+    expect(asked).toContain("incomeFrom=2026-10-01");
+    expect(asked).toContain("invoiceFrom=2026-09-01");
+
+    // Income is recorded from here too, in its own dialog over the sheet.
+    expect(screen.getAllByRole("button", { name: /add income/i })).toHaveLength(2);
   });
 
   it("sends the site chosen on the sheet", async () => {

@@ -195,4 +195,24 @@ describe("BalanceSheetService (real PostgreSQL)", () => {
       { partyId: supplierId, partyName: "AL BURHAN PIPES", billed: "400.00", paid: "150.00", stillToPay: "250.00" },
     ]);
   });
+
+  it("counts a saved sheet's income and its bills over their own dates in the detail too", async () => {
+    await income(akwada, patel, "1000.00", { incomeDate: "2026-04-10" });
+    await income(akwada, patel, "250.00", { incomeDate: "2026-10-01" });
+    await invoice(akwada, patel, "A-1", "400.00"); // 10 Sep
+    await invoice(akwada, patel, "A-2", "70.00", { documentDate: "2026-10-05T00:00:00.000Z" });
+
+    const detail = await service.detail(akwada, {
+      incomeFrom: "2026-04-01",
+      incomeTo: "2026-04-30",
+      invoiceFrom: "2026-10-01",
+      invoiceTo: "2026-10-31",
+    });
+    expect(detail.incomes.map((one) => one.total)).toEqual(["1000.00"]);
+    expect(detail.suppliers.map((one) => one.billed)).toEqual(["70.00"]);
+
+    const both = await service.detail(akwada, { fromDate: "2026-10-01", toDate: "2026-10-31" });
+    expect(both.incomes.map((one) => one.total)).toEqual(["250.00"]);
+    expect(both.suppliers.map((one) => one.billed)).toEqual(["70.00"]);
+  });
 });

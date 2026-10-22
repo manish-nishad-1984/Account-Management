@@ -1,5 +1,6 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query } from "@nestjs/common";
 import {
+  balanceSheetDetailQuerySchema,
   balanceSheetQuerySchema,
   type BalanceSheetDetail,
   type BalanceSheetResponse,
@@ -8,7 +9,7 @@ import { BalanceSheetService } from "./balance-sheet.service";
 import { Permissions } from "../../common/auth/permissions.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
 
-const detailQuerySchema = balanceSheetQuerySchema.omit({ siteId: true });
+const detailQuerySchema = balanceSheetDetailQuerySchema;
 
 /**
  * The site-wise Balance Sheet. It adds up income and expense, so it asks for BOTH
