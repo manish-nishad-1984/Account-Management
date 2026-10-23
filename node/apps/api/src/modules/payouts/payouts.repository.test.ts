@@ -688,6 +688,33 @@ describe("PayoutsRepository (real PostgreSQL)", () => {
       expect((await repo.findById(list.id)).status).toBe("confirmed");
     });
 
+    /**
+     * Client, 23 Oct 2026: a list for one company offered bills as pending, and
+     * confirming refused them as "already settled", because a payment the same
+     * supplier had under ANOTHER company at the same site was set against them.
+     */
+    it("confirms a company's list against that company's bills alone", async () => {
+      const [infra] = await db.insert(schema.companies).values({ name: "DH PATEL INFRA", invoicePrefix: "DHI" }).returning();
+      await payments.createMany(
+        [{ direction: "out", kind: "payment", partyId: alId, companyId: infra!.id, siteId, siteLocationId: null, paymentDate: "2026-02-01T00:00:00.000Z", amount: "1500.00", description: null, method: null, referenceNo: null }],
+        ACTOR,
+      );
+      const a1 = await billId("A1"); // Akwada 1500, DH PATEL
+      const offered = (await repo.outstanding(siteId, companyId)).rows.find((row) => row.partyId === alId)!;
+      expect(offered.invoices.find((bill) => bill.documentId === a1)!.pending).toBe("1500.00");
+
+      const list = await repo.create(
+        createPayoutListSchema.parse({
+          listDate: "2026-10-07",
+          companyId,
+          lines: [{ partyId: alId, amount: "1500.00", invoices: [{ source: "invoice", documentId: a1, displayNo: "A1", amount: "1500.00" }] }],
+        }),
+        ACTOR,
+      );
+      const confirmed = await repo.confirm(list.id, confirmInput(alId, [{ id: a1, paid: "1500.00" }]), ACTOR);
+      expect(confirmed.status).toBe("confirmed");
+    });
+
     it("will not reverse a list that is not confirmed", async () => {
       const list = await repo.create(input([{ partyId: alId, amount: "1.00" }]), ACTOR);
       await expect(repo.reverse(list.id, ACTOR)).rejects.toBeInstanceOf(ConflictException);

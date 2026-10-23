@@ -558,14 +558,19 @@ export class PayoutsRepository extends BaseRepository {
    * What is pending on each of one party's bills RIGHT NOW, with the site and
    * company each belongs to: the Pending Outstanding report's own rows, so the
    * amount a bill may be paid up to is the amount that report shows.
+   *
+   * FOR THE LIST'S COMPANY, as the builder offered them (client, 23 Oct 2026).
+   * Read across every company, a payment the supplier had under ANOTHER company
+   * at the same site settled this company's oldest bills, so bills the list
+   * offered as pending were refused here as "already settled".
    */
-  private async pendingBills(partyId: string) {
+  private async pendingBills(partyId: string, companyId?: string) {
     const bills = new Map<
       string,
       { pending: bigint; siteId: string | null; companyId: string; siteLocationId: string | null }
     >();
     for (let offset = 0; ; offset += BALANCES_PAGE) {
-      const page = await this.reports.pendingLedger({ direction: "out", partyId }, { limit: BALANCES_PAGE, offset });
+      const page = await this.reports.pendingLedger({ direction: "out", partyId, companyId }, { limit: BALANCES_PAGE, offset });
       for (const row of page.rows) {
         bills.set(`${row.source}:${row.documentId}`, {
           pending: toPaise(row.pending),
@@ -635,7 +640,7 @@ export class PayoutsRepository extends BaseRepository {
         );
         continue;
       }
-      const pendingOf = await this.pendingBills(line.partyId);
+      const pendingOf = await this.pendingBills(line.partyId, detail.companyId ?? undefined);
       for (const [billIndex, bill] of line.bills.entries()) {
         const onList = listed.invoices.find(
           (candidate) => candidate.source === bill.source && candidate.documentId === bill.documentId,
