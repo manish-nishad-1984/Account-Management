@@ -4,6 +4,7 @@ import {
   PAYOUT_DETAIL_MAX_IDS,
   payoutDetailResponseSchema,
   type PayoutExportLine,
+  type PayoutExportSalary,
   type PayoutInvoice,
   type PayoutListRow,
 } from "@accountmanagement/contracts";
@@ -11,6 +12,7 @@ import { Button } from "../../components/ui";
 import { apiRequest } from "../../lib/api-client";
 import { downloadGridExcel, exportAmount, exportDate, fetchAllRows, type ExportColumn } from "../../lib/grid-export";
 import type { ListFilters, ListParams } from "../../lib/list-query";
+import { salaryLabel } from "./message";
 
 /**
  * One row of the sheet with details: a bill of a party on a list, a party kept
@@ -20,6 +22,8 @@ export interface PayoutDetailRow {
   list: PayoutListRow;
   line: PayoutExportLine | null;
   bill: PayoutInvoice | null;
+  /** A salary on the list (client, 23 Oct 2026), in place of a party and bill. */
+  salary?: PayoutExportSalary;
   /** The list's first row and the party's first row: their totals are written there only, so a column sums right. */
   firstOfList: boolean;
   firstOfParty: boolean;
@@ -30,33 +34,37 @@ export const WITH_DETAILS_COLUMNS: ExportColumn<PayoutDetailRow>[] = [
   { header: "Title", width: 28, value: (row) => row.list.title },
   { header: "Company", width: 26, value: (row) => row.list.companyName },
   { header: "Status", width: 11, value: (row) => (row.list.status === "confirmed" ? "Confirmed" : "Draft") },
-  { header: "Party", width: 32, value: (row) => row.line?.partyName },
-  { header: "Party amount", width: 15, align: "right", value: (row) => (row.firstOfParty ? exportAmount(row.line?.amount) : "") },
+  { header: "Party", width: 32, value: (row) => (row.salary ? salaryLabel(row.salary) : row.line?.partyName) },
+  { header: "Party amount", width: 15, align: "right", value: (row) => (row.salary ? exportAmount(row.salary.amount) : row.firstOfParty ? exportAmount(row.line?.amount) : "") },
   { header: "Extra paid", width: 13, align: "right", value: (row) => (row.firstOfParty ? exportAmount(row.line?.extraPaid) : "") },
-  { header: "Type", width: 15, value: (row) => (row.bill ? (row.bill.source === "opening_balance" ? "Opening balance" : "Bill") : "") },
+  { header: "Type", width: 15, value: (row) => (row.salary ? "Salary" : row.bill ? (row.bill.source === "opening_balance" ? "Opening balance" : "Bill") : "") },
   { header: "Bill no.", width: 20, value: (row) => row.bill?.displayNo },
   { header: "Bill date", width: 12, value: (row) => exportDate(row.bill?.documentDate) },
-  { header: "Site", width: 22, value: (row) => row.bill?.siteName },
+  { header: "Site", width: 22, value: (row) => (row.salary ? row.salary.siteName : row.bill?.siteName) },
   { header: "Bill amount", width: 15, align: "right", value: (row) => exportAmount(row.bill?.amount) },
   { header: "Pending when saved", width: 15, align: "right", value: (row) => exportAmount(row.bill?.pendingAtSave) },
-  { header: "Paid", width: 15, align: "right", value: (row) => exportAmount(row.bill?.paidAmount) },
+  { header: "Paid", width: 15, align: "right", value: (row) => exportAmount(row.salary ? row.salary.paidAmount : row.bill?.paidAmount) },
   { header: "List total", width: 16, align: "right", value: (row) => (row.firstOfList ? exportAmount(row.list.total) : "") },
   { header: "Confirmed on", width: 12, value: (row) => exportDate(row.list.confirmedAt) },
   { header: "Created by", width: 20, value: (row) => row.list.createdByName },
 ];
 
 /** Each list followed by its parties, each party by its bills, in the list's order. */
-export function toDetailRows(lists: PayoutListRow[], lines: PayoutExportLine[]): PayoutDetailRow[] {
+export function toDetailRows(lists: PayoutListRow[], lines: PayoutExportLine[], salaries: PayoutExportSalary[] = []): PayoutDetailRow[] {
   const byList = new Map<string, PayoutExportLine[]>();
   for (const line of lines) byList.set(line.payoutListId, [...(byList.get(line.payoutListId) ?? []), line]);
+  const salariesBy = new Map<string, PayoutExportSalary[]>();
+  for (const one of salaries) salariesBy.set(one.payoutListId, [...(salariesBy.get(one.payoutListId) ?? []), one]);
   return lists.flatMap((list): PayoutDetailRow[] => {
     const own = byList.get(list.id) ?? [];
-    if (own.length === 0) return [{ list, line: null, bill: null, firstOfList: true, firstOfParty: false }];
+    const pay = salariesBy.get(list.id) ?? [];
+    if (own.length === 0 && pay.length === 0) return [{ list, line: null, bill: null, firstOfList: true, firstOfParty: false }];
     const rows: PayoutDetailRow[] = [];
     for (const line of own) {
       const bills: (PayoutInvoice | null)[] = line.invoices.length > 0 ? line.invoices : [null];
       bills.forEach((bill, index) => rows.push({ list, line, bill, firstOfList: rows.length === 0, firstOfParty: index === 0 }));
     }
+    for (const salary of pay) rows.push({ list, line: null, bill: null, salary, firstOfList: rows.length === 0, firstOfParty: false });
     return rows;
   });
 }
@@ -68,12 +76,14 @@ export async function fetchPayoutDetailRows(
 ): Promise<PayoutDetailRow[]> {
   const lists = await fetchAllRows<PayoutListRow>("payout-lists", params, filters);
   const lines: PayoutExportLine[] = [];
+  const salaries: PayoutExportSalary[] = [];
   for (let at = 0; at < lists.length; at += PAYOUT_DETAIL_MAX_IDS) {
     const ids = lists.slice(at, at + PAYOUT_DETAIL_MAX_IDS).map((list) => list.id);
     const page = await apiRequest("/payout-lists/lines", { method: "POST", body: { ids }, schema: payoutDetailResponseSchema });
     lines.push(...page.lines);
+    salaries.push(...page.salaries);
   }
-  return toDetailRows(lists, lines);
+  return toDetailRows(lists, lines, salaries);
 }
 
 /**

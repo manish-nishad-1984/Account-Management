@@ -8,6 +8,7 @@ import type {
 } from "@accountmanagement/contracts";
 import { ClientIncomesRepository } from "../client-incomes/client-incomes.repository";
 import { ReportsRepository } from "../reports/reports.repository";
+import { EmployeesRepository } from "../employees/employees.repository";
 
 /** Exact decimal on whole paise: money never goes through a float here. */
 export const toPaise = (value: string): bigint => {
@@ -26,6 +27,7 @@ export interface Figures {
   income: bigint;
   billed: bigint;
   paid: bigint;
+  salary: bigint;
 }
 
 const NO_SITE = "No project";
@@ -35,8 +37,9 @@ export const present = (figures: Figures) => ({
   billed: fromPaise(figures.billed),
   paid: fromPaise(figures.paid),
   stillToPay: fromPaise(figures.billed - figures.paid),
-  cashBalance: fromPaise(figures.income - figures.paid),
-  projectResult: fromPaise(figures.income - figures.billed),
+  salary: fromPaise(figures.salary),
+  cashBalance: fromPaise(figures.income - figures.paid - figures.salary),
+  projectResult: fromPaise(figures.income - figures.billed - figures.salary),
 });
 
 /**
@@ -49,6 +52,7 @@ export class BalanceSheetService {
   constructor(
     private readonly incomes: ClientIncomesRepository,
     private readonly reports: ReportsRepository,
+    private readonly employees: EmployeesRepository,
   ) {}
 
   async sheet(query: BalanceSheetQuery): Promise<BalanceSheetResponse> {
@@ -67,9 +71,10 @@ export class BalanceSheetService {
     incomeFilter: { siteId?: string; companyId?: string; fromDate?: string; toDate?: string },
     expenseFilter: { siteId?: string; companyId?: string; fromDate?: string; toDate?: string },
   ): Promise<BalanceSheetResponse> {
-    const [income, expense] = await Promise.all([
+    const [income, expense, salaries] = await Promise.all([
       this.incomes.incomeBySite(incomeFilter),
       this.reports.expenseBySite(expenseFilter),
+      this.employees.salaryBySite(expenseFilter),
     ]);
 
     const bySite = new Map<string, { siteId: string | null; siteName: string; figures: Figures }>();
@@ -77,7 +82,7 @@ export class BalanceSheetService {
       const key = siteId ?? "none";
       let row = bySite.get(key);
       if (!row) {
-        row = { siteId, siteName: siteName ?? NO_SITE, figures: { income: 0n, billed: 0n, paid: 0n } };
+        row = { siteId, siteName: siteName ?? NO_SITE, figures: { income: 0n, billed: 0n, paid: 0n, salary: 0n } };
         bySite.set(key, row);
       }
       return row;
@@ -88,14 +93,16 @@ export class BalanceSheetService {
       row.figures.billed += toPaise(one.billed);
       row.figures.paid += toPaise(one.paid);
     }
+    for (const one of salaries) entry(one.siteId, one.siteName).figures.salary += toPaise(one.salary);
 
-    const total: Figures = { income: 0n, billed: 0n, paid: 0n };
+    const total: Figures = { income: 0n, billed: 0n, paid: 0n, salary: 0n };
     const rows: BalanceSheetRow[] = [...bySite.values()]
       .sort((a, b) => a.siteName.localeCompare(b.siteName))
       .map((row) => {
         total.income += row.figures.income;
         total.billed += row.figures.billed;
         total.paid += row.figures.paid;
+        total.salary += row.figures.salary;
         return { siteId: row.siteId, siteName: row.siteName, ...present(row.figures) };
       });
 
@@ -110,10 +117,11 @@ export class BalanceSheetService {
       fromDate: from ?? query.fromDate,
       toDate: to ?? query.toDate,
     });
-    const [incomes, suppliers] = await Promise.all([
+    const [incomes, suppliers, salaries] = await Promise.all([
       this.incomes.incomeEntries(range(query.incomeFrom, query.incomeTo)),
       this.reports.supplierPayments(range(query.invoiceFrom, query.invoiceTo)),
+      this.employees.salaryEntries(range(query.invoiceFrom, query.invoiceTo)),
     ]);
-    return { incomes, suppliers };
+    return { incomes, suppliers, salaries };
   }
 }

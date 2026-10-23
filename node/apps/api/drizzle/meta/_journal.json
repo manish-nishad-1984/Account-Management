@@ -232,6 +232,13 @@
       "when": 1792666131109,
       "tag": "0032_terms_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792748192895,
+      "tag": "0033_employees_and_salaries",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,7 @@ import { CheckCircle2 } from "lucide-react";
 import { formatDateTime, formatMoney } from "../../lib/format";
 import { sumAmounts } from "./decimal";
 import { formatListDate } from "./message";
+import { monthLabel } from "./SalaryLines";
 
 /**
  * A confirmed list, read-only: what was planned and what was actually paid, bill by
@@ -12,7 +13,7 @@ import { formatListDate } from "./message";
 export function ConfirmedView({ list }: { list: PayoutListDetail }) {
   const paidOf = (line: PayoutListDetail["lines"][number]) =>
     sumAmounts([...line.invoices.map((bill) => bill.paidAmount ?? "0"), line.extraPaid ?? "0"]);
-  const totalPaid = sumAmounts(list.lines.map(paidOf));
+  const totalPaid = sumAmounts([...list.lines.map(paidOf), ...list.salaries.map((one) => one.paidAmount ?? "0")]);
 
   return (
     <div className="space-y-3">
@@ -62,6 +63,23 @@ export function ConfirmedView({ list }: { list: PayoutListDetail }) {
           <tbody className="divide-y divide-slate-100">
             {list.lines.map((line) => (
               <PartyBlock key={line.id} line={line} paid={paidOf(line)} />
+            ))}
+            {list.salaries.length > 0 && (
+              <tr className="bg-slate-50/60">
+                <td colSpan={3} className="px-3 py-1.5 font-medium text-slate-900">
+                  Salaries
+                </td>
+              </tr>
+            )}
+            {list.salaries.map((one) => (
+              <tr key={one.id}>
+                <td className="py-1.5 pl-8 pr-2 text-slate-700">
+                  {one.employeeName}
+                  <span className="ml-2 text-xs text-slate-400">{[monthLabel(one.month), one.note].filter(Boolean).join(" · ")}</span>
+                </td>
+                <td className="tabular px-2 py-1.5 text-right text-slate-600">{formatMoney(one.amount)}</td>
+                <td className="tabular px-2 py-1.5 text-right font-semibold text-slate-900">{formatMoney(one.paidAmount ?? "0")}</td>
+              </tr>
             ))}
           </tbody>
         </table>

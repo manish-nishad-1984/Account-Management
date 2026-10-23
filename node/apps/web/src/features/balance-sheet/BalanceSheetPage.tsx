@@ -20,6 +20,7 @@ const EXPORT_COLUMNS: ExportColumn<BalanceSheetRow>[] = [
   { header: "Billed", width: 16, align: "right", value: (row) => exportAmount(row.billed) },
   { header: "Paid", width: 16, align: "right", value: (row) => exportAmount(row.paid) },
   { header: "Still to pay", width: 16, align: "right", value: (row) => exportAmount(row.stillToPay) },
+  { header: "Salary", width: 16, align: "right", value: (row) => exportAmount(row.salary) },
   { header: "Cash balance", width: 16, align: "right", value: (row) => exportAmount(row.cashBalance) },
   { header: "Project result", width: 16, align: "right", value: (row) => exportAmount(row.projectResult) },
 ];
@@ -122,21 +123,22 @@ export function BalanceSheetPage() {
               <th className="px-4 py-2.5 text-right font-medium" title="Purchase invoices less returns">Billed</th>
               <th className="px-4 py-2.5 text-right font-medium">Paid</th>
               <th className="px-4 py-2.5 text-right font-medium">Still to pay</th>
-              <th className="px-4 py-2.5 text-right font-medium" title="Income less what has been paid">Cash balance</th>
-              <th className="px-4 py-2.5 text-right font-medium" title="Income less what has been billed">Project result</th>
+              <th className="px-4 py-2.5 text-right font-medium" title="Salaries paid for the project's employees">Salary</th>
+              <th className="px-4 py-2.5 text-right font-medium" title="Income less what has been paid, salaries included">Cash balance</th>
+              <th className="px-4 py-2.5 text-right font-medium" title="Income less what has been billed and the salaries">Project result</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {sheet.isLoading && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
                   Loading…
                 </td>
               </tr>
             )}
             {!sheet.isLoading && rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
                   Nothing recorded for this selection yet
                 </td>
               </tr>
@@ -171,12 +173,13 @@ export function BalanceSheetPage() {
                     <td className="px-4 py-2.5"><Plain value={row.billed} /></td>
                     <td className="px-4 py-2.5"><Plain value={row.paid} /></td>
                     <td className="px-4 py-2.5"><Plain value={row.stillToPay} /></td>
+                    <td className="px-4 py-2.5"><Plain value={row.salary} /></td>
                     <td className="px-4 py-2.5"><Signed value={row.cashBalance} /></td>
                     <td className="px-4 py-2.5"><Signed value={row.projectResult} /></td>
                   </tr>
                   {isOpen && row.siteId && (
                     <tr className="bg-slate-50/60">
-                      <td colSpan={7}>
+                      <td colSpan={8}>
                         <ProjectDetail
                           siteId={row.siteId}
                           filters={detailFilters}
@@ -197,6 +200,7 @@ export function BalanceSheetPage() {
                 <td className="px-4 py-2.5"><Plain value={totals.billed} className="text-slate-900" /></td>
                 <td className="px-4 py-2.5"><Plain value={totals.paid} className="text-slate-900" /></td>
                 <td className="px-4 py-2.5"><Plain value={totals.stillToPay} className="text-slate-900" /></td>
+                <td className="px-4 py-2.5"><Plain value={totals.salary} className="text-slate-900" /></td>
                 <td className="px-4 py-2.5"><Signed value={totals.cashBalance} /></td>
                 <td className="px-4 py-2.5"><Signed value={totals.projectResult} /></td>
               </tr>

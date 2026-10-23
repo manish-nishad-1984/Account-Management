@@ -10,9 +10,11 @@ import { z } from "zod";
  *                project's cost and are left out.
  *   PAID         payments made to suppliers for the project
  *   STILL TO PAY billed - paid
+ *   SALARY       salaries paid for the project's employees (client, 23 Oct 2026),
+ *                by the day they were paid; an employee with no site is "No project"
  *
- *   CASH BALANCE   income - paid     what is actually in hand for the project
- *   PROJECT RESULT income - billed   where the project stands once the dues are met
+ *   CASH BALANCE   income - paid - salary     what is actually in hand for the project
+ *   PROJECT RESULT income - billed - salary   where the project stands once the dues are met
  *
  * Both balances are given because "expense" can mean either, and which the boss
  * wants first is his to say; showing both loses nothing.
@@ -43,6 +45,7 @@ const figures = {
   billed: z.string(),
   paid: z.string(),
   stillToPay: z.string(),
+  salary: z.string(),
   cashBalance: z.string(),
   projectResult: z.string(),
 };
@@ -85,5 +88,16 @@ export const balanceSheetDetailSchema = z.object({
       amount: z.string(),
     }),
   ),
+  /** The salaries paid for the project, oldest first (client, 23 Oct 2026). */
+  salaries: z
+    .array(
+      z.object({
+        id: z.string(),
+        employeeName: z.string(),
+        month: z.string(),
+        paymentDate: z.string(),
+        amount: z.string(),
+      }),
+    ),
 });
 export type BalanceSheetDetail = z.infer<typeof balanceSheetDetailSchema>;

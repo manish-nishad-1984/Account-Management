@@ -5,7 +5,7 @@ import { BalanceSheetFormDialog } from "./BalanceSheetFormDialog";
 import { json, renderWithAuth } from "../../test/render";
 
 const COMPANY = "99999999-9999-4999-8999-999999999999";
-const FIGURES = { income: "1000000.00", billed: "400000.00", paid: "300000.00", stillToPay: "100000.00", cashBalance: "700000.00", projectResult: "600000.00" };
+const FIGURES = { income: "1000000.00", billed: "400000.00", paid: "300000.00", stillToPay: "100000.00", salary: "0.00", cashBalance: "700000.00", projectResult: "600000.00" };
 const PREVIEW = { rows: [{ siteId: "s1", siteName: "Akwada Lake Front", ...FIGURES }], totals: FIGURES };
 const COMPANIES = {
   rows: [{ id: COMPANY, name: "DH PATEL", invoicePrefix: "DHP", gstNo: null, panNo: null, area: null, pincode: null, bankName: null, userCount: 0, capabilities: { canEdit: false, canDelete: false, canApprove: false } }],
@@ -32,6 +32,7 @@ describe("BalanceSheetFormDialog", () => {
         return Promise.resolve(
           json({
             incomes: [{ id: "i1", incomeDate: "2026-10-13", clientName: "GUJARAT JHM HOTEL", companyName: "DH PATEL", total: "1000000.00" }],
+            salaries: [],
             suppliers: [{ id: "pay1", partyId: "p1", partyName: "A.K. TIMBER TRADERS", paymentDate: "2026-10-08T00:00:00.000Z", amount: "300000.00" }],
           }),
         );

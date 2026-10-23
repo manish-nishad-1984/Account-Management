@@ -7,6 +7,7 @@ export * from "./users";
 export * from "./user-permissions";
 export * from "./companies";
 export * from "./clients";
+export * from "./employees";
 export * from "./client-incomes";
 export * from "./balance-sheet";
 export * from "./sites";

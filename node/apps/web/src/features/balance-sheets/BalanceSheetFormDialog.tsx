@@ -25,6 +25,7 @@ export const SHEET_EXPORT_COLUMNS: ExportColumn<BalanceSheetRow>[] = [
   { header: "Billed", width: 16, align: "right", value: (row) => exportAmount(row.billed) },
   { header: "Paid", width: 16, align: "right", value: (row) => exportAmount(row.paid) },
   { header: "Still to pay", width: 16, align: "right", value: (row) => exportAmount(row.stillToPay) },
+  { header: "Salary", width: 16, align: "right", value: (row) => exportAmount(row.salary) },
   { header: "Cash balance", width: 16, align: "right", value: (row) => exportAmount(row.cashBalance) },
   { header: "Project result", width: 16, align: "right", value: (row) => exportAmount(row.projectResult) },
 ];
@@ -263,6 +264,7 @@ export function BalanceSheetFormDialog({
                     <th className="px-3 py-2 text-right font-medium">Billed</th>
                     <th className="px-3 py-2 text-right font-medium">Paid</th>
                     <th className="px-3 py-2 text-right font-medium">Still to pay</th>
+                    <th className="px-3 py-2 text-right font-medium">Salary</th>
                     <th className="px-3 py-2 text-right font-medium">Cash balance</th>
                     <th className="px-3 py-2 text-right font-medium">Project result</th>
                   </tr>
@@ -270,7 +272,7 @@ export function BalanceSheetFormDialog({
                 <tbody className="divide-y divide-slate-100">
                   {data.rows.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-3 py-6 text-center text-slate-500">
+                      <td colSpan={8} className="px-3 py-6 text-center text-slate-500">
                         Nothing recorded for these filters
                       </td>
                     </tr>
@@ -304,12 +306,13 @@ export function BalanceSheetFormDialog({
                           <Num value={row.billed} />
                           <Num value={row.paid} />
                           <Num value={row.stillToPay} />
+                          <Num value={row.salary} />
                           <Num value={row.cashBalance} strong />
                           <Num value={row.projectResult} strong />
                         </tr>
                         {isOpen && row.siteId && (
                           <tr className="bg-slate-50/60">
-                            <td colSpan={7}>
+                            <td colSpan={8}>
                               <ProjectDetail
                                 siteId={row.siteId}
                                 filters={{ companyId, incomeFrom, incomeTo, invoiceFrom, invoiceTo }}
@@ -329,6 +332,7 @@ export function BalanceSheetFormDialog({
                     <Num value={data.totals.billed} strong />
                     <Num value={data.totals.paid} strong />
                     <Num value={data.totals.stillToPay} strong />
+                    <Num value={data.totals.salary} strong />
                     <Num value={data.totals.cashBalance} strong />
                     <Num value={data.totals.projectResult} strong />
                   </tr>

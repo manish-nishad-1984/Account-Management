@@ -22,6 +22,7 @@ import { PayoutListsPage } from "./features/payouts/PayoutListsPage";
 import { BalanceSheetPage } from "./features/balance-sheet/BalanceSheetPage";
 import { BalanceSheetsPage } from "./features/balance-sheets/BalanceSheetsPage";
 import { ClientsPage } from "./features/clients/ClientsPage";
+import { EmployeesPage } from "./features/employees/EmployeesPage";
 import { ClientIncomesPage } from "./features/client-incomes/ClientIncomesPage";
 import { ItemsPage } from "./features/items/ItemsPage";
 import { PurchaseRequestsPage } from "./features/purchase-requests/PurchaseRequestsPage";
@@ -70,6 +71,7 @@ const IMPLEMENTED: Record<string, React.ComponentType> = {
   "/payments": PaymentsPage,
   "/payouts": PayoutListsPage,
   "/clients": ClientsPage,
+  "/employees": EmployeesPage,
   "/income": ClientIncomesPage,
   "/balance-sheets": BalanceSheetsPage,
   "/reports/balance-sheet": BalanceSheetPage,

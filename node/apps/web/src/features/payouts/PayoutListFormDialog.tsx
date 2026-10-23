@@ -21,6 +21,7 @@ import {
   usePayoutList,
   usePayoutOutstanding,
   useReversePayoutList,
+  useSalariesDue,
   useUpdatePayoutList,
 } from "./api";
 import { ConfirmedView } from "./ConfirmedView";
@@ -34,6 +35,7 @@ import { AmountField } from "./AmountField";
 import { fromPaise, sumAmounts, toPaise } from "./decimal";
 import { formatListDate } from "./message";
 import { PayoutImageDialog, ShareNotice, usePayoutSharing } from "./share";
+import { SalaryLines, salaryKey, salaryRows, salaryTotal, type SalaryPicks } from "./SalaryLines";
 
 /**
  * Build, edit or read a payout list: the header (date, title, budget, note) and
@@ -200,6 +202,8 @@ export function PayoutListFormDialog({
   const [search, setSearch] = useState("");
   const [tickedOnly, setTickedOnly] = useState(false);
   const [errors, setErrors] = useState<Errors>(NO_ERRORS);
+  /** The salaries ticked, with the amount and note of each (client, 23 Oct 2026). */
+  const [salaryPicks, setSalaryPicks] = useState<SalaryPicks>({});
 
   /**
    * Seed once per opening, never on a refetch. The detail query refetches on
@@ -223,6 +227,7 @@ export function PayoutListFormDialog({
       setCompanyId("");
       setPicked({});
       setBills({});
+      setSalaryPicks({});
       setExpanded(new Set());
     } else if (detail.data) {
       seeded.current = key;
@@ -241,6 +246,9 @@ export function PayoutListFormDialog({
         Object.fromEntries(
           withBills.map((line) => [line.partyId, Object.fromEntries(line.invoices.map((bill) => [billKey(bill), bill.amount]))]),
         ),
+      );
+      setSalaryPicks(
+        Object.fromEntries(detail.data.salaries.map((one) => [salaryKey(one), { amount: one.amount, note: one.note ?? "" }])),
       );
       setExpanded(new Set());
     } else {
@@ -314,8 +322,18 @@ export function PayoutListFormDialog({
 
   const tickedRows = rows.filter(isTicked);
   const total = sumAmounts(tickedRows.map(amountOf));
+  // Salaries due for the list's month, and the saved ones, under the parties.
+  const salariesDue = useSalariesDue(open && !locked, listDate, companyId || null);
+  const salaryList = useMemo(
+    () => salaryRows(salariesDue.data?.rows ?? [], isEdit ? (detail.data?.salaries ?? []) : []),
+    [salariesDue.data, detail.data, isEdit],
+  );
+  const salariesTicked = Object.keys(salaryPicks).length;
+  /** Parties and salaries together: what the owner pays out. */
+  const grandTotal = sumAmounts([total, salaryTotal(salaryPicks)]);
   const budgetPaise = toPaise(budget);
   const totalPaise = toPaise(total) ?? 0n;
+  const grandPaise = toPaise(grandTotal) ?? 0n;
 
   /**
    * THE PARTY'S TICK is "all of it": ticking pays every pending bill in full
@@ -440,7 +458,15 @@ export function PayoutListFormDialog({
         })),
     }));
     const order = lines.map((line) => line.partyId);
-    const parsed = createPayoutListSchema.safeParse({ listDate, title, budget, note, companyId: companyId || null, lines });
+    const salaries = salaryList
+      .filter((row) => row.key in salaryPicks)
+      .map((row) => ({
+        employeeId: row.employeeId,
+        month: row.month,
+        amount: (salaryPicks[row.key]?.amount ?? "").trim(),
+        note: salaryPicks[row.key]?.note ?? "",
+      }));
+    const parsed = createPayoutListSchema.safeParse({ listDate, title, budget, note, companyId: companyId || null, lines, salaries });
     if (!parsed.success) {
       setErrors(placeIssues(parsed.error.issues, order));
       // A ticked party hidden by the search could carry the error; show them all.
@@ -506,7 +532,15 @@ export function PayoutListFormDialog({
       )
       .sort()
       .join("|");
-    return now !== before;
+    const salariesNow = Object.entries(salaryPicks)
+      .map(([key, pick]) => `${key}=${toPaise(pick.amount) ?? ""}:${pick.note.trim()}`)
+      .sort()
+      .join("|");
+    const salariesBefore = saved.salaries
+      .map((one) => `${salaryKey(one)}=${toPaise(one.amount) ?? ""}:${(one.note ?? "").trim()}`)
+      .sort()
+      .join("|");
+    return now !== before || salariesNow !== salariesBefore;
   })();
 
   /** Owed at the site (or at every site), what is ticked, and what is left of it. */
@@ -516,9 +550,9 @@ export function PayoutListFormDialog({
   const budgetLine =
     budgetPaise === null || budget.trim() === ""
       ? null
-      : totalPaise > budgetPaise
-        ? { over: true, text: `Over the budget by ${formatMoney(fromPaise(totalPaise - budgetPaise))}` }
-        : { over: false, text: `${formatMoney(fromPaise(budgetPaise - totalPaise))} left of the budget` };
+      : grandPaise > budgetPaise
+        ? { over: true, text: `Over the budget by ${formatMoney(fromPaise(grandPaise - budgetPaise))}` }
+        : { over: false, text: `${formatMoney(fromPaise(budgetPaise - grandPaise))} left of the budget` };
 
   return (
     <FormDialog
@@ -551,6 +585,7 @@ export function PayoutListFormDialog({
           <div aria-live="polite" className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 text-sm text-slate-700">
             <span className="font-medium">
               {tickedRows.length} {tickedRows.length === 1 ? "party" : "parties"} ticked
+              {salariesTicked > 0 && `, ${salariesTicked} ${salariesTicked === 1 ? "salary" : "salaries"}`}
             </span>
             {budgetLine && (
               <span className={clsx("font-medium", budgetLine.over ? "text-amber-700" : "text-emerald-700")}>
@@ -558,7 +593,7 @@ export function PayoutListFormDialog({
               </span>
             )}
             <span>
-              Total <span className="tabular ml-1 text-base font-semibold text-slate-900">{formatMoney(total)}</span>
+              Total <span className="tabular ml-1 text-base font-semibold text-slate-900">{formatMoney(grandTotal)}</span>
             </span>
           </div>
           )}
@@ -958,6 +993,26 @@ export function PayoutListFormDialog({
                 </table>
               </div>
             )}
+          </FormSection>
+
+          <FormSection
+            title="Salaries"
+            description="Each active employee's month still to be paid. Tick to pay; the amount can be changed for this month."
+            className="p-3!"
+            columns={1}
+          >
+            {salariesDue.error && (
+              <Alert tone="danger">
+                {salariesDue.error instanceof ApiError ? salariesDue.error.message : "Could not load the salaries due"}
+              </Alert>
+            )}
+            <SalaryLines
+              rows={salaryList}
+              picks={salaryPicks}
+              onPicks={setSalaryPicks}
+              loading={salariesDue.isLoading}
+              errors={{}}
+            />
           </FormSection>
           </>
           )}

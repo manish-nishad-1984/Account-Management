@@ -66,6 +66,7 @@ export const balanceSheetFiguresSchema = z.object({
   billed: z.string(),
   paid: z.string(),
   stillToPay: z.string(),
+  salary: z.string(),
   cashBalance: z.string(),
   projectResult: z.string(),
 });

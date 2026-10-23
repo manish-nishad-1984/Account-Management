@@ -1,5 +1,5 @@
 import type { GridExportRequest, PayoutListDetail } from "@accountmanagement/contracts";
-import { formatListDate, rupees } from "./message";
+import { countLabel, formatListDate, listAmounts, rupees, salaryLabel } from "./message";
 import { sumAmounts } from "./decimal";
 
 /**
@@ -21,7 +21,7 @@ export type ImageRow =
   | { kind: "total"; left: string; right: string };
 
 export function buildImageRows(
-  detail: Pick<PayoutListDetail, "listDate" | "lines"> & { companyName?: string | null },
+  detail: Pick<PayoutListDetail, "listDate" | "lines"> & { companyName?: string | null; salaries?: PayoutListDetail["salaries"] },
 ): ImageRow[] {
   const rows: ImageRow[] = [];
   // A list across every company has none to name.
@@ -33,10 +33,16 @@ export function buildImageRows(
     rows.push({ kind: "party", index: index + 1, left: line.partyName, right: rupees(line.amount) });
   });
 
+  // Salaries after the parties, numbered on (client, 23 Oct 2026).
+  const salaries = detail.salaries ?? [];
+  salaries.forEach((one, index) => {
+    rows.push({ kind: "party", index: detail.lines.length + index + 1, left: salaryLabel(one), right: rupees(one.amount) });
+  });
+
   rows.push({
     kind: "total",
-    left: `Total (${detail.lines.length} ${detail.lines.length === 1 ? "party" : "parties"})`,
-    right: rupees(sumAmounts(detail.lines.map((line) => line.amount))),
+    left: `Total (${countLabel(detail.lines.length, salaries.length)})`,
+    right: rupees(sumAmounts(listAmounts(detail))),
   });
   return rows;
 }
@@ -48,7 +54,7 @@ export function buildImageRows(
  * figures, so the sheet adds up in Excel.
  */
 export function buildPayoutSheet(
-  detail: Pick<PayoutListDetail, "listDate" | "lines"> & { companyName?: string | null },
+  detail: Pick<PayoutListDetail, "listDate" | "lines"> & { companyName?: string | null; salaries?: PayoutListDetail["salaries"] },
 ): GridExportRequest {
   const company = detail.companyName?.trim();
   const date = formatListDate(detail.listDate);
@@ -62,7 +68,8 @@ export function buildPayoutSheet(
     ],
     rows: [
       ...detail.lines.map((line) => [line.partyName, line.amount]),
-      [`Total (${parties} ${parties === 1 ? "party" : "parties"})`, sumAmounts(detail.lines.map((line) => line.amount))],
+      ...(detail.salaries ?? []).map((one) => [salaryLabel(one), one.amount]),
+      [`Total (${countLabel(parties, (detail.salaries ?? []).length)})`, sumAmounts(listAmounts(detail))],
     ],
   };
 }

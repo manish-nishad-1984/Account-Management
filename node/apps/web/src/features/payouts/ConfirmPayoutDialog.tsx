@@ -9,6 +9,7 @@ import { AmountField } from "./AmountField";
 import { useConfirmPayoutList } from "./api";
 import { fromPaise, sumAmounts, toPaise } from "./decimal";
 import { formatListDate } from "./message";
+import { monthLabel, salaryKey } from "./SalaryLines";
 
 const METHODS = ["Cash", "Cheque", "NEFT", "RTGS", "UPI"];
 
@@ -41,6 +42,8 @@ export function ConfirmPayoutDialog({
   const [referenceNo, setReferenceNo] = useState("");
   const [paid, setPaid] = useState<Record<string, string>>({});
   const [extra, setExtra] = useState<Record<string, string>>({});
+  /** What was paid of each salary, by employee and month (client, 23 Oct 2026). */
+  const [salaryPaid, setSalaryPaid] = useState<Record<string, string>>({});
   const [banner, setBanner] = useState<string | null>(null);
   /** By bill key, so a message sits on its row. */
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
@@ -53,6 +56,7 @@ export function ConfirmPayoutDialog({
     setReferenceNo("");
     setPaid(Object.fromEntries(list.lines.flatMap((line) => line.invoices.map((bill) => [billKey(bill), bill.amount]))));
     setExtra({});
+    setSalaryPaid(Object.fromEntries(list.salaries.map((one) => [salaryKey(one), one.amount])));
     setBanner(null);
     setRowErrors({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -61,13 +65,14 @@ export function ConfirmPayoutDialog({
   const withoutBills = list.lines.filter((line) => line.invoices.length === 0);
 
   const totals = useMemo(() => {
-    const planned = sumAmounts(list.lines.map((line) => line.amount));
+    const planned = sumAmounts([...list.lines.map((line) => line.amount), ...list.salaries.map((one) => one.amount)]);
     const billsPaid = sumAmounts(list.lines.flatMap((line) => line.invoices.map((bill) => paid[billKey(bill)] ?? "")));
     const extras = sumAmounts(Object.values(extra));
-    const all = sumAmounts([billsPaid, extras]);
+    const salaries = sumAmounts(Object.values(salaryPaid));
+    const all = sumAmounts([billsPaid, extras, salaries]);
     const difference = (toPaise(all) ?? 0n) - (toPaise(planned) ?? 0n);
     return { planned, all, difference };
-  }, [list.lines, paid, extra]);
+  }, [list.lines, list.salaries, paid, extra, salaryPaid]);
 
   const submit = async () => {
     setBanner(null);
@@ -87,6 +92,11 @@ export function ConfirmPayoutDialog({
           })),
           extra: (extra[line.partyId] ?? "").trim() === "" ? null : (extra[line.partyId] ?? "").trim(),
         })),
+      salaries: list.salaries.map((one) => ({
+        employeeId: one.employeeId,
+        month: one.month,
+        paid: (salaryPaid[salaryKey(one)] ?? "").trim() === "" ? "0" : (salaryPaid[salaryKey(one)] ?? "0").trim(),
+      })),
     };
     try {
       await confirm.mutateAsync({ id: list.id, body });
@@ -242,6 +252,36 @@ export function ConfirmPayoutDialog({
                   </PartyRows>
                 );
               })}
+              {list.salaries.length > 0 && (
+                <tr className="bg-slate-50/60">
+                  <td colSpan={3} className="px-3 py-1.5 font-medium text-slate-900">
+                    Salaries
+                  </td>
+                </tr>
+              )}
+              {list.salaries.map((one) => (
+                <tr key={one.id}>
+                  <td className="py-1.5 pl-8 pr-2 text-slate-700">
+                    <span className="font-medium">{one.employeeName}</span>
+                    <span className="ml-2 text-xs text-slate-400">
+                      {[monthLabel(one.month), one.note].filter(Boolean).join(" · ")}
+                    </span>
+                  </td>
+                  <td className="tabular px-2 py-1.5 text-right text-slate-600">{formatMoney(one.amount)}</td>
+                  <td className="px-2 py-1">
+                    <AmountField
+                      label={`Paid salary of ${one.employeeName} for ${monthLabel(one.month)}`}
+                      labelHidden
+                      compact
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      className="[&_input]:text-right"
+                      value={salaryPaid[salaryKey(one)] ?? ""}
+                      onValue={(raw) => setSalaryPaid((current) => ({ ...current, [salaryKey(one)]: raw }))}
+                    />
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

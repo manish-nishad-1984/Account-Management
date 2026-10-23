@@ -272,10 +272,12 @@ describe("UserPermissionsRepository (real PostgreSQL)", () => {
   it("lists every active form even where the user has no permission row", async () => {
     const matrix = await repo.findForUser(userId);
 
-    // "Document Template", "Agency", "Payout", "Client" and "Income" are not from this test:
-    // migrations 0018, 0021, 0022 and 0025 insert them (ids 100 to 104), so every database has them,
-    // ungranted until someone ticks them.
-    expect(matrix.rows.map((row) => row.formName)).toEqual(["User", "Supplier", "Document Template", "Agency", "Payout", "Client", "Income"]);
+    // "Document Template" to "Employee" are not from this test: migrations 0018, 0021, 0022, 0025,
+    // 0027 and 0033 insert them (ids 100 to 106), so every database has them, ungranted until
+    // someone ticks them.
+    expect(matrix.rows.map((row) => row.formName)).toEqual([
+      "User", "Supplier", "Document Template", "Agency", "Payout", "Client", "Income", "Balance Sheets", "Employee",
+    ]);
     expect(matrix.rows.every((row) => row.isViewAllow === false)).toBe(true);
   });
 

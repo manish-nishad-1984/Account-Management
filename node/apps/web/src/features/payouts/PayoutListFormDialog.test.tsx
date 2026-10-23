@@ -44,6 +44,7 @@ const DETAIL = {
   updatedAt: null,
   updatedByName: null,
   note: "Call before paying",
+  salaries: [],
   lines: [
     { id: "l1", partyId: P1, partyName: "Ambica Steel Traders", amount: "125000.00", outstandingAtSave: "125000.00", outstandingNow: "125000.00", extraPaid: null, invoices: [] },
     // Saved at 80,000 against 4,000,000 owed; since then the owed figure stands at 30,000 (paid since).
@@ -74,6 +75,7 @@ function serve() {
     if (method !== "GET" && failure) return Promise.resolve(failure.clone());
     if (/\/companies$/.test(url.pathname)) return Promise.resolve(json(COMPANIES));
     if (/\/payout-lists\/outstanding$/.test(url.pathname)) return Promise.resolve(json(OWED));
+    if (url.pathname.endsWith("/payout-lists/salaries-due")) return Promise.resolve(json({ rows: [] }));
     return Promise.resolve(json(DETAIL));
   });
 }
@@ -171,6 +173,7 @@ describe("PayoutListFormDialog", () => {
       companyId: null,
       note: null,
       lines: [{ partyId: P1, amount: "50000", invoices: [] }],
+      salaries: [],
     });
   });
 
@@ -227,7 +230,7 @@ describe("PayoutListFormDialog", () => {
     await screen.findByLabelText("Pay Ambica Steel Traders");
     await save(user);
 
-    expect(await screen.findByText("Add at least one party")).toBeInTheDocument();
+    expect(await screen.findByText("Add at least one party or salary")).toBeInTheDocument();
     expect(sent("POST")).toBeNull();
   });
 
@@ -391,6 +394,7 @@ describe("PayoutListFormDialog", () => {
           { partyId: P2, amount: "80000.00", invoices: [] },
           { partyId: GONE, amount: "60000.00", invoices: [] },
         ],
+        salaries: [],
       });
       const patch = vi
         .mocked(globalThis.fetch)
@@ -457,6 +461,7 @@ describe("PayoutListFormDialog confirming", () => {
     vi.mocked(globalThis.fetch).mockImplementation((input) => {
       const url = new URL(String(input), "http://localhost");
       if (/\/payout-lists\/outstanding$/.test(url.pathname)) return Promise.resolve(json(OWED));
+      if (url.pathname.endsWith("/payout-lists/salaries-due")) return Promise.resolve(json({ rows: [] }));
       return Promise.resolve(
         json({
           ...DETAIL,

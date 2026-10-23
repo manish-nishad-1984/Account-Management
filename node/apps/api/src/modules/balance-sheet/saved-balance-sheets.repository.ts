@@ -31,6 +31,7 @@ interface HeaderRow {
   income: string;
   billed: string;
   paid: string;
+  salary: string;
   created_by_name: string | null;
   created_at: string;
   updated_at: string | null;
@@ -49,13 +50,13 @@ const HEADER = sql`
     s.income_from::text as income_from, s.income_to::text as income_to,
     s.invoice_from::text as invoice_from, s.invoice_to::text as invoice_to,
     coalesce(t.project_count, 0)::int as project_count,
-    coalesce(t.income, 0)::text as income, coalesce(t.billed, 0)::text as billed, coalesce(t.paid, 0)::text as paid,
+    coalesce(t.income, 0)::text as income, coalesce(t.billed, 0)::text as billed, coalesce(t.paid, 0)::text as paid, coalesce(t.salary, 0)::text as salary,
     nullif(trim(concat_ws(' ', cu.first_name, cu.last_name)), '') as created_by_name,
     s.created_at::text as created_at, s.updated_at::text as updated_at,
     nullif(trim(concat_ws(' ', uu.first_name, uu.last_name)), '') as updated_by_name
   from ${balanceSheets} s
   left join (
-    select balance_sheet_id, count(*) as project_count, sum(income) as income, sum(billed) as billed, sum(paid) as paid
+    select balance_sheet_id, count(*) as project_count, sum(income) as income, sum(billed) as billed, sum(paid) as paid, sum(salary) as salary
     from ${balanceSheetRows} group by balance_sheet_id
   ) t on t.balance_sheet_id = s.id
   left join ${companies} co on co.id = s.company_id
@@ -108,7 +109,7 @@ export class SavedBalanceSheetsRepository extends BaseRepository {
       invoiceFrom: row.invoice_from,
       invoiceTo: row.invoice_to,
       projectCount: row.project_count,
-      figures: present({ income: toPaise(row.income), billed: toPaise(row.billed), paid: toPaise(row.paid) }),
+      figures: present({ income: toPaise(row.income), billed: toPaise(row.billed), paid: toPaise(row.paid), salary: toPaise(row.salary) }),
       createdByName: row.created_by_name,
       createdAt: iso(row.created_at)!,
       updatedAt: iso(row.updated_at),
@@ -167,6 +168,7 @@ export class SavedBalanceSheetsRepository extends BaseRepository {
         income: sql<string>`${balanceSheetRows.income}::text`,
         billed: sql<string>`${balanceSheetRows.billed}::text`,
         paid: sql<string>`${balanceSheetRows.paid}::text`,
+        salary: sql<string>`${balanceSheetRows.salary}::text`,
       })
       .from(balanceSheetRows)
       .where(eq(balanceSheetRows.balanceSheetId, id))
@@ -178,7 +180,7 @@ export class SavedBalanceSheetsRepository extends BaseRepository {
       rows: lines.map((line) => ({
         siteId: line.siteId,
         siteName: line.siteName,
-        ...present({ income: toPaise(line.income), billed: toPaise(line.billed), paid: toPaise(line.paid) }),
+        ...present({ income: toPaise(line.income), billed: toPaise(line.billed), paid: toPaise(line.paid), salary: toPaise(line.salary) }),
       })),
     };
   }
@@ -250,6 +252,7 @@ export class SavedBalanceSheetsRepository extends BaseRepository {
         income: row.income,
         billed: row.billed,
         paid: row.paid,
+        salary: row.salary,
         lineNumber: index + 1,
       })),
     );

@@ -15,6 +15,7 @@ import { ClientsRepository } from "../clients/clients.repository";
 import { PaymentsRepository } from "../payments/payments.repository";
 import { PurchaseInvoicesRepository } from "../purchase-invoices/purchase-invoices.repository";
 import { ReportsRepository } from "../reports/reports.repository";
+import { EmployeesRepository } from "../employees/employees.repository";
 import * as schema from "../../db/schema";
 import { freshDatabase } from "../../test/fresh-database";
 import type { Database } from "../../db/database";
@@ -84,7 +85,7 @@ describe("SavedBalanceSheetsRepository (real PostgreSQL)", () => {
     incomes = new ClientIncomesRepository(db);
     invoices = new PurchaseInvoicesRepository(db);
     payments = new PaymentsRepository(db);
-    repo = new SavedBalanceSheetsRepository(db, new BalanceSheetService(incomes, new ReportsRepository(db)));
+    repo = new SavedBalanceSheetsRepository(db, new BalanceSheetService(incomes, new ReportsRepository(db), new EmployeesRepository(db)));
 
     const [unit] = await db.insert(schema.units).values({ name: "Bag" }).returning({ id: schema.units.id });
     unitId = unit!.id;

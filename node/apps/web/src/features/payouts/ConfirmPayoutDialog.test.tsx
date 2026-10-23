@@ -39,6 +39,7 @@ const LIST: PayoutListDetail = {
   updatedAt: null,
   updatedByName: null,
   note: null,
+  salaries: [],
   lines: [
     {
       id: "l1",

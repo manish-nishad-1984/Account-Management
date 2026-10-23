@@ -30,6 +30,7 @@ import { AgenciesModule } from "./modules/agencies/agencies.module";
 import { GeographyModule } from "./modules/geography/geography.module";
 import { PayoutsModule } from "./modules/payouts/payouts.module";
 import { ClientsModule } from "./modules/clients/clients.module";
+import { EmployeesModule } from "./modules/employees/employees.module";
 import { ClientIncomesModule } from "./modules/client-incomes/client-incomes.module";
 import { BalanceSheetModule } from "./modules/balance-sheet/balance-sheet.module";
 import { AuditModule } from "./modules/audit/audit.module";
@@ -74,6 +75,7 @@ const env = loadEnv();
     GeographyModule,
     PayoutsModule,
     ClientsModule,
+    EmployeesModule,
     ClientIncomesModule,
     BalanceSheetModule,
     AuditModule,

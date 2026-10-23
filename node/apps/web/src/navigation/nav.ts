@@ -22,6 +22,7 @@ import {
   Banknote,
   Scale,
   Handshake,
+  IdCard,
   HardHat,
   Hourglass,
   LayoutDashboard,
@@ -60,7 +61,7 @@ export interface NavItem {
  * row shows for whoever may see at least one of them.
  */
 export const EXPORTABLE_RIGHTS = [
-  "item", "supplier", "site", "group", "company", "client", "agency",
+  "item", "supplier", "site", "group", "company", "client", "agency", "employee",
   "purchase-request", "purchase-orders", "inward-challan", "inventory-inward",
   "purchase-invoice", "sales-invoice", "income", "reports-payments", "payout",
 ] as const;
@@ -98,6 +99,8 @@ export const NAV: NavSection[] = [
       // New, no legacy screen: the contractors who work on a site (1 Oct 2026).
       // New, no legacy screen: who pays us for a project (9 Oct 2026).
       { label: "Clients", to: "/clients", icon: Handshake, permission: "client", status: "ready" },
+      // New, no legacy screen: the payroll, paid from the payout list (23 Oct 2026).
+      { label: "Employees", to: "/employees", icon: IdCard, permission: "employee", status: "ready" },
       { label: "Agency Master", to: "/agencies", icon: HardHat, permission: "agency", status: "ready" },
       { label: "Items", to: "/items", icon: Package, permission: "item", status: "ready", legacy: "/ItemMaster/ItemListView" },
       { label: "Users", to: "/users", icon: Users, permission: "user", status: "ready", legacy: "/User/UserListView" },

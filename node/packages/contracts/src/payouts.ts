@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { money, optionalMoney, optionalText, uuidId } from "./fields";
+import { salaryMonth } from "./employees";
 import { rowCapabilitiesSchema } from "./pagination";
 
 /**
@@ -60,6 +61,19 @@ export const payoutLineInputSchema = z.object({
 });
 export type PayoutLineInput = z.infer<typeof payoutLineInputSchema>;
 
+/**
+ * A MONTH'S SALARY ON THE LIST (client, 23 Oct 2026): an employee, the month it
+ * is for, and what is paid, which starts at the master's net salary and may be
+ * changed for this month. One employee and month once per list.
+ */
+export const payoutSalaryInputSchema = z.object({
+  employeeId: uuidId,
+  month: salaryMonth,
+  amount: positive("Salary"),
+  note: optionalText(200),
+});
+export type PayoutSalaryInput = z.infer<typeof payoutSalaryInputSchema>;
+
 /** The same shape creates a list and replaces one: a PATCH sends the whole list. */
 export const createPayoutListSchema = z
   .object({
@@ -71,9 +85,21 @@ export const createPayoutListSchema = z
     note: optionalText(1000),
     /** The company the list was built for; none means every company. */
     companyId: z.string().uuid().nullable().optional(),
-    lines: z.array(payoutLineInputSchema).min(1, "Add at least one party").max(500),
+    lines: z.array(payoutLineInputSchema).max(500).default([]),
+    salaries: z.array(payoutSalaryInputSchema).max(500).default([]),
   })
   .superRefine((value, ctx) => {
+    if (value.lines.length === 0 && value.salaries.length === 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["lines"], message: "Add at least one party or salary" });
+    }
+    const months = new Set<string>();
+    value.salaries.forEach((salary, index) => {
+      const key = `${salary.employeeId}|${salary.month}`;
+      if (months.has(key)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["salaries", index, "employeeId"], message: "This salary is already in the list" });
+      }
+      months.add(key);
+    });
     const seen = new Set<string>();
     value.lines.forEach((line, index) => {
       if (seen.has(line.partyId)) {
@@ -146,7 +172,20 @@ export const payoutExportLineSchema = z.object({
   invoices: z.array(payoutInvoiceSchema),
 });
 export type PayoutExportLine = z.infer<typeof payoutExportLineSchema>;
-export const payoutDetailResponseSchema = z.object({ lines: z.array(payoutExportLineSchema) });
+export const payoutExportSalarySchema = z.object({
+  payoutListId: z.string(),
+  employeeName: z.string(),
+  siteName: z.string().nullable(),
+  month: z.string(),
+  amount: z.string(),
+  paidAmount: z.string().nullable(),
+  note: z.string().nullable(),
+});
+export type PayoutExportSalary = z.infer<typeof payoutExportSalarySchema>;
+export const payoutDetailResponseSchema = z.object({
+  lines: z.array(payoutExportLineSchema),
+  salaries: z.array(payoutExportSalarySchema),
+});
 export type PayoutDetailResponse = z.infer<typeof payoutDetailResponseSchema>;
 
 export const payoutLineSchema = z.object({
@@ -173,10 +212,24 @@ export const payoutLineSchema = z.object({
 });
 export type PayoutLine = z.infer<typeof payoutLineSchema>;
 
+/** A salary on a saved list. `paidAmount` is set once the list is confirmed. */
+export const payoutSalarySchema = z.object({
+  id: z.string(),
+  employeeId: z.string(),
+  employeeName: z.string(),
+  siteName: z.string().nullable(),
+  month: z.string(),
+  amount: z.string(),
+  note: z.string().nullable(),
+  paidAmount: z.string().nullable(),
+});
+export type PayoutSalary = z.infer<typeof payoutSalarySchema>;
+
 export const payoutListDetailSchema = payoutListRowSchema.omit({ capabilities: true }).extend({
   note: z.string().nullable(),
   confirmedByName: z.string().nullable(),
   lines: z.array(payoutLineSchema),
+  salaries: z.array(payoutSalarySchema),
 });
 export type PayoutListDetail = z.infer<typeof payoutListDetailSchema>;
 
@@ -251,7 +304,12 @@ export const confirmPayoutListSchema = z
     paymentDate: z.string().trim().regex(LIST_DATE_PATTERN, "Choose the payment date"),
     method: optionalText(100),
     referenceNo: optionalText(120),
-    lines: z.array(confirmPayoutLineSchema).min(1).max(500),
+    lines: z.array(confirmPayoutLineSchema).max(500).default([]),
+    /** What was paid of each salary on the list; 0 or left out is not paid. */
+    salaries: z
+      .array(z.object({ employeeId: uuidId, month: salaryMonth, paid: nonNegative("Paid") }))
+      .max(500)
+      .default([]),
   })
   .superRefine((value, ctx) => {
     const seen = new Set<string>();

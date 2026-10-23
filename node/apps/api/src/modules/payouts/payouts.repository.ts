@@ -5,22 +5,28 @@ import type {
   CreatePayoutList,
   ListQuery,
   PayoutExportLine,
+  PayoutExportSalary,
   PayoutListDetail,
   PayoutListRow,
   PayoutInvoiceInput,
   PayoutOutstandingResponse,
   PayoutPendingInvoice,
+  PayoutSalaryInput,
   UpdatePayoutList,
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
 import { dateRangeWhere, type DateRangeFilter } from "../../common/date-range";
 import {
   companies,
+  employees,
   paymentAllocations,
   payments,
   payoutListInvoices,
   payoutListLines,
+  payoutListSalaries,
   payoutLists,
+  salaryPayments,
+  sites,
   suppliers,
   users,
 } from "../../db/schema";
@@ -88,7 +94,7 @@ const HEADER = sql`
     l.company_id, co.name as company_name,
     l.status, l.confirmed_at::text as confirmed_at,
     nullif(trim(concat_ws(' ', cf.first_name, cf.last_name)), '') as confirmed_by_name,
-    coalesce(t.total, 0)::text as total, coalesce(t.party_count, 0)::int as party_count,
+    (coalesce(t.total, 0) + coalesce(sa.total, 0))::text as total, coalesce(t.party_count, 0)::int as party_count,
     nullif(trim(concat_ws(' ', cu.first_name, cu.last_name)), '') as created_by_name,
     l.created_at::text as created_at, l.updated_at::text as updated_at,
     nullif(trim(concat_ws(' ', uu.first_name, uu.last_name)), '') as updated_by_name,
@@ -98,6 +104,9 @@ const HEADER = sql`
     select payout_list_id, sum(amount) as total, count(*) as party_count
     from ${payoutListLines} group by payout_list_id
   ) t on t.payout_list_id = l.id
+  left join (
+    select payout_list_id, sum(amount) as total from ${payoutListSalaries} group by payout_list_id
+  ) sa on sa.payout_list_id = l.id
   left join ${users} cu on cu.id = l.created_by
   left join ${users} uu on uu.id = l.updated_by
   left join ${users} cf on cf.id = l.confirmed_by
@@ -356,10 +365,27 @@ export class PayoutsRepository extends BaseRepository {
     // THE LIST'S OWN COMPANY (client, 19 Oct 2026): a DH PATEL list showed a party's
     // DH PATEL INFRA balance added in. A list with no company keeps every company.
     const owed = await this.owedByParty(undefined, header.company_id ?? undefined);
+    const salaries = await this.db
+      .select({
+        id: payoutListSalaries.id,
+        employeeId: payoutListSalaries.employeeId,
+        employeeName: employees.name,
+        siteName: sites.name,
+        month: sql<string>`to_char(${payoutListSalaries.salaryMonth}, 'YYYY-MM')`,
+        amount: sql<string>`${payoutListSalaries.amount}::text`,
+        note: payoutListSalaries.note,
+        paidAmount: sql<string | null>`${payoutListSalaries.paidAmount}::text`,
+      })
+      .from(payoutListSalaries)
+      .innerJoin(employees, eq(employees.id, payoutListSalaries.employeeId))
+      .leftJoin(sites, eq(sites.id, employees.siteId))
+      .where(eq(payoutListSalaries.payoutListId, id))
+      .orderBy(asc(payoutListSalaries.lineNumber));
     return {
       ...this.toRow(header),
       confirmedByName: header.confirmed_by_name,
       note: header.note,
+      salaries,
       lines: lines.map((line) => ({
         ...line,
         outstandingNow: fromPaise(owed.get(line.partyId)?.paise ?? 0n),
@@ -417,8 +443,30 @@ export class PayoutsRepository extends BaseRepository {
     return lines.map(({ id, ...line }) => ({ ...line, invoices: byLine.get(id) ?? [] }));
   }
 
+  /** The salaries of many lists at once, for the same Excel (client, 23 Oct 2026). */
+  async salariesOf(ids: readonly string[]): Promise<PayoutExportSalary[]> {
+    if (ids.length === 0) return [];
+    return this.db
+      .select({
+        payoutListId: payoutListSalaries.payoutListId,
+        employeeName: employees.name,
+        siteName: sites.name,
+        month: sql<string>`to_char(${payoutListSalaries.salaryMonth}, 'YYYY-MM')`,
+        amount: sql<string>`${payoutListSalaries.amount}::text`,
+        paidAmount: sql<string | null>`${payoutListSalaries.paidAmount}::text`,
+        note: payoutListSalaries.note,
+      })
+      .from(payoutListSalaries)
+      .innerJoin(payoutLists, eq(payoutLists.id, payoutListSalaries.payoutListId))
+      .innerJoin(employees, eq(employees.id, payoutListSalaries.employeeId))
+      .leftJoin(sites, eq(sites.id, employees.siteId))
+      .where(and(inArray(payoutListSalaries.payoutListId, [...ids]), eq(payoutLists.isDeleted, false)))
+      .orderBy(asc(payoutListSalaries.payoutListId), asc(payoutListSalaries.lineNumber));
+  }
+
   async create(input: CreatePayoutList, actorId: string): Promise<PayoutListDetail> {
     const lines = await this.priced(input);
+    const salaries = await this.checkedSalaries(input.salaries);
     const id = await writing(() =>
       this.db.transaction(async (tx) => {
         const [row] = await tx
@@ -434,6 +482,7 @@ export class PayoutsRepository extends BaseRepository {
           .returning({ id: payoutLists.id });
         const handle = tx as unknown as Database;
         await this.writeLines(handle, row!.id, lines);
+        await this.writeSalaries(handle, row!.id, salaries);
         await recordAudit(handle, { entity: "payout-list", entityId: row!.id, action: "created", actorId, view: (await payoutListView(handle, row!.id))! });
         return row!.id;
       }),
@@ -445,6 +494,7 @@ export class PayoutsRepository extends BaseRepository {
   async update(id: string, input: UpdatePayoutList, actorId: string): Promise<PayoutListDetail> {
     await this.refuseIfConfirmed(id);
     const lines = await this.priced(input);
+    const salaries = await this.checkedSalaries(input.salaries);
     await writing(() =>
       this.db.transaction(async (tx) => {
         const handle = tx as unknown as Database;
@@ -465,6 +515,7 @@ export class PayoutsRepository extends BaseRepository {
           throw new NotFoundException("Payout list not found");
         }
         await this.writeLines(handle, id, lines);
+        await this.writeSalaries(handle, id, salaries);
         await recordAudit(handle, { entity: "payout-list", entityId: id, action: "updated", actorId, before, view: (await payoutListView(handle, id))! });
       }),
     );
@@ -635,7 +686,36 @@ export class PayoutsRepository extends BaseRepository {
         fail(`lines.${lineIndex}.extra`, "An extra amount needs at least one bill paid for this party, which gives the payment its site");
       }
     }
-    if (issues.length === 0 && planned.length === 0) {
+    // SALARIES (client, 23 Oct 2026): each paid as typed, 0 or left out is not paid.
+    const salaryPaid: { row: PayoutListDetail["salaries"][number]; paid: bigint }[] = [];
+    for (const [index, salary] of input.salaries.entries()) {
+      const onList = detail.salaries.find((row) => row.employeeId === salary.employeeId && row.month === salary.month);
+      if (!onList) {
+        fail(`salaries.${index}.paid`, "This salary is not on the list");
+        continue;
+      }
+      const paid = toPaise(salary.paid);
+      if (paid > 0n) salaryPaid.push({ row: onList, paid });
+    }
+    const alreadyPaid = salaryPaid.length
+      ? await this.db
+          .select({ employeeId: salaryPayments.employeeId, month: sql<string>`to_char(${salaryPayments.salaryMonth}, 'YYYY-MM')` })
+          .from(salaryPayments)
+          .where(and(inArray(salaryPayments.employeeId, salaryPaid.map((one) => one.row.employeeId)), eq(salaryPayments.isDeleted, false)))
+      : [];
+    for (const one of salaryPaid) {
+      if (alreadyPaid.some((row) => row.employeeId === one.row.employeeId && row.month === one.row.month)) {
+        fail("salaries", `${one.row.employeeName}'s salary for ${one.row.month} is already paid`);
+      }
+    }
+    const people = salaryPaid.length
+      ? await this.db
+          .select({ id: employees.id, companyId: employees.companyId, siteId: employees.siteId })
+          .from(employees)
+          .where(inArray(employees.id, salaryPaid.map((one) => one.row.employeeId)))
+      : [];
+
+    if (issues.length === 0 && planned.length === 0 && salaryPaid.length === 0) {
       fail("lines", "Nothing was paid, so there is nothing to confirm");
     }
     if (issues.length > 0) {
@@ -686,6 +766,26 @@ export class PayoutsRepository extends BaseRepository {
             })),
           );
           madePayments.push(made!.id);
+        }
+
+        for (const one of salaryPaid) {
+          const person = people.find((row) => row.id === one.row.employeeId)!;
+          await tx.insert(salaryPayments).values({
+            employeeId: one.row.employeeId,
+            salaryMonth: `${one.row.month}-01`,
+            companyId: person.companyId,
+            siteId: person.siteId,
+            paymentDate,
+            amount: fromPaise(one.paid),
+            method: input.method,
+            referenceNo: input.referenceNo,
+            sourcePayoutListId: id,
+            ...createdBy(actorId),
+          });
+        }
+        for (const row of detail.salaries) {
+          const done = salaryPaid.find((one) => one.row.id === row.id);
+          await tx.update(payoutListSalaries).set({ paidAmount: fromPaise(done?.paid ?? 0n) }).where(eq(payoutListSalaries.id, row.id));
         }
 
         // What was paid of EVERY bill on the list, 0 for the ones left out.
@@ -755,6 +855,11 @@ export class PayoutsRepository extends BaseRepository {
           await tx.delete(paymentAllocations).where(inArray(paymentAllocations.paymentId, ids));
           await tx.update(payments).set({ isDeleted: true, ...updatedBy(actorId) }).where(inArray(payments.id, ids));
         }
+        await tx
+          .update(salaryPayments)
+          .set({ isDeleted: true, ...updatedBy(actorId) })
+          .where(and(eq(salaryPayments.sourcePayoutListId, id), eq(salaryPayments.isDeleted, false)));
+        await tx.update(payoutListSalaries).set({ paidAmount: null }).where(eq(payoutListSalaries.payoutListId, id));
         const lineIds = detail.lines.map((line) => line.id);
         if (lineIds.length > 0) {
           await tx
@@ -783,6 +888,7 @@ export class PayoutsRepository extends BaseRepository {
    * nothing, and a SOFT-deleted party would not trip it at all.
    */
   private async priced(input: CreatePayoutList) {
+    if (input.lines.length === 0) return [];
     const ids = input.lines.map((line) => line.partyId);
     const live = await this.db
       .select({ id: suppliers.id })
@@ -809,6 +915,37 @@ export class PayoutsRepository extends BaseRepository {
     }));
   }
 
+  /** Every employee must exist; an inactive one may still be paid what is owed. */
+  private async checkedSalaries(salaries: PayoutSalaryInput[]) {
+    if (salaries.length === 0) return [];
+    const live = await this.db
+      .select({ id: employees.id })
+      .from(employees)
+      .where(and(inArray(employees.id, salaries.map((one) => one.employeeId)), eq(employees.isDeleted, false)));
+    const known = new Set(live.map((row) => row.id));
+    const missing = salaries.findIndex((one) => !known.has(one.employeeId));
+    if (missing !== -1) {
+      const message = "This employee does not exist, or has been deleted";
+      throw new BadRequestException({ message, issues: [{ path: `salaries.${missing}.employeeId`, message }] });
+    }
+    return salaries;
+  }
+
+  private async writeSalaries(db: Database, payoutListId: string, salaries: PayoutSalaryInput[]) {
+    await db.delete(payoutListSalaries).where(eq(payoutListSalaries.payoutListId, payoutListId));
+    if (salaries.length === 0) return;
+    await db.insert(payoutListSalaries).values(
+      salaries.map((one, index) => ({
+        payoutListId,
+        employeeId: one.employeeId,
+        salaryMonth: `${one.month}-01`,
+        amount: one.amount,
+        note: one.note,
+        lineNumber: index + 1,
+      })),
+    );
+  }
+
   private async writeLines(
     db: Database,
     payoutListId: string,
@@ -822,6 +959,7 @@ export class PayoutsRepository extends BaseRepository {
   ) {
     // The bills go with their line (ON DELETE CASCADE), so clearing the lines clears both.
     await db.delete(payoutListLines).where(eq(payoutListLines.payoutListId, payoutListId));
+    if (lines.length === 0) return;
     const saved = await db
       .insert(payoutListLines)
       .values(

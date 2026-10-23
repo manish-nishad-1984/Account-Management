@@ -4,6 +4,7 @@ import type { ListFilters } from "../../lib/list-query";
 import { EXPORT_COLUMNS as AGENCY_COLUMNS } from "../agencies/AgenciesPage";
 import { EXPORT_COLUMNS as INCOME_COLUMNS } from "../client-incomes/ClientIncomesPage";
 import { EXPORT_COLUMNS as CLIENT_COLUMNS } from "../clients/ClientsPage";
+import { EXPORT_COLUMNS as EMPLOYEE_COLUMNS } from "../employees/EmployeesPage";
 import { EXPORT_COLUMNS as COMPANY_COLUMNS } from "../companies/CompaniesPage";
 import { EXPORT_COLUMNS as INVENTORY_COLUMNS } from "../inventory/InventoryPage";
 import { EXPORT_COLUMNS as CHALLAN_COLUMNS } from "../inward-challans/InwardChallansPage";
@@ -99,6 +100,7 @@ export const EXPORT_DATASETS: ExportDataset[] = [
   listDataset({ key: "site-locations", group: "Masters", label: "Site locations", hint: "Locations under each site", permission: "group", resource: "site-locations", columns: LOCATION_COLUMNS, sheetName: "Site locations" }),
   listDataset({ key: "companies", group: "Masters", label: "Companies", hint: "Your companies, GST and bank", permission: "company", resource: "companies", columns: COMPANY_COLUMNS, sheetName: "Companies" }),
   listDataset({ key: "clients", group: "Masters", label: "Clients", hint: "Who the income comes from", permission: "client", resource: "clients", columns: CLIENT_COLUMNS, sheetName: "Clients" }),
+  listDataset({ key: "employees", group: "Masters", label: "Employees", hint: "Payroll: company, site, basic and net salary", permission: "employee", byCompany: true, resource: "employees", columns: EMPLOYEE_COLUMNS, sheetName: "Employees" }),
   listDataset({ key: "agencies", group: "Masters", label: "Agencies", hint: "Agency master", permission: "agency", resource: "agencies", columns: AGENCY_COLUMNS, sheetName: "Agencies" }),
 
   // Procurement.

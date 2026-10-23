@@ -27,9 +27,11 @@ import {
   type PayoutListDetail,
   type PayoutListRow,
   type PayoutOutstandingResponse,
+  type SalaryDueResponse,
   type UpdatePayoutList,
 } from "@accountmanagement/contracts";
 import { PayoutsRepository } from "./payouts.repository";
+import { EmployeesRepository } from "../employees/employees.repository";
 import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
@@ -49,9 +51,17 @@ const listFilterSchema = listQuerySchema.extend({ companyId: z.string().uuid().o
 
 const outstandingQuerySchema = z.object({ siteId: z.string().uuid().optional(), companyId: z.string().uuid().optional() });
 
+const salariesDueQuerySchema = z.object({
+  listDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  companyId: z.string().uuid().optional(),
+});
+
 @Controller("payout-lists")
 export class PayoutsController {
-  constructor(private readonly payouts: PayoutsRepository) {}
+  constructor(
+    private readonly payouts: PayoutsRepository,
+    private readonly employees: EmployeesRepository,
+  ) {}
 
   @Get()
   @Permissions("payout.view")
@@ -89,7 +99,20 @@ export class PayoutsController {
   async lines(
     @Body(new ZodValidationPipe(payoutDetailRequestSchema)) body: PayoutDetailRequest,
   ): Promise<PayoutDetailResponse> {
-    return { lines: await this.payouts.linesOf(body.ids) };
+    const [lines, salaries] = await Promise.all([this.payouts.linesOf(body.ids), this.payouts.salariesOf(body.ids)]);
+    return { lines, salaries };
+  }
+
+  /**
+   * The salaries still to be paid on a list for `listDate` (client, 23 Oct 2026):
+   * each active employee's unpaid months before the list's month.
+   */
+  @Get("salaries-due")
+  @Permissions("payout.view")
+  async salariesDue(
+    @Query(new ZodValidationPipe(salariesDueQuerySchema)) query: { listDate: string; companyId?: string },
+  ): Promise<SalaryDueResponse> {
+    return { rows: await this.employees.salariesDue(query.listDate, query.companyId) };
   }
 
   @Get(":id")

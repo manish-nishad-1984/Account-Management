@@ -3,6 +3,7 @@ import {
   payoutListDetailSchema,
   payoutListRowSchema,
   payoutOutstandingResponseSchema,
+  salaryDueResponseSchema,
   type ConfirmPayoutList,
   type CreatePayoutList,
   type PayoutListDetail,
@@ -105,3 +106,20 @@ const useLedgerWrite = (path: (id: string) => string) => {
 
 export const useConfirmPayoutList = () => useLedgerWrite((id) => `/${RESOURCE}/${id}/confirm`);
 export const useReversePayoutList = () => useLedgerWrite((id) => `/${RESOURCE}/${id}/reverse`);
+
+/**
+ * The salaries still to be paid on a list for `listDate` (client, 23 Oct 2026):
+ * each active employee's unpaid months before the list's month.
+ */
+export const useSalariesDue = (enabled: boolean, listDate: string, companyId: string | null) =>
+  useQuery({
+    queryKey: [RESOURCE, "salaries-due", listDate, companyId],
+    enabled: enabled && /^\d{4}-\d{2}-\d{2}$/.test(listDate),
+    staleTime: 0,
+    refetchOnMount: "always",
+    queryFn: ({ signal }) => {
+      const search = new URLSearchParams({ listDate });
+      if (companyId) search.set("companyId", companyId);
+      return apiRequest(`/${RESOURCE}/salaries-due?${search.toString()}`, { schema: salaryDueResponseSchema, signal });
+    },
+  });

@@ -48,7 +48,7 @@ describe("payout lists, with details", () => {
         vi.fn((input: RequestInfo | URL) => {
           const url = String(input);
           if (url.includes("/grid-exports/xlsx")) return Promise.resolve(new Response(new Blob(["x"])));
-          if (url.includes("/payout-lists/lines")) return Promise.resolve(json({ lines: LINES }));
+          if (url.includes("/payout-lists/lines")) return Promise.resolve(json({ lines: LINES, salaries: [] }));
           return Promise.resolve(json({ rows: LISTS, nextCursor: null, total: 2 }));
         }),
       );

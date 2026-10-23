@@ -52,6 +52,8 @@ export const balanceSheetRows = pgTable(
     income: numeric("income", { precision: 18, scale: 2 }).notNull(),
     billed: numeric("billed", { precision: 18, scale: 2 }).notNull(),
     paid: numeric("paid", { precision: 18, scale: 2 }).notNull(),
+    /** Salaries paid for the project (client, 23 Oct 2026); 0 on a sheet saved before. */
+    salary: numeric("salary", { precision: 18, scale: 2 }).notNull().default("0"),
     lineNumber: integer("line_number").notNull(),
   },
   (table) => [index("balance_sheet_rows_sheet_id_idx").on(table.balanceSheetId)],

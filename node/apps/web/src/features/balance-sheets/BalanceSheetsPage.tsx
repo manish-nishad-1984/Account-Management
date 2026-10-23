@@ -44,6 +44,7 @@ const EXPORT_COLUMNS: ExportColumn<SavedBalanceSheetRow>[] = [
   { header: "Billed", width: 16, align: "right", value: (row) => exportAmount(row.figures.billed) },
   { header: "Paid", width: 16, align: "right", value: (row) => exportAmount(row.figures.paid) },
   { header: "Still to pay", width: 16, align: "right", value: (row) => exportAmount(row.figures.stillToPay) },
+  { header: "Salary", width: 16, align: "right", value: (row) => exportAmount(row.figures.salary) },
   { header: "Cash balance", width: 16, align: "right", value: (row) => exportAmount(row.figures.cashBalance) },
   { header: "Project result", width: 16, align: "right", value: (row) => exportAmount(row.figures.projectResult) },
   { header: "Saved on", width: 12, value: (row) => exportDate(row.createdAt) },

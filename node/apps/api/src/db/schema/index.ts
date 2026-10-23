@@ -18,3 +18,4 @@ export * from "./clients";
 export * from "./balance-sheets";
 export * from "./audit";
 export * from "./terms-templates";
+export * from "./employees";

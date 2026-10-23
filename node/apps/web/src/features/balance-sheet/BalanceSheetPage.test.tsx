@@ -15,6 +15,7 @@ const sheet = {
       billed: "500000.00",
       paid: "300000.00",
       stillToPay: "200000.00",
+      salary: "0.00",
       cashBalance: "600000.00",
       projectResult: "400000.00",
     },
@@ -25,6 +26,7 @@ const sheet = {
       billed: "250000.00",
       paid: "0.00",
       stillToPay: "250000.00",
+      salary: "0.00",
       cashBalance: "0.00",
       projectResult: "-250000.00",
     },
@@ -34,6 +36,7 @@ const sheet = {
     billed: "750000.00",
     paid: "300000.00",
     stillToPay: "450000.00",
+    salary: "0.00",
     cashBalance: "600000.00",
     projectResult: "150000.00",
   },
@@ -47,6 +50,7 @@ describe("the Balance Sheet", () => {
         /\/balance-sheet\/site\//,
         {
           incomes: [{ id: "i1", incomeDate: "2026-10-05", clientName: "Shah Developers", companyName: "DH Patel", total: "900000.00" }],
+          salaries: [],
           suppliers: [
             { id: "pay1", partyId: "p1", partyName: "AL BURHAN PIPES", paymentDate: "2026-10-01T00:00:00.000Z", amount: "300000.00" },
             { id: "pay2", partyId: "p2", partyName: "SHAH ENTERPRISE", paymentDate: "2026-10-05T00:00:00.000Z", amount: "50000.00" },

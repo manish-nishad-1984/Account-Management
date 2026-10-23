@@ -30,8 +30,36 @@ export function formatListDate(listDate: string): string {
 
 export const rupees = (amount: string): string => `Rs ${formatMoney(amount)}`;
 
+/** `2026-10` as people say it: `Oct 2026`. */
+export const monthLabel = (month: string): string => {
+  const [year, number] = month.split("-");
+  const name = MONTHS[Number(number) - 1];
+  return name && year ? `${name} ${year}` : month;
+};
+
+/** A salary as one line of a list: the employee and the month (client, 23 Oct 2026). */
+export const salaryLabel = (salary: { employeeName: string; month: string }): string =>
+  `${salary.employeeName} (Salary ${monthLabel(salary.month)})`;
+
+type Salaries = { salaries?: PayoutListDetail["salaries"] };
+
+/** Parties then salaries, as they are counted in a total: "2 parties, 1 salary". */
+export const countLabel = (parties: number, salaries: number): string =>
+  [
+    `${parties} ${parties === 1 ? "party" : "parties"}`,
+    salaries > 0 ? `${salaries} ${salaries === 1 ? "salary" : "salaries"}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+/** Every amount on the list, parties and salaries. */
+export const listAmounts = (detail: Pick<PayoutListDetail, "lines"> & Salaries): string[] => [
+  ...detail.lines.map((line) => line.amount),
+  ...(detail.salaries ?? []).map((one) => one.amount),
+];
+
 export function buildPayoutMessage(
-  detail: Pick<PayoutListDetail, "listDate" | "title" | "lines">,
+  detail: Pick<PayoutListDetail, "listDate" | "title" | "lines"> & Salaries,
 ): string {
   const lines = [`Payout list - ${formatListDate(detail.listDate)}`];
   const title = detail.title?.trim();
@@ -46,7 +74,12 @@ export function buildPayoutMessage(
     }
   });
 
-  lines.push(`Total: ${rupees(sumAmounts(detail.lines.map((line) => line.amount)))}`);
+  const salaries = detail.salaries ?? [];
+  salaries.forEach((one, index) => {
+    lines.push(`${detail.lines.length + index + 1}. ${salaryLabel(one)} - ${rupees(one.amount)}`);
+  });
+
+  lines.push(`Total: ${rupees(sumAmounts(listAmounts(detail)))}`);
   return lines.join("\n");
 }
 

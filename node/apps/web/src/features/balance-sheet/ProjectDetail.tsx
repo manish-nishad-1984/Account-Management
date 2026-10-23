@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { formatDate, formatMoney } from "../../lib/format";
 import { sumAmounts } from "../payouts/decimal";
+import { monthLabel } from "../payouts/message";
 import { useBalanceSheetDetail, type BalanceSheetDetailFilters } from "./api";
 
 /**
@@ -27,7 +28,7 @@ export function ProjectDetail({
   const [party, setParty] = useState("");
   if (detail.isLoading) return <p className="px-4 py-3 text-sm text-slate-500">Loading…</p>;
   if (!detail.data) return <p className="px-4 py-3 text-sm text-rose-700">Could not load this project.</p>;
-  const { incomes, suppliers } = detail.data;
+  const { incomes, suppliers, salaries } = detail.data;
   const parties = [...new Map(suppliers.map((one) => [one.partyId, one.partyName])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
   const shown = party === "" ? suppliers : suppliers.filter((one) => one.partyId === party);
   // The total follows the filter (client, 22 Oct 2026).
@@ -118,6 +119,42 @@ export function ProjectDetail({
               </tr>
             </tfoot>
           </table>
+        )}
+        {salaries.length > 0 && (
+          <>
+            {/* Salaries paid for the project (client, 23 Oct 2026). */}
+            <h3 className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Salaries</h3>
+            <table className="w-full text-sm">
+              <thead className="text-xs text-slate-500">
+                <tr>
+                  <th className="py-1 pr-3 text-left font-medium">Date</th>
+                  <th className="py-1 pr-3 text-left font-medium">Employee</th>
+                  <th className="py-1 pr-3 text-left font-medium">Month</th>
+                  <th className="py-1 text-right font-medium">Paid amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {salaries.map((one) => (
+                  <tr key={one.id}>
+                    <td className="tabular py-1 pr-3 text-slate-600">{formatDate(one.paymentDate)}</td>
+                    <td className="py-1 pr-3 text-slate-800">{one.employeeName}</td>
+                    <td className="py-1 pr-3 text-slate-600">{monthLabel(one.month)}</td>
+                    <td className="tabular py-1 text-right font-medium text-slate-900">{formatMoney(one.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-slate-300">
+                  <td colSpan={3} className="py-1 pr-3 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    Total salary
+                  </td>
+                  <td aria-label="Salary total" className="tabular py-1 text-right font-semibold text-slate-900">
+                    {formatMoney(sumAmounts(salaries.map((one) => one.amount)))}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </>
         )}
       </div>
     </div>
