@@ -10,6 +10,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
 } from "@nestjs/common";
 import { z } from "zod";
 import {
@@ -24,8 +25,18 @@ import {
   type PaymentDetail,
   type PaymentRow,
   type UpdatePayment,
+  deletePaymentsSchema,
+  type DeletePayments,
+  type DeletePaymentsResult,
+  type PaymentDirection,
+  type PaymentImportPreview,
+  type PaymentImportResult,
 } from "@accountmanagement/contracts";
+import type { FastifyRequest } from "fastify";
 import { PaymentsRepository } from "./payments.repository";
+import { PaymentImportRejected, PaymentImportService } from "./payment-import.service";
+import { readUploads } from "../../common/storage/multipart";
+import { assertSpreadsheet } from "../../common/spreadsheet/assert-spreadsheet";
 import { ReportsRepository } from "../reports/reports.repository";
 import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
@@ -67,12 +78,80 @@ const filterSchema = z.object({
 
 const listRequestSchema = listQuerySchema.and(filterSchema).and(dateRangeFilterSchema);
 
+/** What the person verified on the import preview, and which way the money went. */
+const importConfirmSchema = z.object({
+  direction: z.enum(PAYMENT_DIRECTIONS).default("out"),
+  count: z.coerce.number().int().nonnegative(),
+  total: z.string().regex(/^-?\d+(\.\d{1,2})?$/),
+});
+const importDirectionSchema = z.object({ direction: z.enum(PAYMENT_DIRECTIONS).default("out") });
+
 @Controller("payments")
 export class PaymentsController {
   constructor(
     private readonly payments: PaymentsRepository,
     private readonly reports: ReportsRepository,
+    private readonly importer: PaymentImportService,
   ) {}
+
+  /**
+   * "Import payments", step 1 (client, 23 Oct 2026): every row checked and
+   * nothing saved. A static segment beside `:id`, as `outstanding` is elsewhere.
+   */
+  @Post("import/preview")
+  @Permissions("reports-payments.add")
+  @HttpCode(200)
+  async importPreview(
+    @Req() request: FastifyRequest,
+    @Query(new ZodValidationPipe(importDirectionSchema)) query: { direction: PaymentDirection },
+  ): Promise<PaymentImportPreview> {
+    const file = await this.oneSpreadsheet(request);
+    return this.importer.preview(file.bytes, query.direction);
+  }
+
+  /** Step 2: the same file, with the count and total the person verified. All or nothing. */
+  @Post("import")
+  @Permissions("reports-payments.add")
+  @HttpCode(200)
+  async importPayments(
+    @Req() request: FastifyRequest,
+    @Query(new ZodValidationPipe(importConfirmSchema)) confirm: { direction: PaymentDirection; count: number; total: string },
+    @CurrentUser() caller: AccessTokenClaims | undefined,
+  ): Promise<PaymentImportResult> {
+    const file = await this.oneSpreadsheet(request);
+    try {
+      return await this.importer.import(file.bytes, confirm.direction, actorId(caller), confirm);
+    } catch (error) {
+      if (error instanceof PaymentImportRejected) {
+        throw new BadRequestException({
+          message: `Nothing was imported. ${error.preview.errors.length} ${error.preview.errors.length === 1 ? "problem" : "problems"} to fix.`,
+          ...error.preview,
+        });
+      }
+      throw error;
+    }
+  }
+
+  private async oneSpreadsheet(request: FastifyRequest) {
+    const files = await readUploads(request);
+    if (files.length !== 1) {
+      throw new BadRequestException("Send one spreadsheet, not several.");
+    }
+    const file = files[0]!;
+    assertSpreadsheet(file.fileName, file.bytes);
+    return file;
+  }
+
+  /** Delete the payments ticked on the list, together (client, 23 Oct 2026). */
+  @Post("delete-many")
+  @Permissions("reports-payments.delete")
+  @HttpCode(200)
+  async removeMany(
+    @Body(new ZodValidationPipe(deletePaymentsSchema)) body: DeletePayments,
+    @CurrentUser() caller: AccessTokenClaims | undefined,
+  ): Promise<DeletePaymentsResult> {
+    return { deleted: await this.payments.removeMany(body.ids, actorId(caller)) };
+  }
 
   @Get()
   @Permissions("reports-payments.view")

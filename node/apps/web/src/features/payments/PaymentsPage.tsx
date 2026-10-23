@@ -1,16 +1,21 @@
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { PAYMENT_SORT_FIELDS, type PaymentRow } from "@accountmanagement/contracts";
-import { Plus } from "lucide-react";
+import { Plus, Trash2, Upload } from "lucide-react";
 import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
 import { exportAmount, exportDate, type ExportColumn } from "../../lib/grid-export";
-import { Badge, Button, ConfirmDialog, PageHeader } from "../../components/ui";
+import { Alert, Badge, Button, ConfirmDialog, PageHeader, SelectField } from "../../components/ui";
+import { askConfirm } from "../../components/ui/confirm";
+import { ApiError } from "../../lib/api-client";
+import { useCompanyOptions, useSupplierOptions } from "../purchase-orders/api";
+import { sumAmounts } from "../payouts/decimal";
+import { PaymentImportDialog } from "./PaymentImportDialog";
 import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
 import { formatDate, formatMoney } from "../../lib/format";
 import { PaymentFormDialog } from "./PaymentFormDialog";
 import { PaymentEditDialog } from "./PaymentEditDialog";
-import { useDeletePayment, usePaymentList } from "./api";
+import { useDeletePayment, useDeletePayments, usePaymentList } from "./api";
 
 /**
  * Panel 3 of `/Report/ReportDetails` — "Payment Actions" — as its own screen.
@@ -39,20 +44,101 @@ export const EXPORT_COLUMNS: ExportColumn<PaymentRow>[] = [
 
 export function PaymentsPage() {
   const canAdd = usePermission("reports-payments", "add");
+  const canDelete = usePermission("reports-payments", "delete");
   const [direction, setDirection] = useState<"out" | "in">("out");
   const [formOpen, setFormOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  // Supplier and company filters (client, 23 Oct 2026).
+  const [partyId, setPartyId] = useState("");
+  const [companyId, setCompanyId] = useState("");
+  const suppliers = useSupplierOptions();
+  const companies = useCompanyOptions();
+  /** The payments ticked for deleting together, by id (client, 23 Oct 2026). */
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const removeMany = useDeletePayments();
+  const [bulkError, setBulkError] = useState<string | null>(null);
   // The payment open for editing (the Record payments repeater only creates).
   const [editing, setEditing] = useState<PaymentRow | null>(null);
 
   const screen = useMasterScreen<PaymentRow>({ defaultSortBy: "createdAt", defaultSortDir: "desc" });
-  const filters = { direction };
+  const filters = {
+    direction,
+    partyId: partyId === "" ? undefined : partyId,
+    companyId: companyId === "" ? undefined : companyId,
+  };
   const query = usePaymentList(screen.listParams, filters);
+  const shownRows = query.data?.rows ?? [];
+  // Only what is on screen can be ticked; a payment off the page is never deleted unseen.
+  const ticked = shownRows.filter((row) => selected.has(row.id));
+  const clearTicks = () => {
+    setSelected(new Set());
+    setBulkError(null);
+  };
+
+  const deleteTicked = async () => {
+    setBulkError(null);
+    const total = sumAmounts(ticked.map((row) => row.amount));
+    const yes = await askConfirm({
+      title: `Delete ${ticked.length} ${ticked.length === 1 ? "payment" : "payments"}`,
+      body: (
+        <>
+          <p>
+            Delete <span className="font-medium text-slate-900">{ticked.length}</span>{" "}
+            {ticked.length === 1 ? "payment" : "payments"} totalling{" "}
+            <span className="font-medium text-slate-900">{formatMoney(total)}</span>?
+          </p>
+          <p className="mt-2 text-xs text-slate-500">
+            This changes each party&apos;s balance on every report. The payments are marked deleted, so the change can be traced.
+          </p>
+        </>
+      ),
+    });
+    if (!yes) return;
+    try {
+      await removeMany.mutateAsync(ticked.map((row) => row.id));
+      clearTicks();
+    } catch (error) {
+      setBulkError(error instanceof ApiError ? error.message : "Could not delete these payments. Please try again.");
+    }
+  };
   const remove = useDeletePayment();
 
   const { askDelete } = screen;
 
+  const allTicked = shownRows.length > 0 && shownRows.every((row) => selected.has(row.id));
   const columns = useMemo<ColumnDef<PaymentRow, unknown>[]>(
     () => [
+      ...(canDelete
+        ? [
+            {
+              id: "select",
+              header: () => (
+                <input
+                  type="checkbox"
+                  aria-label="Tick every payment on this page"
+                  className="size-4 rounded border-slate-300 text-brand-600"
+                  checked={allTicked}
+                  onChange={() => setSelected(allTicked ? new Set() : new Set(shownRows.map((row) => row.id)))}
+                />
+              ),
+              cell: ({ row }: { row: { original: PaymentRow } }) => (
+                <input
+                  type="checkbox"
+                  aria-label={`Tick payment of ${row.original.amount} to ${row.original.partyName}`}
+                  className="size-4 rounded border-slate-300 text-brand-600"
+                  checked={selected.has(row.original.id)}
+                  onChange={() =>
+                    setSelected((current) => {
+                      const next = new Set(current);
+                      if (!next.delete(row.original.id)) next.add(row.original.id);
+                      return next;
+                    })
+                  }
+                />
+              ),
+            } satisfies ColumnDef<PaymentRow, unknown>,
+          ]
+        : []),
       {
         id: "paymentDate",
         header: "Date",
@@ -154,7 +240,7 @@ export function PaymentsPage() {
         ),
       },
     ],
-    [askDelete, screen],
+    [askDelete, screen, canDelete, selected, allTicked, shownRows],
   );
 
   return (
@@ -164,9 +250,60 @@ export function PaymentsPage() {
         description="Money paid to suppliers and received from customers"
       />
 
+      {ticked.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg bg-rose-50 px-3 py-2 text-sm ring-1 ring-inset ring-rose-200">
+          <span className="font-medium text-rose-900">
+            {ticked.length} {ticked.length === 1 ? "payment" : "payments"} ticked · {formatMoney(sumAmounts(ticked.map((row) => row.amount)))}
+          </span>
+          <Button variant="danger" icon={Trash2} onClick={() => void deleteTicked()} loading={removeMany.isPending}>
+            Delete ticked
+          </Button>
+          <Button variant="secondary" onClick={clearTicks}>
+            Clear
+          </Button>
+        </div>
+      )}
+      {bulkError && (
+        <div className="mb-3">
+          <Alert tone="danger">{bulkError}</Alert>
+        </div>
+      )}
+
       <DataGrid<PaymentRow>
         // One row above the grid (client request, 18 Sep 2026): the screen's
         // filters beside the search box and its actions at the right-hand end.
+        filters={
+          <>
+            <SelectField
+              labelHidden
+              label="Supplier"
+              value={partyId}
+              options={[
+                { value: "", label: direction === "out" ? "All suppliers" : "All parties" },
+                ...(suppliers.data?.rows ?? []).map((row) => ({ value: row.id, label: row.name })),
+              ]}
+              onChange={(event) => {
+                setPartyId(event.target.value);
+                screen.resetPaging();
+                clearTicks();
+              }}
+            />
+            <SelectField
+              labelHidden
+              label="Company"
+              value={companyId}
+              options={[
+                { value: "", label: "All companies" },
+                ...(companies.data?.rows ?? []).map((row) => ({ value: row.id, label: row.name })),
+              ]}
+              onChange={(event) => {
+                setCompanyId(event.target.value);
+                screen.resetPaging();
+                clearTicks();
+              }}
+            />
+          </>
+        }
         actions={<>
             <ExportExcelButton<PaymentRow>
               resource="payments"
@@ -190,6 +327,7 @@ export function PaymentsPage() {
                   onClick={() => {
                     setDirection(value);
                     screen.resetPaging();
+                    clearTicks();
                   }}
                   className={`px-3 py-1.5 text-sm font-medium first:rounded-l-md last:rounded-r-md ${
                     direction === value
@@ -201,6 +339,11 @@ export function PaymentsPage() {
                 </button>
               ))}
             </div>
+            {canAdd && (
+              <Button variant="outline" icon={Upload} onClick={() => setImportOpen(true)}>
+                Import
+              </Button>
+            )}
             {canAdd && (
               <Button icon={Plus} onClick={() => setFormOpen(true)}>
                 Record payments
@@ -222,6 +365,8 @@ export function PaymentsPage() {
         direction={direction}
         onClose={() => setFormOpen(false)}
       />
+
+      <PaymentImportDialog open={importOpen} direction={direction} onClose={() => setImportOpen(false)} />
 
       <PaymentEditDialog
         row={editing}

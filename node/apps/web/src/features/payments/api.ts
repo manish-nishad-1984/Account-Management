@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  deletePaymentsResultSchema,
   paymentBatchResultSchema,
+  paymentImportPreviewSchema,
+  paymentImportResultSchema,
+  type DeletePaymentsResult,
+  type PaymentImportPreview,
+  type PaymentImportResult,
   paymentDetailSchema,
   paymentRowSchema,
   type CreatePaymentBatch,
@@ -11,7 +17,7 @@ import {
 } from "@accountmanagement/contracts";
 import { useListResource, type ListFilters, type ListParams } from "../../lib/list-query";
 import { useDeleteResource, useUpdateResource } from "../../lib/crud";
-import { apiRequest } from "../../lib/api-client";
+import { ApiError, apiRequest, uploadRequest } from "../../lib/api-client";
 
 const RESOURCE = "payments";
 
@@ -62,3 +68,47 @@ export const useUpdatePayment = () =>
   useUpdateResource<UpdatePayment, PaymentDetail>(RESOURCE, paymentDetailSchema);
 
 export const useDeletePayment = () => useDeleteResource(RESOURCE);
+
+/** Delete the payments ticked on the list, together (client, 23 Oct 2026). */
+export const useDeletePayments = () => {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      apiRequest<DeletePaymentsResult>(`/${RESOURCE}/delete-many`, { method: "POST", body: { ids }, schema: deletePaymentsResultSchema }),
+    onSettled: () => {
+      client.invalidateQueries({ queryKey: [RESOURCE] });
+    },
+  });
+};
+
+/** "Import payments", step 1: every row checked, nothing saved. */
+export const usePreviewPaymentImport = () =>
+  useMutation({
+    mutationFn: ({ file, direction }: { file: File; direction: "out" | "in" }) =>
+      uploadRequest<PaymentImportPreview>(`/${RESOURCE}/import/preview?direction=${direction}`, [file], {
+        schema: paymentImportPreviewSchema,
+      }),
+  });
+
+/** Step 2: the same file with the count and total the person verified. */
+export const useImportPayments = () => {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, direction, count, total }: { file: File; direction: "out" | "in"; count: number; total: string }) =>
+      uploadRequest<PaymentImportResult>(
+        `/${RESOURCE}/import?direction=${direction}&count=${count}&total=${encodeURIComponent(total)}`,
+        [file],
+        { schema: paymentImportResultSchema },
+      ),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: [RESOURCE] });
+    },
+  });
+};
+
+/** The preview out of a refused import, or null when it failed some other way. */
+export function paymentImportRejectionFrom(error: unknown): PaymentImportPreview | null {
+  if (!(error instanceof ApiError) || !error.body) return null;
+  const parsed = paymentImportPreviewSchema.safeParse(error.body);
+  return parsed.success ? parsed.data : null;
+}

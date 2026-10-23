@@ -72,7 +72,7 @@ const sameFigure = (a: string, b: string): boolean => {
  * `5/10/2026`, `05.10.2026`. A year-first date is accepted as the sheet's own
  * Excel dates arrive that way. Impossible dates (31-02) are refused, not rolled over.
  */
-function parseDate(text: string): string | null {
+export function parseDate(text: string): string | null {
   let y: number, m: number, d: number;
   let hit = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ].*)?$/.exec(text);
   if (hit) {

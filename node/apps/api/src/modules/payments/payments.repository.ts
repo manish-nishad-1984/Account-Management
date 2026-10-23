@@ -1,5 +1,5 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { and, count, eq, ilike, or, sql } from "drizzle-orm";
+import { Inject, Injectable, NotFoundException, ConflictException } from "@nestjs/common";
+import { and, count, eq, ilike, or, sql, inArray } from "drizzle-orm";
 import type {
   CreatePayment,
   ListQuery,
@@ -331,6 +331,39 @@ export class PaymentsRepository extends BaseRepository {
         await tx.delete(paymentAllocations).where(eq(paymentAllocations.id, one.id));
       }
     }
+  }
+
+  /**
+   * SEVERAL AT ONCE (client, 23 Oct 2026): soft-deleted together, each audited,
+   * or none. Refused, naming how many, when any is already gone or was made by a
+   * confirmed payout list, which only reversing the list may take back.
+   */
+  async removeMany(ids: readonly string[], actorId: string): Promise<number> {
+    const unique = [...new Set(ids)];
+    const found = await this.db
+      .select({ id: payments.id, fromList: payments.sourcePayoutListId })
+      .from(payments)
+      .where(and(inArray(payments.id, unique), eq(payments.isDeleted, false)));
+    if (found.length !== unique.length) {
+      throw new NotFoundException(`${unique.length - found.length} of these payments are already deleted or do not exist. Refresh the list and try again.`);
+    }
+    const fromLists = found.filter((row) => row.fromList !== null).length;
+    if (fromLists > 0) {
+      throw new ConflictException(
+        `${fromLists} of these ${fromLists === 1 ? "payment was" : "payments were"} made by a confirmed payout list. Untick ${fromLists === 1 ? "it" : "them"}, or reverse the payout list instead.`,
+      );
+    }
+    await this.db.transaction(async (tx) => {
+      const handle = tx as unknown as Database;
+      await tx
+        .update(payments)
+        .set({ isDeleted: true, ...updatedBy(actorId) })
+        .where(and(inArray(payments.id, unique), eq(payments.isDeleted, false)));
+      for (const id of unique) {
+        await recordAudit(handle, { entity: "payment", entityId: id, action: "deleted", actorId, view: (await paymentView(handle, id))! });
+      }
+    });
+    return unique.length;
   }
 
   /**
