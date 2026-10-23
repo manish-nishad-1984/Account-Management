@@ -128,6 +128,27 @@ describe("writeReportWorkbook", () => {
     expect(grid[1]![1]).toBe("100");
   });
 
+  /** Client, 23 Oct 2026: a date in an export sorts and filters as a date. */
+  it("writes a column of dates as real dates, and leaves a column that only partly looks like dates as text", async () => {
+    const columns: ReportSheetColumn[] = [
+      { header: "Date", width: 12, align: "left" },
+      { header: "Bill no", width: 12, align: "left" },
+      { header: "Amount", width: 12, align: "right" },
+    ];
+    const bytes = await writeReportWorkbook("Bills", [
+      { kind: "table", columns, rows: [["05-10-2026", "01-02-2026", "10.00"], ["", "B-7", "5.00"], ["31-03-2027", "B-8", "1.00"]] },
+    ]);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(bytes as never);
+    const sheet = workbook.worksheets[0]!;
+    const first = sheet.getRow(2).getCell(1);
+    expect(first.value).toBeInstanceOf(Date);
+    expect((first.value as Date).toISOString().slice(0, 10)).toBe("2026-10-05");
+    expect(first.numFmt).toBe("dd-mm-yyyy");
+    expect(sheet.getRow(3).getCell(1).value ?? "").toBe("");
+    expect(sheet.getRow(2).getCell(2).value).toBe("01-02-2026");
+  });
+
   it("names the sheet what it was asked to", async () => {
     const bytes = await writeReportWorkbook("Sales report", [
       { kind: "table", columns: COLUMNS, rows: [] },

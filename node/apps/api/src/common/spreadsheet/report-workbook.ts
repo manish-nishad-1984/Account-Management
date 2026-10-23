@@ -60,16 +60,48 @@ export function figureOrText(text: string, align: "left" | "right"): string | nu
   return Number.isFinite(value) ? value : text;
 }
 
+/** A date as the exports write it: `09-09-2026`. */
+const DATE_TEXT = /^(\d{2})-(\d{2})-(\d{4})$/;
+const DATE_FORMAT = "dd-mm-yyyy";
+
+/**
+ * DATES ARE DATES (client, 23 Oct 2026): a date written as text would not sort
+ * or filter as a date in Excel. A column is a date column when every cell in it
+ * that is not blank reads `dd-mm-yyyy`, so a bill number that happens to look
+ * like a date, in a column of other bill numbers, stays text.
+ */
+export function dateColumns(rows: string[][], width: number): Set<number> {
+  const found = new Set<number>();
+  for (let index = 0; index < width; index += 1) {
+    const filled = rows.map((cells) => cells[index] ?? "").filter((text) => text !== "");
+    if (filled.length > 0 && filled.every((text) => DATE_TEXT.test(text))) found.add(index);
+  }
+  return found;
+}
+
+/** `09-09-2026` as that calendar day; written at UTC midnight, Excel shows the same day. */
+function asDate(text: string): Date | string {
+  const match = DATE_TEXT.exec(text);
+  if (!match) return text;
+  const [, day, month, year] = match;
+  const value = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  return value.getUTCDate() === Number(day) ? value : text;
+}
+
 function writeCells(
   sheet: ExcelJS.Worksheet,
   columns: ReportSheetColumn[],
   cells: string[],
+  dates: Set<number> = new Set(),
 ): ExcelJS.Row {
-  const row = sheet.addRow(cells.map((text, index) => figureOrText(text, columns[index]?.align ?? "left")));
+  const row = sheet.addRow(
+    cells.map((text, index) => (dates.has(index) ? asDate(text) : figureOrText(text, columns[index]?.align ?? "left"))),
+  );
   columns.forEach((column, index) => {
     const cell = row.getCell(index + 1);
     cell.alignment = { horizontal: column.align };
     if (typeof cell.value === "number") cell.numFmt = MONEY_FORMAT;
+    if (cell.value instanceof Date) cell.numFmt = DATE_FORMAT;
   });
   return row;
 }
@@ -135,8 +167,9 @@ function fillSheet(sheet: ExcelJS.Worksheet, blocks: ReportSheetBlock[]): void {
     header.fill = { type: "pattern", pattern: "solid", fgColor: { argb: DARK } };
     header.alignment = { horizontal: "center" };
 
+    const dates = dateColumns(block.rows, block.columns.length);
     for (const cells of block.rows) {
-      writeCells(sheet, block.columns, cells);
+      writeCells(sheet, block.columns, cells, dates);
     }
 
     if (block.footer) {

@@ -87,3 +87,18 @@ describe("InvoiceExportButton", () => {
     expect(vi.mocked(globalThis.fetch).mock.calls.some(([input]) => String(input).includes("/lines"))).toBe(false);
   });
 });
+
+/** Client, 23 Oct 2026: the Excel lists bills oldest first, by the bill's own date. */
+describe("oldestFirst", () => {
+  it("orders by bill date, then by entry, with an undated bill last", async () => {
+    const { oldestFirst } = await import("./InvoiceExportButton");
+    const bill = (id: string, documentDate: string | null, createdAt: string) => ({ id, documentDate, createdAt }) as never;
+    const sorted = oldestFirst([
+      bill("new", "2026-10-20T00:00:00.000Z", "2026-10-20T10:00:00.000Z"),
+      bill("none", null, "2026-01-01T00:00:00.000Z"),
+      bill("old-b", "2026-09-01T00:00:00.000Z", "2026-09-02T00:00:00.000Z"),
+      bill("old-a", "2026-09-01T00:00:00.000Z", "2026-09-01T00:00:00.000Z"),
+    ]);
+    expect(sorted.map((row: { id: string }) => row.id)).toEqual(["old-a", "old-b", "new", "none"]);
+  });
+});

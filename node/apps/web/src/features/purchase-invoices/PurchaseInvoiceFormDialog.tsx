@@ -462,6 +462,7 @@ export function PurchaseInvoiceFormDialog({
                 <SiteLocationAddresses
                   siteId={chosenSiteId}
                   shippingAddress={shippingAddress}
+                  showLocationAddress={false}
                   onShippingChange={(address) => setValue("shippingAddress", address, { shouldDirty: true })}
                   location={{
                     value: chosenLocationId,

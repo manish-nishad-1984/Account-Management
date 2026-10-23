@@ -24,6 +24,7 @@ export function SiteLocationAddresses({
   onShippingChange,
   location,
   className,
+  showLocationAddress = true,
 }: {
   siteId: string | null | undefined;
   shippingAddress: string | null | undefined;
@@ -35,6 +36,8 @@ export function SiteLocationAddresses({
     error?: string;
   };
   className?: string;
+  /** False: the location alone, its address still filled behind it (purchase invoice, client 23 Oct 2026). */
+  showLocationAddress?: boolean;
 }) {
   const chosenSite = siteId && siteId !== "" ? siteId : null;
   const options = useSiteDocumentOptions(chosenSite);
@@ -73,7 +76,7 @@ export function SiteLocationAddresses({
           onShippingChange(locationId === "" ? "" : addressOf(locationId));
         }}
       />
-      <ReadOnlyAddress label="Location Address" value={(shippingAddress ?? "").trim()} />
+      {showLocationAddress && <ReadOnlyAddress label="Location Address" value={(shippingAddress ?? "").trim()} />}
     </div>
   );
 }

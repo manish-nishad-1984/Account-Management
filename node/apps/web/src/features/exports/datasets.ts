@@ -11,7 +11,7 @@ import { EXPORT_COLUMNS as PAYMENT_COLUMNS } from "../payments/PaymentsPage";
 import { EXPORT_COLUMNS as PAYOUT_COLUMNS } from "../payouts/PayoutListsPage";
 import { WITH_DETAILS_COLUMNS as PAYOUT_DETAIL_COLUMNS, fetchPayoutDetailRows } from "../payouts/PayoutExportButton";
 import { EXPORT_COLUMNS as PURCHASE_INVOICE_COLUMNS } from "../purchase-invoices/PurchaseInvoicesPage";
-import { WITH_ITEMS_COLUMNS, fetchInvoiceLineRows } from "../purchase-invoices/InvoiceExportButton";
+import { WITH_ITEMS_COLUMNS, fetchInvoiceLineRows, oldestFirst } from "../purchase-invoices/InvoiceExportButton";
 import { EXPORT_COLUMNS as ORDER_COLUMNS } from "../purchase-orders/PurchaseOrdersPage";
 import { EXPORT_COLUMNS as REQUEST_COLUMNS } from "../purchase-requests/PurchaseRequestsPage";
 import { EXPORT_COLUMNS as SALES_COLUMNS } from "../sales-invoices/SalesInvoicesPage";
@@ -82,12 +82,12 @@ export const ITEM_COLUMNS: ExportColumn<ItemRow>[] = [
 ];
 
 function listDataset<T>(
-  spec: Omit<ExportDataset, "sheet"> & { resource: string; columns: ExportColumn<T>[]; sheetName: string },
+  spec: Omit<ExportDataset, "sheet"> & { resource: string; columns: ExportColumn<T>[]; sheetName: string; order?: (rows: T[]) => T[] },
 ): ExportDataset {
-  const { resource, columns, sheetName, ...dataset } = spec;
+  const { resource, columns, sheetName, order = (rows) => rows, ...dataset } = spec;
   return {
     ...dataset,
-    sheet: async (choices) => workbookSheet(await fetchAllRows<T>(resource, {}, filtersFor(dataset, choices)), columns, sheetName),
+    sheet: async (choices) => workbookSheet(order(await fetchAllRows<T>(resource, {}, filtersFor(dataset, choices))), columns, sheetName),
   };
 }
 
@@ -108,7 +108,7 @@ export const EXPORT_DATASETS: ExportDataset[] = [
   listDataset({ key: "inventory", group: "Procurement", label: "Inventory", hint: "Inventory inward entries", permission: "inventory-inward", dateLabel: "Inward date", bySite: true, resource: "inventory-inward", columns: INVENTORY_COLUMNS, sheetName: "Inventory" }),
 
   // Invoices and money.
-  listDataset({ key: "purchase-invoices", group: "Invoices & payments", label: "Purchase invoices", hint: "One row per bill, with paid / pending", permission: "purchase-invoice", dateLabel: "Bill date", bySite: true, byCompany: true, resource: "purchase-invoices", columns: PURCHASE_INVOICE_COLUMNS, sheetName: "Purchase invoices" }),
+  listDataset({ key: "purchase-invoices", group: "Invoices & payments", label: "Purchase invoices", hint: "One row per bill, with paid / pending", permission: "purchase-invoice", dateLabel: "Bill date", bySite: true, byCompany: true, resource: "purchase-invoices", columns: PURCHASE_INVOICE_COLUMNS, sheetName: "Purchase invoices", order: oldestFirst }),
   {
     key: "purchase-invoice-items",
     group: "Invoices & payments",

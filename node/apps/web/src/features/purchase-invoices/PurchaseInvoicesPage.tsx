@@ -22,7 +22,7 @@ import {
   SelectField,
 } from "../../components/ui";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
-import { useCompanyOptions } from "../purchase-orders/api";
+import { useCompanyOptions, useSupplierOptions } from "../purchase-orders/api";
 import {
   useDeletePurchaseInvoice,
   usePurchaseInvoiceList,
@@ -97,14 +97,17 @@ export function PurchaseInvoicesPage() {
   const [approval, setApproval] = useState<ApprovalFilter>("all");
   const [invoiceType, setInvoiceType] = useState<string>("");
   const [companyId, setCompanyId] = useState<string>("");
+  const [supplierId, setSupplierId] = useState<string>("");
 
   const scope = useSiteScope();
   const pdf = useDocumentPdf();
   const companies = useCompanyOptions();
+  const suppliers = useSupplierOptions();
   const filterValues = {
     isApproved: approval === "all" ? undefined : approval === "approved",
     invoiceType: invoiceType === "" ? undefined : invoiceType,
     companyId: companyId === "" ? undefined : companyId,
+    supplierId: supplierId === "" ? undefined : supplierId,
   };
   const query = usePurchaseInvoiceList(screen.listParams, filterValues);
   // The list hook adds the header's site; the export must carry it too.
@@ -385,6 +388,17 @@ export function PurchaseInvoicesPage() {
               value={companyId}
               options={companyOptions}
               onChange={(event) => setCompanyId(event.target.value)}
+            />
+            {/* Supplier filter (client, 23 Oct 2026); every dropdown has a search box. */}
+            <SelectField
+              labelHidden
+              label="Supplier"
+              value={supplierId}
+              options={[
+                { value: "", label: "All suppliers" },
+                ...(suppliers.data?.rows ?? []).map((row) => ({ value: row.id, label: row.name })),
+              ]}
+              onChange={(event) => setSupplierId(event.target.value)}
             />
           </>
         }

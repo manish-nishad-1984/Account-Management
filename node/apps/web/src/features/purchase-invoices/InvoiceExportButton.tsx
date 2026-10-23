@@ -63,6 +63,16 @@ export const WITH_ITEMS_COLUMNS: ExportColumn<InvoiceLineRow>[] = [
   { header: "Pending amount", width: 16, align: "right", value: once((invoice) => invoice.pendingAmount) },
 ];
 
+/**
+ * OLDEST BILL FIRST in the Excel (client, 23 Oct 2026), by the bill's own date,
+ * then the order it was entered. A bill with no date goes last. The screen cannot
+ * sort by bill date (the date may be blank, see the contract), so the export does.
+ */
+export function oldestFirst(invoices: PurchaseInvoiceRow[]): PurchaseInvoiceRow[] {
+  const day = (invoice: PurchaseInvoiceRow) => invoice.documentDate?.slice(0, 10) ?? "9999-99-99";
+  return [...invoices].sort((a, b) => day(a).localeCompare(day(b)) || a.createdAt.localeCompare(b.createdAt));
+}
+
 /** Each invoice followed by its lines, in the list's order; an invoice with no line is one row. */
 export function toLineRows(invoices: PurchaseInvoiceRow[], lines: PurchaseInvoiceExportLine[]): InvoiceLineRow[] {
   const byInvoice = new Map<string, PurchaseInvoiceExportLine[]>();
@@ -79,7 +89,7 @@ export async function fetchInvoiceLineRows(
   params: Partial<Pick<ListParams, "sortBy" | "sortDir" | "search">>,
   filters: ListFilters,
 ): Promise<InvoiceLineRow[]> {
-  const invoices = await fetchAllRows<PurchaseInvoiceRow>("purchase-invoices", params, filters);
+  const invoices = oldestFirst(await fetchAllRows<PurchaseInvoiceRow>("purchase-invoices", params, filters));
   const lines: PurchaseInvoiceExportLine[] = [];
   for (let at = 0; at < invoices.length; at += PURCHASE_INVOICE_LINES_MAX_IDS) {
     const ids = invoices.slice(at, at + PURCHASE_INVOICE_LINES_MAX_IDS).map((invoice) => invoice.id);
@@ -130,8 +140,7 @@ export function InvoiceExportButton({
       if (!withItems) {
         await downloadGridExcel<PurchaseInvoiceRow>({
           resource: "purchase-invoices",
-          params,
-          filters,
+          rows: oldestFirst(await fetchAllRows<PurchaseInvoiceRow>("purchase-invoices", params, filters)),
           columns: invoiceColumns,
           sheetName: "Purchase Invoices",
           fileName: "Purchase-Invoices",
