@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createPurchaseInvoiceSchema } from "@accountmanagement/contracts";
 import { GstReportService, splitGst } from "./gst-report.service";
 import { PurchaseInvoicesRepository } from "../purchase-invoices/purchase-invoices.repository";
+import { PaymentsRepository } from "../payments/payments.repository";
 import * as schema from "../../db/schema";
 import { freshDatabase } from "../../test/fresh-database";
 import type { Database } from "../../db/database";
@@ -131,6 +132,37 @@ describe("GstReportService (real PostgreSQL)", () => {
     ]);
     // Not placed, so counted within the state.
     expect(report.totals.igst).toBe("0.00");
+  });
+
+  /** Paid-wise (client, 26 Oct 2026): the GST in the payments made on the dates. */
+  it("puts in each payment of the dates the GST of the bills it paid, in proportion", async () => {
+    const payments = new PaymentsRepository(db);
+    const pay = (amount: string, date: string, allocations: { documentId: string; amount: string }[] = []) =>
+      payments.createMany(
+        [{ direction: "out", kind: "payment", partyId: local, companyId: patel, siteId, siteLocationId: null, paymentDate: `${date}T00:00:00.000Z`, amount, description: null, method: null, referenceNo: null, allocations: allocations.map((a) => ({ source: "invoice" as const, ...a })) }],
+        ACTOR,
+      );
+    const june = await bill(local, [{ price: "1000.00", gst: "18" }], { documentDate: "2026-06-10T00:00:00.000Z" }); // 1180
+    const july = await bill(local, [{ price: "2000.00", gst: "5" }], { documentDate: "2026-07-10T00:00:00.000Z" }); // 2100
+    await bill(local, [{ price: "500.00", gst: "18" }], { documentDate: "2026-08-10T00:00:00.000Z" }); // 590, named below
+
+    await pay("590.00", "2026-09-05"); // before the dates: half of June
+    // In October: the rest of June (590) and half of July (1050), oldest first.
+    await pay("1640.00", "2026-10-03");
+    // In October: names the August bill, and pays 100 beyond every bill.
+    const augustId = (await db.select().from(schema.purchaseInvoices)).find((row) => row.supplierInvoiceNo === "B-3")!.id;
+    await pay("1740.00", "2026-10-20", [{ documentId: augustId, amount: "590.00" }]);
+
+    const october = await service.report({ fromDate: "2026-10-01", toDate: "2026-10-31" });
+    expect(october.paid).toHaveLength(2);
+    const [first, second] = october.paid;
+    expect(first).toMatchObject({ date: "2026-10-03", amount: "1640.00", billNos: [june.supplierInvoiceNo, july.supplierInvoiceNo], unsettled: "0.00" });
+    // Half of June's 180 and half of July's 100.
+    expect(first).toMatchObject({ taxable: "1500.00", cgst: "70.00", sgst: "70.00", igst: "0.00", totalGst: "140.00" });
+    // August named (90 GST), the other half of July (50 GST), and 100 paid ahead.
+    expect(second).toMatchObject({ amount: "1740.00", unsettled: "100.00", totalGst: "140.00" });
+    expect(second!.billNos).toEqual(["B-3", july.supplierInvoiceNo]);
+    expect(october.paidTotals).toMatchObject({ paymentCount: 2, amount: "3380.00", unsettled: "100.00", totalGst: "280.00" });
   });
 
   it("splits an odd paisa so the two halves still add up to the bill's GST", () => {

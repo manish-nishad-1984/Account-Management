@@ -239,6 +239,13 @@
       "when": 1792748192895,
       "tag": "0033_employees_and_salaries",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1793000800823,
+      "tag": "0034_date_tags_and_inventory_issues",
+      "breakpoints": true
     }
   ]
 }

@@ -54,6 +54,8 @@ export interface NavItem {
   legacy?: string;
   /** Shown when the user may view ANY of these, rather than one `permission`. */
   anyOf?: readonly string[];
+  /** A route that is kept but left out of the rail, reached from another screen. */
+  hidden?: boolean;
 }
 
 /**
@@ -124,7 +126,9 @@ export const NAV: NavSection[] = [
       { label: "Purchase Invoices", to: "/purchase-invoices", icon: Receipt, permission: "purchase-invoice", status: "ready", legacy: "/InvoiceMaster/SupplierInvoiceListView" },
       { label: "Sales Invoices", to: "/sales-invoices", icon: FileText, permission: "sales-invoice", status: "ready", legacy: "/Sales/SalesList" },
       // New, no legacy screen: money the project's client has paid us (9 Oct 2026).
-      { label: "Income", to: "/income", icon: Banknote, permission: "income", status: "ready" },
+      // Out of the menu since 26 Oct 2026 (client: income is added from the balance
+      // sheet); the list stays, opened from there to correct or delete an entry.
+      { label: "Income", to: "/income", icon: Banknote, permission: "income", status: "ready", hidden: true },
       { label: "Payments", to: "/payments", icon: Wallet, permission: "reports-payments", status: "ready", legacy: "/Report/ReportDetails (Payment Actions)" },
     ],
   },

@@ -10,30 +10,34 @@ import {
 import { FormDialog, FormSection, SelectField, TextAreaField, TextField } from "../../components/ui";
 import { applyServerErrors, unshownValidationMessage } from "../../lib/crud";
 import { text } from "../../lib/form-values";
-import { useAllUnits } from "../items/api";
-import { ItemCombobox } from "../items/ItemCombobox";
 import {
   useCreateInventoryInward,
   useInventoryInward,
   useUpdateInventoryInward,
 } from "./api";
+import { useInventoryItems } from "./stock-api";
+import { PhotoInput } from "./photos";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { todayInput } from "../../lib/dates";
 
 /**
- * The inventory arrival form. Six fields, matching "Create Inventory".
+ * NEW ARRIVAL. Since 26 Oct 2026 (client) it brings stock into the INVENTORY
+ * ITEM MASTER: an item picked from it, or a name typed for the first time,
+ * which the master then gets, with its unit. The quantity, and a photo of what
+ * came. The purchase items (the Items master) keep a stock of their own, from
+ * the inward challans.
  *
  * NO SITE FIELD, matching the source — and the site is nonetheless recorded.
- * The scope in the header supplies it, so a new arrival is attributable without
- * adding a control the old screen never had. The list says which site that is.
+ * The scope in the header supplies it, and the stock is the site's.
  *
- * NO APPROVAL FIELD either. `InsertInventoryDetails` hard-codes
- * `IsApproved = true`, so every arrival in production posted already approved
- * and the Approve column has never gated anything. New rows are created
- * unapproved; approving is a separate action needing the approve right.
+ * NO APPROVAL FIELD either: new rows are created unapproved; approving is a
+ * separate action needing the approve right.
  */
 type FormValues = z.input<typeof createInventoryInwardSchema>;
 type Submitted = z.output<typeof createInventoryInwardSchema>;
+
+/** The picker's choice that opens the name and unit of a new item. */
+const NEW_ITEM = "__new__";
 
 export function InventoryFormDialog({
   open,
@@ -47,10 +51,12 @@ export function InventoryFormDialog({
   const isEdit = recordId !== null;
   const detail = useInventoryInward(open && isEdit ? recordId : null);
   const scope = useSiteScope();
-  const units = useAllUnits();
+  const itemsQuery = useInventoryItems(scope.siteId);
   const create = useCreateInventoryInward();
   const update = useUpdateInventoryInward();
   const [formError, setFormError] = useState<string | null>(null);
+  // "+ New item" chosen: the name and unit open.
+  const [typingNew, setTypingNew] = useState(false);
 
   const {
     register,
@@ -68,11 +74,10 @@ export function InventoryFormDialog({
   useEffect(() => {
     if (!open) return;
     setFormError(null);
+    setTypingNew(false);
     if (!isEdit) {
-      // Dated today unless the person says otherwise, which is what the
-      // legacy screens did and what a day of data entry wants. Computed on
-      // open, never at module load: a tab left open overnight would
-      // otherwise offer yesterday.
+      // Dated today unless the person says otherwise. Computed on open, never at
+      // module load: a tab left open overnight would otherwise offer yesterday.
       reset({ ...EMPTY, documentDate: todayInput(), siteId: scope.siteId ?? null });
     } else if (detail.data) {
       reset(toFormValues(detail.data));
@@ -98,25 +103,21 @@ export function InventoryFormDialog({
     (invalid) => setFormError(unshownValidationMessage(invalid)),
   );
 
-  const unitOptions = (units.data?.rows ?? []).map((unit) => ({
-    value: unit.id,
-    label: unit.name,
-  }));
-
-  /** Watched rather than registered: `ItemCombobox` is a controlled picker. */
-  const itemId = useWatch({ control, name: "itemId" });
+  const inventoryItemId = useWatch({ control, name: "inventoryItemId" });
+  const items = itemsQuery.data?.rows ?? [];
+  const picked = items.find((item) => item.id === inventoryItemId);
 
   return (
     <FormDialog
       open={open}
       onClose={onClose}
       onSubmit={onSubmit}
-      title={isEdit ? "Edit inventory arrival" : "New inventory arrival"}
+      title={isEdit ? "Edit arrival" : "New arrival"}
       description={
         isEdit
           ? "What arrived, and how much"
           : scope.siteName
-            ? `Recorded against ${scope.siteName}`
+            ? `Into the stock of ${scope.siteName}`
             : "Recorded against every site — choose a site in the header to narrow it"
       }
       formError={formError}
@@ -126,58 +127,76 @@ export function InventoryFormDialog({
       {isEdit && detail.isLoading ? (
         <p className="py-8 text-center text-sm text-slate-500">Loading arrival…</p>
       ) : (
-        <>
-          <FormSection icon={PackageCheck} title="What arrived" columns={3}>
-            {/*
-              NO `allowFreeText`. An arrival must name a catalogue item — there
-              is nowhere on this document for a typed name to go — so the picker
-              offers the catalogue and nothing else. The Alert that used to say
-              "showing the first 200 of 758, add it to Items first if it is not
-              listed" is gone with it: the search reaches all 758.
-            */}
-            <ItemCombobox
-              label="Item"
-              required
-              className="sm:col-span-2"
-              itemId={String(itemId ?? "")}
-              error={errors.itemId?.message}
-              onPick={(picked) =>
-                setValue("itemId", picked, { shouldDirty: true, shouldValidate: true })
+        <FormSection icon={PackageCheck} title="What arrived" columns={3}>
+          <SelectField
+            label="Inventory item"
+            required
+            className="sm:col-span-2"
+            value={typingNew ? NEW_ITEM : String(inventoryItemId ?? "")}
+            placeholder={itemsQuery.isLoading ? "Loading items…" : "Choose the item"}
+            options={[
+              ...items.map((item) => ({ value: item.id, label: `${item.name} (${item.unit})` })),
+              { value: NEW_ITEM, label: "+ New item…" },
+            ]}
+            error={typingNew ? undefined : errors.inventoryItemId?.message}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === NEW_ITEM) {
+                setTypingNew(true);
+                setValue("inventoryItemId", null, { shouldDirty: true });
+              } else {
+                setTypingNew(false);
+                setValue("newItemName", undefined, { shouldDirty: true });
+                setValue("inventoryItemId", value || null, { shouldDirty: true, shouldValidate: true });
               }
-            />
+            }}
+          />
+          <p className="self-end pb-2 text-xs text-slate-500">
+            {picked ? `In stock here: ${Number(picked.stock)} ${picked.unit}` : ""}
+          </p>
 
-            <TextField
-              label="Quantity"
-              required
-              inputMode="decimal"
-              error={errors.quantity?.message}
-              {...register("quantity")}
-            />
-            <SelectField
-              label="Unit"
-              required
-              placeholder={units.isLoading ? "Loading units…" : "Choose a unit"}
-              options={unitOptions}
-              error={errors.unitId?.message}
-              {...register("unitId")}
-            />
+          {typingNew && (
+            <>
+              <TextField
+                label="New item name"
+                required
+                className="sm:col-span-2"
+                placeholder="e.g. Drill machine"
+                error={errors.inventoryItemId?.message ?? errors.newItemName?.message}
+                {...register("newItemName")}
+              />
+              <TextField label="Unit" placeholder="Nos" error={errors.unit?.message} {...register("unit")} />
+            </>
+          )}
 
-            <TextField
-              label="Date"
-              type="date"
-              error={errors.documentDate?.message}
-              {...register("documentDate")}
-            />
+          <TextField
+            label="Quantity"
+            required
+            inputMode="decimal"
+            error={errors.quantity?.message}
+            {...register("quantity")}
+          />
+          <TextField
+            label="Date"
+            type="date"
+            error={errors.documentDate?.message}
+            {...register("documentDate")}
+          />
+          <TextAreaField
+            label="Details"
+            rows={1}
+            error={errors.details?.message}
+            {...register("details")}
+          />
 
-            <TextAreaField
-              label="Details"
-              rows={1}
-              error={errors.details?.message}
-              {...register("details")}
+          <div className="sm:col-span-3">
+            <PhotoInput
+              label="Photo"
+              currentPath={isEdit && detail.data?.hasPhoto ? `/inventory-issues/arrivals/${recordId}/photo` : null}
+              onChange={(photoKey) => setValue("photoKey", photoKey, { shouldDirty: true })}
             />
-          </FormSection>
-
-        </>
+          </div>
+        </FormSection>
       )}
     </FormDialog>
   );
@@ -185,11 +204,13 @@ export function InventoryFormDialog({
 
 const EMPTY: FormValues = {
   siteId: null,
-  itemId: "",
-  unitId: "" as unknown as number,
+  inventoryItemId: null,
+  newItemName: undefined,
+  unit: undefined,
   quantity: "",
   documentDate: "",
   details: "",
+  photoKey: undefined,
 };
 
 /** `<input type="date">` wants `yyyy-mm-dd`; the API sends a full ISO timestamp. */
@@ -198,13 +219,16 @@ const dateInput = (value: string | null): string => (value ? value.slice(0, 10) 
 /**
  * An edit KEEPS the row's own site, including a null one. Reassigning an old
  * arrival to whatever site the editor happens to be looking at would rewrite
- * history as a side effect of opening a form.
+ * history as a side effect of opening a form. An arrival from before 26 Oct 2026
+ * has no inventory item: its item is picked again.
  */
 const toFormValues = (detail: InventoryInwardDetail): FormValues => ({
   siteId: detail.siteId,
-  itemId: detail.itemId,
-  unitId: detail.unitId,
+  inventoryItemId: detail.inventoryItemId,
+  newItemName: undefined,
+  unit: undefined,
   quantity: detail.quantity,
   documentDate: dateInput(detail.documentDate),
   details: text(detail.details),
+  photoKey: undefined,
 });

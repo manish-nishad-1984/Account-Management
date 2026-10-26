@@ -1,5 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Plus } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ChevronDown, ChevronRight, List, Plus, Upload } from "lucide-react";
 import { hasPermission, type BalanceSheetRow } from "@accountmanagement/contracts";
 import { ExportExcelButton } from "../../components/DataGrid";
 import { Alert, Button, PageHeader, SelectField, TextField } from "../../components/ui";
@@ -12,6 +13,7 @@ import { useCompanyOptions } from "../purchase-orders/api";
 import { useBalanceSheet, type BalanceSheetFilters } from "./api";
 import { ProjectDetail } from "./ProjectDetail";
 import { ClientIncomeFormDialog } from "../client-incomes/ClientIncomeFormDialog";
+import { IncomeImportDialog } from "../client-incomes/IncomeImportDialog";
 
 /** The sheet the Export button writes: the rows on screen, then the Total. */
 const EXPORT_COLUMNS: ExportColumn<BalanceSheetRow>[] = [
@@ -57,7 +59,10 @@ export function BalanceSheetPage() {
   // Record income from the sheet itself (client, 22 Oct 2026): a dialog over the
   // page, so the open project and the place on the page are kept.
   const canAddIncome = hasPermission(user?.permissions ?? [], "income", "add");
+  const canSeeIncome = hasPermission(user?.permissions ?? [], "income", "view");
   const [addingIncome, setAddingIncome] = useState<{ siteId?: string } | null>(null);
+  // Many entries from Excel, beside Add income (client, 26 Oct 2026).
+  const [importingIncome, setImportingIncome] = useState(false);
 
   const filters = useMemo<BalanceSheetFilters>(
     () => ({ siteId, companyId, fromDate, toDate }),
@@ -92,6 +97,21 @@ export function BalanceSheetPage() {
           <TextField label="To" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
         </div>
         <div className="ml-auto flex items-end gap-2">
+          {canSeeIncome && (
+            // The income list is no longer in the menu (client, 26 Oct 2026); an entry is corrected from here.
+            <Link
+              to="/income"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"
+            >
+              <List aria-hidden className="size-4" />
+              Income entries
+            </Link>
+          )}
+          {canAddIncome && (
+            <Button variant="secondary" icon={Upload} onClick={() => setImportingIncome(true)}>
+              Import income
+            </Button>
+          )}
           {canAddIncome && (
             <Button variant="secondary" icon={Plus} onClick={() => setAddingIncome({})}>
               Add income
@@ -216,6 +236,7 @@ export function BalanceSheetPage() {
         defaultCompanyId={companyId || undefined}
         onClose={() => setAddingIncome(null)}
       />
+      <IncomeImportDialog open={importingIncome} onClose={() => setImportingIncome(false)} />
 
       <p className="mt-3 text-xs text-slate-500">
         Income is the Final Total of each entry. Billed is purchase invoices less returns; opening balances are not counted.

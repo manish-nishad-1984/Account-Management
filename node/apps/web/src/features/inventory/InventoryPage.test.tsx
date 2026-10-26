@@ -20,6 +20,8 @@ const row = (overrides: Record<string, unknown> = {}) => ({
   siteName: "Akwada Lake Front",
   itemId: "33333333-3333-3333-3333-333333333333",
   itemName: "HELMET YELLOW LABOUR",
+  inventoryItemId: null,
+  hasPhoto: false,
   unitId: 1,
   unitName: "Nos",
   quantity: "1000.00",

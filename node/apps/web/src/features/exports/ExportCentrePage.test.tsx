@@ -22,6 +22,44 @@ const workbook = () => {
   return call ? (JSON.parse(String(call.init?.body)) as { fileName: string; sheets: { sheetName: string; rows: string[][] }[] }) : null;
 };
 
+describe("ExportCentrePage date tags (client, 26 Oct 2026)", () => {
+  const TAG = { id: "t1", name: "Q2 audit", fromDate: "2026-07-01", toDate: "2026-09-30" };
+  beforeEach(() => {
+    window.localStorage.clear();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/date-tags") && init?.method === "POST") return Promise.resolve(json({ ...TAG, id: "t2", ...JSON.parse(String(init.body)) }));
+        if (url.endsWith("/date-tags")) return Promise.resolve(json({ tags: [TAG] }));
+        return Promise.resolve(json({ rows: [], nextCursor: null, total: 0 }));
+      }),
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("sets the dates from a saved tag, and saves the dates on screen under a name", async () => {
+    const user = userEvent.setup();
+    renderWithAuth(<ExportCentrePage />, { permissions: ["item.view"] });
+
+    await user.click(await screen.findByRole("button", { name: "Q2 audit" }));
+    expect(screen.getByLabelText("From")).toHaveValue("2026-07-01");
+    expect(screen.getByLabelText("To")).toHaveValue("2026-09-30");
+    expect(screen.getByRole("button", { name: "Q2 audit" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.clear(screen.getByLabelText("To"));
+    await user.type(screen.getByLabelText("To"), "2026-10-31");
+    await user.click(screen.getByRole("button", { name: /add tag/i }));
+    await user.type(screen.getByLabelText("Tag name"), "July to October");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      const sent = calls().find((c) => c.url.endsWith("/date-tags") && c.init?.method === "POST");
+      expect(JSON.parse(String(sent!.init!.body))).toEqual({ name: "July to October", fromDate: "2026-07-01", toDate: "2026-10-31" });
+    });
+  });
+});
+
 describe("ExportCentrePage", () => {
   beforeEach(() => {
     save.mockClear();

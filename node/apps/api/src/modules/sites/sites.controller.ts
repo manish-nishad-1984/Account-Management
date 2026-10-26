@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -14,6 +15,9 @@ import {
 import {
   createSiteSchema,
   hasPermission,
+  purgeSiteSchema,
+  type PurgeSite,
+  type SiteContents,
   listQuerySchema,
   saveSiteAddressSchema,
   updateSiteSchema,
@@ -29,6 +33,7 @@ import {
   type UpdateSite,
 } from "@accountmanagement/contracts";
 import { SitesRepository } from "./sites.repository";
+import { PasswordService } from "../auth/password.service";
 import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
@@ -40,7 +45,38 @@ const SUBJECT = "site";
 
 @Controller("sites")
 export class SitesController {
-  constructor(private readonly sites: SitesRepository) {}
+  constructor(
+    private readonly sites: SitesRepository,
+    private readonly passwords: PasswordService,
+  ) {}
+
+  /** What the site holds, for the screen to show before deleting it with everything (client, 26 Oct 2026). */
+  @Get(":id/contents")
+  @Permissions("site.delete")
+  contents(@Param("id", ParseUUIDPipe) id: string): Promise<SiteContents> {
+    return this.sites.contents(id);
+  }
+
+  /**
+   * The site and everything in it, after the caller's OWN login password
+   * (client, 26 Oct 2026). A wrong password is a 400, not a 401: the person is
+   * signed in, and a 401 would sign them out.
+   */
+  @Post(":id/delete-everything")
+  @Permissions("site.delete")
+  @HttpCode(200)
+  async purge(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(purgeSiteSchema)) body: PurgeSite,
+    @CurrentUser() caller: AccessTokenClaims | undefined,
+  ): Promise<SiteContents> {
+    const stored = await this.sites.passwordOf(actorId(caller));
+    const check = stored === null ? { ok: false } : await this.passwords.verify(stored, body.password);
+    if (!check.ok) {
+      throw new BadRequestException("That is not your password. Nothing was deleted.");
+    }
+    return this.sites.purge(id, actorId(caller));
+  }
 
   @Get()
   @Permissions("site.view")

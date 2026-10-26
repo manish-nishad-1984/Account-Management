@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import clsx from "clsx";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   INVENTORY_INWARD_SORT_FIELDS,
   type InventoryInwardRow,
 } from "@accountmanagement/contracts";
-import { Check, Info, Plus, Undo2 } from "lucide-react";
+import { Check, HandHelping, Info, Plus, Undo2 } from "lucide-react";
 import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
 import { exportDate, exportYesNo, type ExportColumn } from "../../lib/grid-export";
 import {
@@ -21,6 +23,10 @@ import {
   useSetInventoryApproval,
 } from "./api";
 import { InventoryFormDialog } from "./InventoryFormDialog";
+import { IssueDialog } from "./IssueDialog";
+import { IssuesView } from "./IssueLists";
+import { StockView } from "./StockView";
+import { AuthedPhoto } from "./photos";
 import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
@@ -48,7 +54,60 @@ const APPROVAL_OPTIONS = [
   { value: "approved", label: "Approved" },
 ];
 
+type Tab = "arrivals" | "stock" | "issues";
+const TABS: { key: Tab; label: string }[] = [
+  { key: "arrivals", label: "New arrivals" },
+  { key: "stock", label: "Stock" },
+  { key: "issues", label: "Issued items" },
+];
+
+/**
+ * INVENTORY (client, 26 Oct 2026): New Arrival brings stock into the inventory
+ * item master; Stock shows it, and the purchase items' own stock; Issued items
+ * are what was given to an agency's people, and what is to come back.
+ */
 export function InventoryPage() {
+  const canAdd = usePermission("inventory-inward", "add");
+  const [params, setParams] = useSearchParams();
+  const tab: Tab = TABS.some((one) => one.key === params.get("tab")) ? (params.get("tab") as Tab) : "arrivals";
+  const [issuing, setIssuing] = useState(false);
+  return (
+    <>
+      <PageHeader
+        title="Inventory"
+        description="Stock arriving at a site, issued to agencies and received back"
+        actions={
+          canAdd ? (
+            <Button icon={HandHelping} onClick={() => setIssuing(true)}>
+              Issue item
+            </Button>
+          ) : undefined
+        }
+      />
+      <div role="tablist" aria-label="Inventory" className="mb-4 flex gap-1 border-b border-slate-200">
+        {TABS.map((one) => (
+          <button
+            key={one.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === one.key}
+            onClick={() => setParams(one.key === "arrivals" ? {} : { tab: one.key }, { replace: true })}
+            className={clsx(
+              "-mb-px border-b-2 px-3 py-2 text-sm font-medium",
+              tab === one.key ? "border-brand-600 text-brand-700" : "border-transparent text-slate-600 hover:text-slate-900",
+            )}
+          >
+            {one.label}
+          </button>
+        ))}
+      </div>
+      {tab === "arrivals" ? <ArrivalsView /> : tab === "stock" ? <StockView /> : <IssuesView />}
+      <IssueDialog open={issuing} onClose={() => setIssuing(false)} />
+    </>
+  );
+}
+
+function ArrivalsView() {
   const canAdd = usePermission("inventory-inward", "add");
   const screen = useMasterScreen<InventoryInwardRow>({
     defaultSortBy: "createdAt",
@@ -73,15 +132,20 @@ export function InventoryPage() {
         id: "itemName",
         header: "Item",
         cell: ({ row }) => (
-          <div>
-            <div className="font-medium text-slate-900">
-              {row.original.itemName}
-            </div>
-            {row.original.details && (
-              <div className="text-xs text-slate-500">
-                {row.original.details}
-              </div>
+          <div className="flex items-center gap-2">
+            {row.original.hasPhoto && (
+              <AuthedPhoto path={`/inventory-issues/arrivals/${row.original.id}/photo`} alt={row.original.itemName} className="size-9" />
             )}
+            <div>
+              <div className="font-medium text-slate-900">
+                {row.original.itemName}
+              </div>
+              {row.original.details && (
+                <div className="text-xs text-slate-500">
+                  {row.original.details}
+                </div>
+              )}
+            </div>
           </div>
         ),
       },
@@ -187,10 +251,6 @@ export function InventoryPage() {
 
   return (
     <>
-      <PageHeader
-        title="Inventory Inward"
-        description="Stock arriving at a site"
-      />
 
       {/*
         Says WHY a site-scoped list is showing rows that belong to no site.

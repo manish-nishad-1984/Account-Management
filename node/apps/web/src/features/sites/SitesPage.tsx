@@ -1,11 +1,12 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { SITE_SORT_FIELDS, type SiteRow } from "@accountmanagement/contracts";
 import { Plus } from "lucide-react";
 import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
 import { exportYesNo, type ExportColumn } from "../../lib/grid-export";
-import { Badge, Button, ConfirmDialog, PageHeader } from "../../components/ui";
-import { useDeleteSite, useSiteList } from "./api";
+import { Badge, Button, PageHeader } from "../../components/ui";
+import { useSiteList } from "./api";
+import { SiteDeleteDialog } from "./SiteDeleteDialog";
 import { SiteFormDialog } from "./SiteFormDialog";
 import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
@@ -28,9 +29,10 @@ export function SitesPage() {
   const canAdd = usePermission("site", "add");
   const screen = useMasterScreen<SiteRow>({ defaultSortBy: "name" });
   const query = useSiteList(screen.listParams);
-  const remove = useDeleteSite();
+  // Delete takes the site with everything in it, after the person's password (client, 26 Oct 2026).
+  const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null);
 
-  const { openEdit, askDelete } = screen;
+  const { openEdit } = screen;
 
   const columns = useMemo<ColumnDef<SiteRow, unknown>[]>(
     () => [
@@ -134,12 +136,12 @@ export function SitesPage() {
             capabilities={row.original.capabilities}
             label={row.original.name}
             onEdit={() => openEdit(row.original.id)}
-            onDelete={() => askDelete(row.original)}
+            onDelete={() => setDeleting({ id: row.original.id, name: row.original.name })}
           />
         ),
       },
     ],
-    [openEdit, askDelete],
+    [openEdit],
   );
 
   return (
@@ -182,31 +184,7 @@ export function SitesPage() {
         onClose={screen.closeForm}
       />
 
-      <ConfirmDialog
-        open={screen.deleteTarget !== null}
-        onClose={screen.cancelDelete}
-        onConfirm={() => screen.runDelete(remove.mutateAsync)}
-        pending={remove.isPending}
-        error={screen.deleteError}
-        title="Delete site"
-        typeToConfirm={screen.deleteTarget?.name ?? ""}
-        body={
-          <>
-            <p>
-              Delete <span className="font-medium text-slate-900">{screen.deleteTarget?.name}</span>?
-            </p>
-            {/*
-              Worth stating up front: this delete is refused outright while users
-              are assigned or the site still has locations. Both are fixable on a
-              screen — the locations on Site Location.
-            */}
-            <p className="mt-2 text-xs text-slate-500">
-              The site is marked deleted and hidden from every list. It is refused
-              while users are assigned to it, or while it still has site locations.
-            </p>
-          </>
-        }
-      />
+      <SiteDeleteDialog site={deleting} onClose={() => setDeleting(null)} />
     </>
   );
 }

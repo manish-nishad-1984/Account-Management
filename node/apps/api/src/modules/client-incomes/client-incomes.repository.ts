@@ -311,6 +311,22 @@ export class ClientIncomesRepository extends BaseRepository {
     return this.findById(id);
   }
 
+  /** Many entries in one transaction, from the Excel import: all are recorded or none. */
+  async createMany(inputs: CreateClientIncome[], actorId: string): Promise<number> {
+    await writing(() =>
+      this.db.transaction(async (tx) => {
+        for (const input of inputs) {
+          const [row] = await tx
+            .insert(clientIncomes)
+            .values({ ...this.fields(input), ...createdBy(actorId) })
+            .returning({ id: clientIncomes.id });
+          await this.writeLines(tx as unknown as Database, row!.id, input);
+        }
+      }),
+    );
+    return inputs.length;
+  }
+
   /** The whole entry is sent and replaces the old one, lines included. */
   async update(id: string, input: CreateClientIncome, actorId: string): Promise<ClientIncomeDetail> {
     await writing(() =>

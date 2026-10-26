@@ -203,9 +203,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       ...section,
       items: section.items.filter(
         (item) =>
-          item.anyOf
+          !item.hidden &&
+          (item.anyOf
             ? item.anyOf.some((right) => hasPermission(granted, right, "view"))
-            : !item.permission || hasPermission(granted, item.permission, "view"),
+            : !item.permission || hasPermission(granted, item.permission, "view")),
       ),
     })).filter((section) => section.items.length > 0);
   }, [user?.permissions]);

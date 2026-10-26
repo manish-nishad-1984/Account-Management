@@ -4,7 +4,8 @@ import { z } from "zod";
  * THE AUDIT TRAIL (client, 20 Oct 2026): what happened to a purchase invoice, a
  * payment or a payout list - who, when, and each field's old and new value.
  */
-export const AUDIT_ENTITIES = ["purchase-invoice", "payment", "payout-list"] as const;
+// "site": a site deleted with everything in it (client, 26 Oct 2026).
+export const AUDIT_ENTITIES = ["purchase-invoice", "payment", "payout-list", "site"] as const;
 export type AuditEntity = (typeof AUDIT_ENTITIES)[number];
 
 export const AUDIT_ACTIONS = [

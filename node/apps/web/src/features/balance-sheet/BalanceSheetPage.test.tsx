@@ -110,6 +110,40 @@ describe("the Balance Sheet", () => {
     expect(screen.getByText("SHAH ENTERPRISE", { selector: "td" })).toBeInTheDocument();
   });
 
+  /** Salaries in the same list as the supplier payments, by date (client, 26 Oct 2026). */
+  it("lists the salaries paid among the supplier payments, in the filter and the total", async () => {
+    routeFetch([
+      [
+        /\/balance-sheet\/site\//,
+        {
+          incomes: [],
+          salaries: [{ id: "s1", employeeName: "RAMESH PATEL", month: "2026-09", paymentDate: "2026-10-03", amount: "25000.00" }],
+          suppliers: [
+            { id: "pay1", partyId: "p1", partyName: "AL BURHAN PIPES", paymentDate: "2026-10-01T00:00:00.000Z", amount: "300000.00" },
+            { id: "pay2", partyId: "p2", partyName: "SHAH ENTERPRISE", paymentDate: "2026-10-05T00:00:00.000Z", amount: "50000.00" },
+          ],
+        },
+      ],
+      [/\/balance-sheet$/, sheet],
+      [/\/companies/, { rows: [], nextCursor: null, total: 0 }],
+      [/\/clients/, { rows: [], nextCursor: null, total: 0 }],
+    ]);
+    const user = userEvent.setup();
+    renderWithAuth(<BalanceSheetPage />, { permissions: ["reports-payments.view", "income.view"] });
+    await user.click(await screen.findByLabelText("Show Akwada Lake Front"));
+
+    await screen.findByText("AL BURHAN PIPES", { selector: "td" });
+    const rows = [...screen.getByLabelText("Paid total").closest("table")!.querySelectorAll(":scope > tbody > tr")];
+    expect(rows.map((row) => row.querySelector("td")!.textContent)).toEqual(["01 Oct 2026", "03 Oct 2026", "05 Oct 2026"]);
+    expect(rows[1]).toHaveTextContent("RAMESH PATEL");
+    expect(rows[1]).toHaveTextContent("Salary · Sep 2026");
+    expect(screen.getByLabelText("Paid total")).toHaveTextContent("3,75,000.00");
+
+    await user.selectOptions(screen.getByLabelText("Filter by supplier"), "RAMESH PATEL (salary)");
+    expect(screen.getByLabelText("Paid total")).toHaveTextContent("25,000.00");
+    expect(screen.queryByText("AL BURHAN PIPES", { selector: "td" })).not.toBeInTheDocument();
+  });
+
   /** Record income from the sheet (client, 22 Oct 2026), the open project kept. */
   it("records income for an opened project without leaving the sheet", async () => {
     const user = userEvent.setup();

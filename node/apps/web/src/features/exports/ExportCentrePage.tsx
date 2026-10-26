@@ -9,6 +9,7 @@ import { downloadWorkbook } from "../../lib/grid-export";
 import { useCompanyOptions } from "../purchase-orders/api";
 import { EXPORT_DATASETS, EXPORT_GROUPS, EXPORT_PACKS, type ExportChoices, type ExportDataset } from "./datasets";
 import { DATE_PRESETS, describeRange, presetDates, presetOf } from "./date-presets";
+import { DateTags } from "./DateTags";
 
 /**
  * THE EXCEL EXPORT CENTRE (client, 20 Oct 2026): every module's export in one
@@ -225,6 +226,8 @@ export function ExportCentrePage() {
                   </button>
                 ))}
               </div>
+              {/* Named date ranges, kept and picked again (client, 26 Oct 2026). */}
+              <DateTags fromDate={fromDate} toDate={toDate} onPick={setDates} />
               <div className="grid grid-cols-2 gap-2">
                 <TextField label="From" type="date" value={fromDate} onChange={(event) => setDates({ fromDate: event.target.value, toDate })} />
                 <TextField label="To" type="date" value={toDate} onChange={(event) => setDates({ fromDate, toDate: event.target.value })} />

@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { InventoryInwardController } from "./inventory-inward.controller";
 import { InventoryInwardRepository } from "./inventory-inward.repository";
+import { InventoryStockModule } from "../inventory-stock/inventory-stock.module";
 
 /**
  * Inventory inward — Phase 3, and the first module built against the shell's
@@ -15,6 +16,8 @@ import { InventoryInwardRepository } from "./inventory-inward.repository";
  * of what counts as pending.
  */
 @Module({
+  // A New Arrival's photo is checked as the inventory's other photos are.
+  imports: [InventoryStockModule],
   controllers: [InventoryInwardController],
   providers: [InventoryInwardRepository],
   exports: [InventoryInwardRepository],

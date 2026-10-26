@@ -20,6 +20,7 @@ const VIEW_RIGHT: Record<AuditEntity, string> = {
   "purchase-invoice": "purchase-invoice",
   payment: "reports-payments",
   "payout-list": "payout",
+  site: "site",
 };
 
 @Controller("audit")

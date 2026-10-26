@@ -29,6 +29,14 @@ const REPORT: GstReport = {
   rates: [{ gstPercent: "18.00", taxable: "3000.00", cgst: "90.00", sgst: "90.00", igst: "360.00", totalGst: "540.00" }],
   totals: { billCount: 2, taxable: "3000.00", cgst: "90.00", sgst: "90.00", igst: "360.00", totalGst: "540.00" },
   warnings: [{ problem: "supplier-gstin-invalid", name: "LOCAL HARDWARE", gstin: "24ABC", billCount: 3 }],
+  paid: [
+    {
+      paymentId: "p1", date: "2026-10-03", supplierId: SHAH, supplierName: "SHAH ENTERPRISE", supplierGstin: "24AAAPS1234A1Z5",
+      companyName: "DH PATEL", siteName: "Akwada", referenceNo: "UTR1", amount: "1280.00", billNos: ["B-1"], unsettled: "100.00",
+      taxable: "1000.00", cgst: "90.00", sgst: "90.00", igst: "0.00", totalGst: "180.00",
+    },
+  ],
+  paidTotals: { paymentCount: 1, amount: "1280.00", unsettled: "100.00", taxable: "1000.00", cgst: "90.00", sgst: "90.00", igst: "0.00", totalGst: "180.00" },
 };
 
 const urls = () => vi.mocked(globalThis.fetch).mock.calls.map(([input]) => String(input));
@@ -79,7 +87,20 @@ describe("GstReportPage", () => {
     expect(within(screen.getByRole("table", { name: "Bill-wise GST" })).getByText("MS-9")).toBeInTheDocument();
   });
 
-  it("exports one Excel with the summary, the three views and the GSTINs to fix", async () => {
+  /** The GST in the payments made on the dates (client, 26 Oct 2026). */
+  it("shows each payment with the bills it paid and the GST in it", async () => {
+    const user = userEvent.setup();
+    renderWithAuth(<GstReportPage />, { permissions: ["purchase-invoice.view"] });
+    await user.click(await screen.findByRole("tab", { name: "Paid-wise" }));
+    const table = screen.getByRole("table", { name: "Paid-wise GST" });
+    const row = within(table).getByText("SHAH ENTERPRISE").closest("tr")!;
+    expect(row).toHaveTextContent("03 Oct 2026");
+    expect(row).toHaveTextContent("B-1 · advance 100.00");
+    expect(row).toHaveTextContent("1,280.00");
+    expect(within(table).getByText(/Total \(1 payments/).closest("tr")).toHaveTextContent("180.00");
+  });
+
+  it("exports one Excel with the summary, the four views and the GSTINs to fix", async () => {
     const user = userEvent.setup();
     renderWithAuth(<GstReportPage />, { permissions: ["purchase-invoice.view"] });
     await screen.findByRole("table", { name: "Supplier-wise GST" });
@@ -88,7 +109,8 @@ describe("GstReportPage", () => {
 
     const call = vi.mocked(globalThis.fetch).mock.calls.find(([input]) => String(input).includes("/grid-exports/workbook"))!;
     const body = JSON.parse(String((call[1] as RequestInit).body)) as { sheets: { sheetName: string; rows: string[][] }[] };
-    expect(body.sheets.map((sheet) => sheet.sheetName)).toEqual(["Summary", "Supplier-wise", "Bill-wise", "Rate-wise", "GSTIN to fix"]);
+    expect(body.sheets.map((sheet) => sheet.sheetName)).toEqual(["Summary", "Supplier-wise", "Bill-wise", "Rate-wise", "Paid-wise", "GSTIN to fix"]);
+    expect(body.sheets[4]!.rows[0]).toEqual(expect.arrayContaining(["03-10-2026", "SHAH ENTERPRISE", "B-1", "1280.00", "100.00", "180.00"]));
     const billSheet = body.sheets[2]!;
     expect(billSheet.rows[1]).toEqual(expect.arrayContaining(["10-09-2026", "MS-9", "27AAACM9999B1Z2", "360.00"]));
   });

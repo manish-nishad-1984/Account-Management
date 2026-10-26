@@ -1,4 +1,5 @@
-import { jsonb, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { date, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { users } from "./users";
 import type { GridColumnPreference } from "@accountmanagement/contracts";
 
@@ -52,4 +53,26 @@ export const userGridPreferences = pgTable(
     // so an upsert can target it directly rather than reading first.
     primaryKey({ columns: [table.userId, table.gridKey] }),
   ],
+);
+
+/**
+ * DATE TAGS on the Excel Export (client, 26 Oct 2026): a date range kept under
+ * a name ("Q2 audit", "Diwali bills") so it is picked again in one click.
+ * Each person's own, as the column layouts are, and for the same reason: the
+ * server, so the tags follow the person to another computer.
+ */
+export const exportDateTags = pgTable(
+  "export_date_tags",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Either end may be open; both null is "all dates". */
+    fromDate: date("from_date"),
+    toDate: date("to_date"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("export_date_tags_user_name_key").on(table.userId, sql`lower(${table.name})`)],
 );

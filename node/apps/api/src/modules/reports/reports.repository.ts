@@ -154,6 +154,68 @@ export class ReportsRepository extends BaseRepository {
     `;
   }
 
+  /**
+   * Every bill, opening balance, return and payment of the OUT side, with no date
+   * filter, and the bills each payment names: what the GST report's paid-wise
+   * view walks to find which bills a payment paid (client, 26 Oct 2026).
+   */
+  async settlementEntries(companyId?: string): Promise<{
+    entries: {
+      documentId: string;
+      sourceKind: string;
+      displayNo: string;
+      documentDate: string | null;
+      createdAt: string;
+      partyId: string;
+      siteId: string | null;
+      companyId: string;
+      amount: string;
+      effect: "credit" | "debit";
+    }[];
+    allocations: { paymentId: string; documentKind: string; documentId: string; amount: string }[];
+  }> {
+    const filter: ReportFilter = { direction: "out", companyId };
+    const entries = rawRows<Record<string, unknown>>(
+      await this.db.execute(sql`
+        with entries as (${this.entries(filter)})
+        select e.document_id, e.source_kind, e.display_no,
+          e.document_date, e.created_at, e.party_id, e.site_id, e.company_id,
+          e.amount::text as amount, e.effect
+        from entries e
+        where ${this.where(filter)}
+        order by e.document_date asc nulls first, e.created_at asc, e.document_id asc
+      `),
+    );
+    const allocations = rawRows<Record<string, unknown>>(
+      await this.db.execute(sql`
+        select a.payment_id, a.document_kind, a.document_id, a.amount::text as amount
+        from payment_allocations a
+        join payments p on p.id = a.payment_id and p.is_deleted = false and p.direction = 'out'
+      `),
+    );
+    const iso = (value: unknown) => (value === null || value === undefined ? null : new Date(String(value)).toISOString());
+    return {
+      entries: entries.map((row) => ({
+        documentId: String(row.document_id),
+        sourceKind: String(row.source_kind),
+        displayNo: String(row.display_no ?? ""),
+        documentDate: iso(row.document_date),
+        createdAt: iso(row.created_at)!,
+        partyId: String(row.party_id),
+        siteId: row.site_id === null ? null : String(row.site_id),
+        companyId: String(row.company_id),
+        amount: String(row.amount),
+        effect: row.effect === "debit" ? "debit" : "credit",
+      })),
+      allocations: allocations.map((row) => ({
+        paymentId: String(row.payment_id),
+        documentKind: String(row.document_kind),
+        documentId: String(row.document_id),
+        amount: String(row.amount),
+      })),
+    };
+  }
+
   /** The seven filters, applied to the union rather than to each table. */
   private where(filter: ReportFilter): SQL {
     const clauses: SQL[] = [sql`true`];

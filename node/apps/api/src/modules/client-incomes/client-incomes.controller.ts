@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,7 +10,10 @@ import {
   Patch,
   Post,
   Query,
+  Req,
 } from "@nestjs/common";
+import { z } from "zod";
+import type { FastifyRequest } from "fastify";
 import {
   clientIncomeFilterSchema,
   createClientIncomeSchema,
@@ -19,10 +23,15 @@ import {
   type ClientIncomeDetail,
   type ClientIncomeRow,
   type CreateClientIncome,
+  type IncomeImportPreview,
+  type IncomeImportResult,
   type ListResponse,
   type UpdateClientIncome,
 } from "@accountmanagement/contracts";
 import { ClientIncomesRepository } from "./client-incomes.repository";
+import { IncomeImportRejected, IncomeImportService } from "./income-import.service";
+import { readUploads } from "../../common/storage/multipart";
+import { assertSpreadsheet } from "../../common/spreadsheet/assert-spreadsheet";
 import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
@@ -35,9 +44,60 @@ const SUBJECT = "income";
 
 const listRequestSchema = listQuerySchema.and(clientIncomeFilterSchema);
 
+/** What the person verified on the import preview. */
+const importConfirmSchema = z.object({
+  count: z.coerce.number().int().nonnegative(),
+  total: z.string().regex(/^-?\d+(\.\d{1,2})?$/),
+});
+
 @Controller("client-incomes")
 export class ClientIncomesController {
-  constructor(private readonly incomes: ClientIncomesRepository) {}
+  constructor(
+    private readonly incomes: ClientIncomesRepository,
+    private readonly importer: IncomeImportService,
+  ) {}
+
+  /** "Import income" from the balance sheet, step 1 (client, 26 Oct 2026): every row checked, nothing saved. */
+  @Post("import/preview")
+  @Permissions("income.add")
+  @HttpCode(200)
+  async importPreview(@Req() request: FastifyRequest): Promise<IncomeImportPreview> {
+    const file = await this.oneSpreadsheet(request);
+    return this.importer.preview(file.bytes);
+  }
+
+  /** Step 2: the same file, with the count and total the person verified. All or nothing. */
+  @Post("import")
+  @Permissions("income.add")
+  @HttpCode(200)
+  async importIncomes(
+    @Req() request: FastifyRequest,
+    @Query(new ZodValidationPipe(importConfirmSchema)) confirm: { count: number; total: string },
+    @CurrentUser() caller: AccessTokenClaims | undefined,
+  ): Promise<IncomeImportResult> {
+    const file = await this.oneSpreadsheet(request);
+    try {
+      return await this.importer.import(file.bytes, actorId(caller), confirm);
+    } catch (error) {
+      if (error instanceof IncomeImportRejected) {
+        throw new BadRequestException({
+          message: `Nothing was imported. ${error.preview.errors.length} ${error.preview.errors.length === 1 ? "problem" : "problems"} to fix.`,
+          ...error.preview,
+        });
+      }
+      throw error;
+    }
+  }
+
+  private async oneSpreadsheet(request: FastifyRequest) {
+    const files = await readUploads(request);
+    if (files.length !== 1) {
+      throw new BadRequestException("Send one spreadsheet, not several.");
+    }
+    const file = files[0]!;
+    assertSpreadsheet(file.fileName, file.bytes);
+    return file;
+  }
 
   @Get()
   @Permissions("income.view")

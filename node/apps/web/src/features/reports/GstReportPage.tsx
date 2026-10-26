@@ -5,6 +5,7 @@ import { AlertTriangle, FileSpreadsheet, X } from "lucide-react";
 import {
   gstReportSchema,
   type GstBillRow,
+  type GstPaidRow,
   type GstRateRow,
   type GstReport,
   type GstSupplierRow,
@@ -26,12 +27,14 @@ import { DATE_PRESETS, describeRange, presetDates, presetOf, type DatePreset } f
  *
  * Opens on LAST month: the return being prepared is for the month just ended.
  */
-type View = "suppliers" | "bills" | "rates";
+type View = "suppliers" | "bills" | "rates" | "paid";
 
 const VIEWS: { key: View; label: string }[] = [
   { key: "suppliers", label: "Supplier-wise" },
   { key: "bills", label: "Bill-wise" },
   { key: "rates", label: "Rate-wise" },
+  // The GST in the payments made on the dates (client, 26 Oct 2026).
+  { key: "paid", label: "Paid-wise" },
 ];
 
 const PRESETS: DatePreset[] = ["lastMonth", "month", "fy", "lastFy"];
@@ -73,6 +76,19 @@ export const BILL_COLUMNS: ExportColumn<GstBillRow>[] = [
 export const RATE_COLUMNS: ExportColumn<GstRateRow>[] = [
   { header: "GST %", width: 10, align: "right", value: (row) => exportAmount(row.gstPercent) },
   ...taxColumns<GstRateRow>(),
+];
+
+export const PAID_COLUMNS: ExportColumn<GstPaidRow>[] = [
+  { header: "Payment date", width: 12, value: (row) => exportDate(row.date) },
+  { header: "Supplier", width: 32, value: (row) => row.supplierName },
+  { header: "Supplier GSTIN", width: 18, value: (row) => row.supplierGstin },
+  { header: "Company", width: 24, value: (row) => row.companyName },
+  { header: "Site", width: 24, value: (row) => row.siteName },
+  { header: "Reference", width: 16, value: (row) => row.referenceNo },
+  { header: "Bills paid", width: 30, value: (row) => row.billNos.join(", ") },
+  { header: "Paid amount", width: 16, align: "right", value: (row) => exportAmount(row.amount) },
+  { header: "Advance (no bill)", width: 16, align: "right", value: (row) => exportAmount(row.unsettled) },
+  ...taxColumns<GstPaidRow>(),
 ];
 
 const WARNING_COLUMNS: ExportColumn<GstWarning>[] = [
@@ -131,8 +147,13 @@ export function GstReportPage() {
           ["IGST", exportAmount(data.totals.igst)],
           ["Total GST", exportAmount(data.totals.totalGst)],
           ["", ""],
+          ["Paid in the dates", `${data.paidTotals.paymentCount} payments`],
+          ["Paid amount", exportAmount(data.paidTotals.amount)],
+          ["GST in the payments", exportAmount(data.paidTotals.totalGst)],
+          ["", ""],
           ["Note", "Input GST from purchase bills. Credit notes and returns are negative."],
           ["", "Same state as our GSTIN: CGST + SGST; another state: IGST."],
+          ["", "Paid-wise: payments by payment date, with the GST of the bills each one paid, in proportion."],
         ],
       };
       const sheets = [
@@ -140,6 +161,7 @@ export function GstReportPage() {
         workbookSheet(data.suppliers, SUPPLIER_COLUMNS, "Supplier-wise"),
         workbookSheet(data.bills, BILL_COLUMNS, "Bill-wise"),
         workbookSheet(data.rates, RATE_COLUMNS, "Rate-wise"),
+        workbookSheet(data.paid, PAID_COLUMNS, "Paid-wise"),
         ...(data.warnings.length > 0 ? [workbookSheet(data.warnings, WARNING_COLUMNS, "GSTIN to fix")] : []),
       ];
       await downloadWorkbook(sheets, `GST-Report-${fromDate || "start"}-to-${toDate || "today"}`);
@@ -258,7 +280,29 @@ export function GstReportPage() {
       <div className="overflow-x-auto rounded-lg bg-white ring-1 ring-slate-200">
         {report.isLoading ? (
           <p className="px-4 py-8 text-center text-sm text-slate-500">Loading…</p>
-        ) : !data || data.totals.billCount === 0 ? (
+        ) : !data ? null : view === "paid" ? (
+          data.paid.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-slate-500">No payments in these dates.</p>
+          ) : (
+            <TaxTable
+              label="Paid-wise GST"
+              head={["Payment date", "Supplier", "Site", "Bills paid", "Paid amount"]}
+              rows={data.paid.map((row) => ({
+                key: row.paymentId,
+                cells: [
+                  formatDate(row.date),
+                  row.supplierName,
+                  row.siteName ?? "—",
+                  [row.billNos.join(", "), Number(row.unsettled) > 0 ? `advance ${formatMoney(row.unsettled)}` : ""].filter(Boolean).join(" · ") || "—",
+                  formatMoney(row.amount),
+                ],
+                taxes: row,
+              }))}
+              total={data.paidTotals}
+              totalLabel={`Total (${data.paidTotals.paymentCount} payments · ${formatMoney(data.paidTotals.amount)})`}
+            />
+          )
+        ) : data.totals.billCount === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-slate-500">No purchase bills in these dates.</p>
         ) : view === "suppliers" ? (
           <TaxTable
@@ -303,7 +347,8 @@ export function GstReportPage() {
       </div>
 
       <p className="mt-3 text-xs text-slate-500">
-        Counted by bill date. Taxable value is each line after discount. Same state as our GSTIN is CGST + SGST, half each; another
+        Counted by bill date; Paid-wise by payment date, each payment carrying the GST of the bills it paid, in proportion.
+        Taxable value is each line after discount. Same state as our GSTIN is CGST + SGST, half each; another
         state is IGST. Credit notes and purchase returns are taken off.
       </p>
     </>
@@ -317,11 +362,13 @@ function TaxTable({
   head,
   rows,
   total,
+  totalLabel = "Total",
 }: {
   label: string;
   head: string[];
   rows: { key: string; cells: string[]; taxes: TaxFigures; onOpen?: () => void }[];
   total: TaxFigures;
+  totalLabel?: string;
 }) {
   const money = (value: string) => (
     <td className={clsx("tabular px-3 py-2 text-right", Number(value) < 0 ? "text-rose-700" : "text-slate-800")}>{formatMoney(value)}</td>
@@ -366,7 +413,7 @@ function TaxTable({
       <tfoot className="bg-surface-muted font-semibold">
         <tr>
           <td className="px-3 py-2.5 text-slate-900" colSpan={head.length}>
-            Total
+            {totalLabel}
           </td>
           {money(total.taxable)}
           {money(total.cgst)}

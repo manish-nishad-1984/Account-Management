@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { listResponseSchema, rowCapabilitiesSchema, type ListResponse } from "./pagination";
 import { optionalDate, optionalText, quantity, uuidId } from "./fields";
+import { photoKeySchema } from "./inventory-issues";
 
 /**
  * Inventory inward — `InventoryInward` in SQL Server, served from `SalesRepo`.
@@ -23,7 +24,10 @@ export const inventoryInwardRowSchema = z.object({
   siteId: z.string().nullable(),
   siteName: z.string().nullable(),
 
-  itemId: z.string(),
+  /** The Items-master item of an arrival keyed before 26 Oct 2026; null since. */
+  itemId: z.string().nullable(),
+  /** The INVENTORY item an arrival brings in (client, 26 Oct 2026). */
+  inventoryItemId: z.string().nullable(),
   /**
    * The item's CURRENT name, from the master.
    *
@@ -33,8 +37,10 @@ export const inventoryInwardRowSchema = z.object({
    */
   itemName: z.string(),
 
-  unitId: z.number().int(),
+  unitId: z.number().int().nullable(),
   unitName: z.string(),
+  /** The arrival has a photo of what came. */
+  hasPhoto: z.boolean(),
 
   /** A decimal STRING. Never parse it to a number. */
   quantity: z.string(),
@@ -77,20 +83,36 @@ export type InventoryInwardDetail = z.infer<typeof inventoryInwardDetailSchema>;
  * approve right. Flagged for sign-off — if arrivals should post pre-approved,
  * that is a decision to state rather than a constant inside an insert.
  */
-export const createInventoryInwardSchema = z.object({
-  siteId: uuidId
-    .nullable()
-    .optional()
-    .transform((value) => value ?? null),
-  itemId: uuidId,
-  unitId: z.coerce.number().int().positive("Choose a unit"),
-  quantity: quantity("Quantity"),
-  documentDate: optionalDate,
-  details: optionalText(500),
-});
+/**
+ * A NEW ARRIVAL (client, 26 Oct 2026): an item of the INVENTORY item master,
+ * picked, or named for the first time (and then added to the master with its
+ * unit), with the quantity and a photo. It adds to that item's stock at the site.
+ */
+export const createInventoryInwardSchema = z
+  .object({
+    siteId: uuidId
+      .nullable()
+      .optional()
+      .transform((value) => value ?? null),
+    inventoryItemId: uuidId.nullable().optional(),
+    /** A new item's name; the master gets it on save. */
+    newItemName: z.string().trim().max(200).optional(),
+    /** A new item's unit. */
+    unit: z.string().trim().max(30).optional(),
+    quantity: quantity("Quantity"),
+    documentDate: optionalDate,
+    details: optionalText(500),
+    /** A new photo; leave out to keep the one there is. */
+    photoKey: photoKeySchema.nullable().optional(),
+  })
+  .refine((arrival) => !!arrival.inventoryItemId || !!arrival.newItemName, {
+    message: "Choose the item, or type a new one",
+    path: ["inventoryItemId"],
+  });
 export type CreateInventoryInward = z.infer<typeof createInventoryInwardSchema>;
 
-export const updateInventoryInwardSchema = createInventoryInwardSchema.partial();
+/** The whole arrival is sent on an edit, as on create. */
+export const updateInventoryInwardSchema = createInventoryInwardSchema;
 export type UpdateInventoryInward = z.infer<typeof updateInventoryInwardSchema>;
 
 /**

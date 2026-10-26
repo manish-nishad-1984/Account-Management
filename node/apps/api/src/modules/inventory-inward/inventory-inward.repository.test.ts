@@ -21,11 +21,11 @@ describe("InventoryInwardRepository (real PostgreSQL)", () => {
   let siteId: string;
   let otherSiteId: string;
   let itemId: string;
-  let otherItemId: string;
   let unitId: number;
 
+  // Since 26 Oct 2026 an arrival is of an inventory item, named here for the first time.
   const input = (overrides: Record<string, unknown> = {}): CreateInventoryInward =>
-    createInventoryInwardSchema.parse({ itemId, unitId, quantity: "10.00", ...overrides });
+    createInventoryInwardSchema.parse({ newItemName: "HELMET YELLOW LABOUR", quantity: "10.00", ...overrides });
 
   /** A row as the ETL leaves it: no site, and approved, because the source is. */
   const imported = (overrides: Record<string, unknown> = {}) => ({
@@ -56,7 +56,6 @@ describe("InventoryInwardRepository (real PostgreSQL)", () => {
       ])
       .returning({ id: schema.items.id, name: schema.items.name });
     itemId = insertedItems[0]!.id;
-    otherItemId = insertedItems[1]!.id;
 
     const insertedSites = await db
       .insert(schema.sites)
@@ -104,7 +103,7 @@ describe("InventoryInwardRepository (real PostgreSQL)", () => {
 
     it("refuses an item that does not exist", async () => {
       await expect(
-        repo.create(input({ itemId: "99999999-9999-9999-9999-999999999999" }), ACTOR),
+        repo.create(input({ inventoryItemId: "99999999-9999-9999-9999-999999999999" }), ACTOR),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
@@ -113,9 +112,9 @@ describe("InventoryInwardRepository (real PostgreSQL)", () => {
     it("reads the item's CURRENT name, not the snapshot taken when it was keyed", async () => {
       const created = await repo.create(input(), ACTOR);
       await db
-        .update(schema.items)
+        .update(schema.inventoryItems)
         .set({ name: "HELMET YELLOW LABOUR (ISI)" })
-        .where(eq(schema.items.id, itemId));
+        .where(eq(schema.inventoryItems.id, created.inventoryItemId!));
 
       const page = await repo.list(query());
       const row = page.rows.find((r) => r.id === created.id)!;
@@ -155,7 +154,7 @@ describe("InventoryInwardRepository (real PostgreSQL)", () => {
     });
 
     it("searches the item name, the unit and the free text", async () => {
-      await repo.create(input({ itemId: otherItemId, details: "TO RAJAOUL" }), ACTOR);
+      await repo.create(input({ newItemName: "GI WIRE CUTTING 12 INCH", details: "TO RAJAOUL" }), ACTOR);
       await repo.create(input(), ACTOR);
 
       expect((await repo.list(query({ search: "GI WIRE" }))).rows).toHaveLength(1);
@@ -287,10 +286,27 @@ describe("InventoryInwardRepository (real PostgreSQL)", () => {
     });
   });
 
+  describe("the inventory item master (client, 26 Oct 2026)", () => {
+    it("adds a new name to the master once, and the next arrival of it is the same item", async () => {
+      const first = await repo.create(input({ newItemName: "Drill Machine", unit: "Nos" }), ACTOR);
+      const second = await repo.create(input({ newItemName: "DRILL MACHINE" }), ACTOR);
+      expect(second.inventoryItemId).toBe(first.inventoryItemId);
+      expect(await db.select().from(schema.inventoryItems)).toHaveLength(1);
+    });
+
+    it("lists an arrival from before by its Items-master item, beside the new ones", async () => {
+      await db.insert(schema.inventoryInward).values(imported());
+      await repo.create(input(), ACTOR);
+      const names = (await repo.list(query())).rows.map((row) => [row.itemName, row.unitName]);
+      expect(names).toEqual(expect.arrayContaining([["HELMET YELLOW LABOUR", "Nos"]]));
+      expect(names).toHaveLength(2);
+    });
+  });
+
   describe("updating", () => {
     it("changes the quantity without touching the site", async () => {
       const created = await repo.create(input({ siteId }), ACTOR);
-      const updated = await repo.update(created.id, { quantity: "42.00" }, ACTOR);
+      const updated = await repo.update(created.id, input({ inventoryItemId: created.inventoryItemId, quantity: "42.00" }), ACTOR);
 
       expect(updated.quantity).toBe("42.00");
       expect(updated.siteId).toBe(siteId);
@@ -300,13 +316,13 @@ describe("InventoryInwardRepository (real PostgreSQL)", () => {
       const created = await repo.create(input({ documentDate: "2026-01-04" }), ACTOR);
       expect(created.documentDate).not.toBeNull();
 
-      const updated = await repo.update(created.id, { documentDate: null }, ACTOR);
+      const updated = await repo.update(created.id, input({ documentDate: null }), ACTOR);
       expect(updated.documentDate).toBeNull();
     });
 
     it("refuses an id that is not there", async () => {
       await expect(
-        repo.update("99999999-9999-9999-9999-999999999999", { quantity: "1.00" }, ACTOR),
+        repo.update("99999999-9999-9999-9999-999999999999", input({ quantity: "1.00" }), ACTOR),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });

@@ -25,6 +25,7 @@ import {
   type UpdateInventoryInward,
 } from "@accountmanagement/contracts";
 import { InventoryInwardRepository } from "./inventory-inward.repository";
+import { InventoryPhotosService } from "../inventory-stock/inventory-photos.service";
 import { Permissions } from "../../common/auth/permissions.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ZodValidationPipe } from "../../common/zod-validation.pipe";
@@ -55,7 +56,10 @@ const listRequestSchema = listQuerySchema.and(filterSchema).and(dateRangeFilterS
 
 @Controller("inventory-inward")
 export class InventoryInwardController {
-  constructor(private readonly inventory: InventoryInwardRepository) {}
+  constructor(
+    private readonly inventory: InventoryInwardRepository,
+    private readonly photos: InventoryPhotosService,
+  ) {}
 
   @Get()
   @Permissions("inventory-inward.view")
@@ -102,10 +106,11 @@ export class InventoryInwardController {
   /** Created unapproved. The source hard-codes `IsApproved = true`; see the schema. */
   @Post()
   @Permissions("inventory-inward.add")
-  create(
+  async create(
     @Body(new ZodValidationPipe(createInventoryInwardSchema)) body: CreateInventoryInward,
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<InventoryInwardDetail> {
+    await this.photos.assertUploaded(body.photoKey);
     return this.inventory.create(
       { ...body, isApproved: approvedOnCreate(caller, SUBJECT) },
       actorId(caller),
@@ -114,11 +119,12 @@ export class InventoryInwardController {
 
   @Patch(":id")
   @Permissions("inventory-inward.edit")
-  update(
+  async update(
     @Param("id", ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(updateInventoryInwardSchema)) body: UpdateInventoryInward,
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<InventoryInwardDetail> {
+    await this.photos.assertUploaded(body.photoKey);
     return this.inventory.update(
       id,
       { ...body, ...approvalOnUpdate(caller, SUBJECT) },

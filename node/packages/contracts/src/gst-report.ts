@@ -71,12 +71,43 @@ export const gstWarningSchema = z.object({
 });
 export type GstWarning = z.infer<typeof gstWarningSchema>;
 
+/**
+ * PAID-WISE (client, 26 Oct 2026: "how much GST is in the payments made on
+ * these dates"). One row per payment made in the dates, whatever the date of
+ * the bills it paid. A payment pays the bills it names first and then the
+ * oldest bills of the same supplier, site and company, as the Pending
+ * Outstanding report reads it; returns and credit notes take off the oldest
+ * bills in the same way. The GST in a payment is the GST of each bill it paid,
+ * in proportion: half a bill paid is half its GST.
+ *
+ * `unsettled` is what was paid beyond the bills (an advance), which carries no
+ * GST yet; an opening balance paid off carries none either.
+ */
+export const gstPaidRowSchema = z.object({
+  paymentId: z.string(),
+  date: z.string().nullable(),
+  supplierId: z.string(),
+  supplierName: z.string(),
+  supplierGstin: z.string().nullable(),
+  companyName: z.string(),
+  siteName: z.string().nullable(),
+  referenceNo: z.string().nullable(),
+  amount: z.string(),
+  /** The bills this payment paid, by their number. */
+  billNos: z.array(z.string()),
+  unsettled: z.string(),
+  ...taxes,
+});
+export type GstPaidRow = z.infer<typeof gstPaidRowSchema>;
+
 export const gstReportSchema = z.object({
   bills: z.array(gstBillRowSchema),
   suppliers: z.array(gstSupplierRowSchema),
   rates: z.array(gstRateRowSchema),
   totals: z.object({ billCount: z.number().int(), ...taxes }),
   warnings: z.array(gstWarningSchema),
+  paid: z.array(gstPaidRowSchema),
+  paidTotals: z.object({ paymentCount: z.number().int(), amount: z.string(), unsettled: z.string(), ...taxes }),
 });
 export type GstReport = z.infer<typeof gstReportSchema>;
 

@@ -9,10 +9,13 @@ import type {
   SiteContact,
   SiteContactInput,
   SiteDetail,
+  SiteContents,
   SiteDocumentOptions,
   SortDirection,
   UpdateSite,
 } from "@accountmanagement/contracts";
+import { rawRow } from "../../common/raw-rows";
+import { recordAudit } from "../../common/audit";
 import { DATABASE, type Database } from "../../db/database";
 import {
   siteAddresses,
@@ -20,6 +23,7 @@ import {
   siteLocations,
   sites,
   userSites,
+  users,
 } from "../../db/schema";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
@@ -301,6 +305,105 @@ export class SitesRepository extends BaseRepository {
       }),
     );
     return this.findById(id);
+  }
+
+  /** What a site holds, shown before it is deleted with everything in it (client, 26 Oct 2026). */
+  async contents(id: string): Promise<SiteContents> {
+    const [site] = await this.db
+      .select({ name: sites.name })
+      .from(sites)
+      .where(and(eq(sites.id, id), eq(sites.isDeleted, false)));
+    if (!site) throw new NotFoundException("Site not found");
+    const row = rawRow<Record<string, string | number>>(
+      await this.db.execute(sql`
+        select
+          (select count(*) from purchase_requests where site_id = ${id} and is_deleted = false)::int as purchase_requests,
+          (select count(*) from purchase_orders where site_id = ${id} and is_deleted = false)::int as purchase_orders,
+          (select count(*) from inward_challans where site_id = ${id} and is_deleted = false)::int as inward_challans,
+          (select count(*) from inventory_inward where site_id = ${id} and is_deleted = false)::int as inventory_arrivals,
+          (select count(*) from purchase_invoices where site_id = ${id})::int as purchase_invoices,
+          (select coalesce(sum(total_amount), 0)::text from purchase_invoices where site_id = ${id}) as billed_total,
+          (select count(*) from sales_invoices where site_id = ${id})::int as sales_invoices,
+          (select count(*) from payments where site_id = ${id} and is_deleted = false)::int as payments,
+          (select coalesce(sum(amount), 0)::text from payments
+            where site_id = ${id} and is_deleted = false and kind = 'payment' and direction = 'out') as paid_total,
+          (select count(*) from client_incomes where site_id = ${id} and is_deleted = false)::int as incomes,
+          (select count(*) from site_locations where site_id = ${id} and is_deleted = false)::int as locations,
+          (select count(*) from user_sites where site_id = ${id})::int as users
+      `),
+    )!;
+    const n = (key: string) => Number(row[key] ?? 0);
+    return {
+      siteName: site.name,
+      purchaseRequests: n("purchase_requests"),
+      purchaseOrders: n("purchase_orders"),
+      inwardChallans: n("inward_challans"),
+      inventoryArrivals: n("inventory_arrivals"),
+      purchaseInvoices: n("purchase_invoices"),
+      salesInvoices: n("sales_invoices"),
+      payments: n("payments"),
+      incomes: n("incomes"),
+      locations: n("locations"),
+      users: n("users"),
+      billedTotal: Number(row.billed_total ?? 0).toFixed(2),
+      paidTotal: Number(row.paid_total ?? 0).toFixed(2),
+    };
+  }
+
+  /** The caller's stored password, to check before a site is deleted with everything in it. */
+  async passwordOf(userId: string): Promise<string | null> {
+    const [row] = await this.db.select({ password: users.password }).from(users).where(eq(users.id, userId));
+    return row?.password ?? null;
+  }
+
+  /**
+   * THE SITE AND EVERYTHING IN IT, in one transaction (client, 26 Oct 2026).
+   *
+   * What has a deleted flag is marked deleted, as each screen's own delete does;
+   * purchase and sales invoices are removed, as their own delete removes them.
+   * Payments go too, those made from a payout list included (the client's
+   * choice). Employees of the site stay, with no site. Saved balance sheets are
+   * kept as they were saved. One audit event names the site and what went.
+   */
+  async purge(id: string, actorId: string): Promise<SiteContents> {
+    const contents = await this.contents(id);
+    await this.db.transaction(async (tx) => {
+      const run = (query: ReturnType<typeof sql>) => tx.execute(query);
+      for (const table of ["purchase_requests", "purchase_orders", "inward_challans", "inventory_inward", "payments", "client_incomes", "site_locations", "site_addresses", "inventory_issues"]) {
+        await run(sql`update ${sql.identifier(table)} set is_deleted = true where site_id = ${id} and is_deleted = false`);
+      }
+      for (const table of ["purchase_invoices", "sales_invoices", "site_location_addresses", "site_contacts", "user_sites", "client_sites", "site_group_sites"]) {
+        await run(sql`delete from ${sql.identifier(table)} where site_id = ${id}`);
+      }
+      await run(sql`update employees set site_id = null where site_id = ${id}`);
+      await tx
+        .update(sites)
+        .set({ isDeleted: true, isActive: false, ...updatedBy(actorId) })
+        .where(eq(sites.id, id));
+      await recordAudit(tx as unknown as Database, {
+        entity: "site",
+        entityId: id,
+        action: "deleted",
+        actorId,
+        view: {
+          label: contents.siteName,
+          facts: [
+            ["Site", contents.siteName],
+            ["Purchase requests", String(contents.purchaseRequests)],
+            ["Purchase orders", String(contents.purchaseOrders)],
+            ["Inward challans", String(contents.inwardChallans)],
+            ["Inventory arrivals", String(contents.inventoryArrivals)],
+            ["Purchase invoices", `${contents.purchaseInvoices} (${contents.billedTotal})`],
+            ["Sales invoices", String(contents.salesInvoices)],
+            ["Payments", `${contents.payments} (${contents.paidTotal} paid out)`],
+            ["Income entries", String(contents.incomes)],
+            ["Site locations", String(contents.locations)],
+            ["Users with access", String(contents.users)],
+          ],
+        },
+      });
+    });
+    return contents;
   }
 
   /**

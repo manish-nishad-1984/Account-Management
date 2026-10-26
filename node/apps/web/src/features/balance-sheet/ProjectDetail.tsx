@@ -5,9 +5,23 @@ import { sumAmounts } from "../payouts/decimal";
 import { monthLabel } from "../payouts/message";
 import { useBalanceSheetDetail, type BalanceSheetDetailFilters } from "./api";
 
+/** A supplier payment or a salary, as one row of the list beside the income. */
+interface PaidRow {
+  key: string;
+  date: string | null;
+  /** What the header's filter picks by: `p:` and the supplier, or `s:` and the employee. */
+  who: string;
+  name: string;
+  /** The salary's month; null for a supplier payment. */
+  salaryMonth: string | null;
+  amount: string;
+}
+
 /**
  * What is behind one project's row: the income entries and, beside them, each
  * payment made to a supplier: supplier, date and amount only (client, 22 Oct 2026).
+ * The salaries paid are in the same list, by date, named after the employee
+ * (client, 26 Oct 2026: "salary also comes with the supplier payments").
  *
  * Shared by the Balance Sheet report and the saved Balance Sheets, so the two
  * open a project the same way (client, 22 Oct 2026: "all in one in balance
@@ -29,8 +43,14 @@ export function ProjectDetail({
   if (detail.isLoading) return <p className="px-4 py-3 text-sm text-slate-500">Loading…</p>;
   if (!detail.data) return <p className="px-4 py-3 text-sm text-rose-700">Could not load this project.</p>;
   const { incomes, suppliers, salaries } = detail.data;
-  const parties = [...new Map(suppliers.map((one) => [one.partyId, one.partyName])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  const shown = party === "" ? suppliers : suppliers.filter((one) => one.partyId === party);
+  const paid: PaidRow[] = [
+    ...suppliers.map((one) => ({ key: one.id, date: one.paymentDate, who: `p:${one.partyId}`, name: one.partyName, salaryMonth: null, amount: one.amount })),
+    ...salaries.map((one) => ({ key: `salary-${one.id}`, date: one.paymentDate, who: `s:${one.employeeName}`, name: one.employeeName, salaryMonth: one.month, amount: one.amount })),
+  ];
+  // Oldest first, undated first, as the supplier payments always were.
+  paid.sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
+  const parties = [...new Map(paid.map((one) => [one.who, one.name])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const shown = party === "" ? paid : paid.filter((one) => one.who === party);
   // The total follows the filter (client, 22 Oct 2026).
   const shownTotal = sumAmounts(shown.map((one) => one.amount));
   return (
@@ -71,9 +91,9 @@ export function ProjectDetail({
         )}
       </div>
       <div>
-        <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Suppliers</h3>
-        {suppliers.length === 0 ? (
-          <p className="text-sm text-slate-500">No payments to suppliers.</p>
+        <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Suppliers and salaries</h3>
+        {paid.length === 0 ? (
+          <p className="text-sm text-slate-500">No payments to suppliers or salaries.</p>
         ) : (
           <table className="w-full text-sm">
             <thead className="text-xs text-slate-500">
@@ -91,7 +111,7 @@ export function ProjectDetail({
                     <option value="">Supplier (all)</option>
                     {parties.map(([id, name]) => (
                       <option key={id} value={id}>
-                        {name}
+                        {id.startsWith("s:") ? `${name} (salary)` : name}
                       </option>
                     ))}
                   </select>
@@ -101,9 +121,16 @@ export function ProjectDetail({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {shown.map((one) => (
-                <tr key={one.id}>
-                  <td className="tabular py-1 pr-3 text-slate-600">{one.paymentDate ? formatDate(one.paymentDate) : "—"}</td>
-                  <td className="py-1 pr-3 text-slate-800">{one.partyName}</td>
+                <tr key={one.key}>
+                  <td className="tabular py-1 pr-3 text-slate-600">{one.date ? formatDate(one.date) : "—"}</td>
+                  <td className="py-1 pr-3 text-slate-800">
+                    {one.name}
+                    {one.salaryMonth && (
+                      <span className="ml-1.5 rounded bg-violet-50 px-1.5 py-0.5 text-[11px] font-medium text-violet-700 ring-1 ring-inset ring-violet-200">
+                        Salary · {monthLabel(one.salaryMonth)}
+                      </span>
+                    )}
+                  </td>
                   <td className="tabular py-1 text-right font-medium text-slate-900">{formatMoney(one.amount)}</td>
                 </tr>
               ))}
@@ -119,42 +146,6 @@ export function ProjectDetail({
               </tr>
             </tfoot>
           </table>
-        )}
-        {salaries.length > 0 && (
-          <>
-            {/* Salaries paid for the project (client, 23 Oct 2026). */}
-            <h3 className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Salaries</h3>
-            <table className="w-full text-sm">
-              <thead className="text-xs text-slate-500">
-                <tr>
-                  <th className="py-1 pr-3 text-left font-medium">Date</th>
-                  <th className="py-1 pr-3 text-left font-medium">Employee</th>
-                  <th className="py-1 pr-3 text-left font-medium">Month</th>
-                  <th className="py-1 text-right font-medium">Paid amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {salaries.map((one) => (
-                  <tr key={one.id}>
-                    <td className="tabular py-1 pr-3 text-slate-600">{formatDate(one.paymentDate)}</td>
-                    <td className="py-1 pr-3 text-slate-800">{one.employeeName}</td>
-                    <td className="py-1 pr-3 text-slate-600">{monthLabel(one.month)}</td>
-                    <td className="tabular py-1 text-right font-medium text-slate-900">{formatMoney(one.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-slate-300">
-                  <td colSpan={3} className="py-1 pr-3 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Total salary
-                  </td>
-                  <td aria-label="Salary total" className="tabular py-1 text-right font-semibold text-slate-900">
-                    {formatMoney(sumAmounts(salaries.map((one) => one.amount)))}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </>
         )}
       </div>
     </div>

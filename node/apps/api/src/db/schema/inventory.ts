@@ -1,15 +1,48 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   integer,
   numeric,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { sites } from "./users";
 import { items, units } from "./masters";
+import { agencies, agencyContacts } from "./agencies";
+
+/**
+ * THE INVENTORY ITEM MASTER (client, 26 Oct 2026): the things kept in stock at
+ * a site and lent out by the day: tools, shuttering, a drill. Not the Items
+ * master, which is what is BOUGHT; the two stocks are kept apart (client:
+ * "purchase item stock is different and new arrival item also different").
+ * An item comes into being from New Arrival, by name, with its photo.
+ */
+export const inventoryItems = pgTable(
+  "inventory_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    unit: text("unit").notNull().default("Nos"),
+    /** The item's photo, in document storage; null for none. */
+    photoKey: text("photo_key"),
+    note: text("note"),
+    isDeleted: boolean("is_deleted").notNull().default(false),
+    createdBy: uuid("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid("updated_by"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("inventory_items_name_key")
+      .on(sql`lower(${table.name})`)
+      .where(sql`${table.isDeleted} = false`),
+  ],
+);
 
 /**
  * Inventory inward — stock arriving at a site.
@@ -52,9 +85,16 @@ export const inventoryInward = pgTable(
      * off-catalogue row. `item_name` below is a denormalised snapshot, not a
      * fallback.
      */
-    itemId: uuid("item_id")
-      .notNull()
-      .references(() => items.id),
+    itemId: uuid("item_id").references(() => items.id),
+
+    /**
+     * Since 26 Oct 2026 an arrival is of an INVENTORY item (above), and `item_id`
+     * and `unit_id` are null on it. The rows from before keep their Items-master
+     * item. One of the two is always there.
+     */
+    inventoryItemId: uuid("inventory_item_id").references(() => inventoryItems.id),
+    /** The arrival's photo, in document storage. */
+    photoKey: text("photo_key"),
 
     /**
      * `Item` in the source — the item's name as it was when the row was keyed.
@@ -69,9 +109,7 @@ export const inventoryInward = pgTable(
      */
     itemName: text("item_name"),
 
-    unitId: integer("unit_id")
-      .notNull()
-      .references(() => units.id),
+    unitId: integer("unit_id").references(() => units.id),
 
     quantity: numeric("quantity", { precision: 18, scale: 2 }).notNull(),
 
@@ -120,5 +158,93 @@ export const inventoryInward = pgTable(
     index("inventory_inward_item_id_idx").on(table.itemId),
     /** The dashboard's pending queue reads exactly this. */
     index("inventory_inward_is_approved_idx").on(table.isApproved),
+    index("inventory_inward_inventory_item_idx").on(table.inventoryItemId),
+    check("inventory_inward_item_present", sql`${table.itemId} is not null or ${table.inventoryItemId} is not null`),
+  ],
+);
+
+/**
+ * THE PEOPLE OF AN AGENCY WHO TAKE THINGS AWAY (client, 26 Oct 2026): picked or
+ * added when an item is issued, with a photo and a mobile, and kept for the
+ * next time.
+ */
+export const agencyPersons = pgTable(
+  "agency_persons",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agencyId: uuid("agency_id")
+      .notNull()
+      .references(() => agencies.id),
+    name: text("name").notNull(),
+    mobile: text("mobile"),
+    photoKey: text("photo_key"),
+    isDeleted: boolean("is_deleted").notNull().default(false),
+    createdBy: uuid("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("agency_persons_agency_idx").on(table.agencyId)],
+);
+
+/**
+ * AN ITEM GIVEN OUT (client, 26 Oct 2026): from the inventory item stock or the
+ * purchase item stock of a site, to a person of an agency. RETURNABLE ones are
+ * expected back the same evening and wait on the dashboard until received; a
+ * non-returnable one leaves the stock for good.
+ *
+ * What comes back goes back into the stock it left. `returned_quantity` below
+ * `quantity` means some did not come back; that part stays out of stock.
+ */
+export const inventoryIssues = pgTable(
+  "inventory_issues",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    siteId: uuid("site_id").references(() => sites.id),
+    /** `inventory` or `purchase`: which stock it came out of. */
+    source: text("source").notNull(),
+    inventoryItemId: uuid("inventory_item_id").references(() => inventoryItems.id),
+    itemId: uuid("item_id").references(() => items.id),
+    /** The item's name and unit when it was issued. */
+    itemName: text("item_name").notNull(),
+    unitName: text("unit_name"),
+    quantity: numeric("quantity", { precision: 18, scale: 2 }).notNull(),
+    returnable: boolean("returnable").notNull(),
+    agencyId: uuid("agency_id")
+      .notNull()
+      .references(() => agencies.id),
+    /** The agency's contact picked (its main number). */
+    agencyContactId: uuid("agency_contact_id").references(() => agencyContacts.id),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => agencyPersons.id),
+    issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
+    note: text("note"),
+    returnedQuantity: numeric("returned_quantity", { precision: 18, scale: 2 }),
+    returnedAt: timestamp("returned_at", { withTimezone: true }),
+    returnedBy: uuid("returned_by"),
+    returnNote: text("return_note"),
+    isDeleted: boolean("is_deleted").notNull().default(false),
+    createdBy: uuid("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid("updated_by"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("inventory_issues_site_idx").on(table.siteId),
+    index("inventory_issues_inventory_item_idx").on(table.inventoryItemId),
+    index("inventory_issues_item_idx").on(table.itemId),
+    /** The dashboard's "to receive back" list reads exactly this. */
+    index("inventory_issues_out_idx")
+      .on(table.issuedAt)
+      .where(sql`${table.isDeleted} = false and ${table.returnable} = true and ${table.returnedAt} is null`),
+    check("inventory_issues_source", sql`${table.source} in ('inventory', 'purchase')`),
+    check(
+      "inventory_issues_item_of_source",
+      sql`(${table.source} = 'inventory' and ${table.inventoryItemId} is not null) or (${table.source} = 'purchase' and ${table.itemId} is not null)`,
+    ),
+    check("inventory_issues_quantity_positive", sql`${table.quantity} > 0`),
+    check(
+      "inventory_issues_returned_within",
+      sql`${table.returnedQuantity} is null or (${table.returnedQuantity} >= 0 and ${table.returnedQuantity} <= ${table.quantity})`,
+    ),
   ],
 );

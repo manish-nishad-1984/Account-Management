@@ -9,7 +9,8 @@ import type {
 } from "@accountmanagement/contracts";
 import { DATABASE, type Database } from "../../db/database";
 import { dateRangeWhere, type DateRangeFilter } from "../../common/date-range";
-import { inventoryInward, items, sites, units } from "../../db/schema";
+import { inventoryInward, inventoryItems, items, sites, units } from "../../db/schema";
+import { resolveInventoryItem } from "../inventory-stock/inventory-stock.repository";
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
@@ -30,10 +31,12 @@ export interface InventoryInwardListRow {
   id: string;
   siteId: string | null;
   siteName: string | null;
-  itemId: string;
+  itemId: string | null;
+  inventoryItemId: string | null;
   itemName: string;
-  unitId: number;
+  unitId: number | null;
   unitName: string;
+  hasPhoto: boolean;
   quantity: string;
   documentDate: string | null;
   details: string | null;
@@ -45,7 +48,9 @@ const DETAIL_COLUMNS = {
   id: inventoryInward.id,
   siteId: inventoryInward.siteId,
   itemId: inventoryInward.itemId,
+  inventoryItemId: inventoryInward.inventoryItemId,
   unitId: inventoryInward.unitId,
+  hasPhoto: sql<boolean>`${inventoryInward.photoKey} is not null`,
   quantity: inventoryInward.quantity,
   documentDate: inventoryInward.documentDate,
   details: inventoryInward.details,
@@ -61,8 +66,10 @@ type DetailRow = { [K in keyof typeof DETAIL_COLUMNS]: unknown };
 const toDetail = (row: DetailRow): InventoryInwardDetail => ({
   id: row.id as string,
   siteId: row.siteId as string | null,
-  itemId: row.itemId as string,
-  unitId: row.unitId as number,
+  itemId: row.itemId as string | null,
+  inventoryItemId: row.inventoryItemId as string | null,
+  unitId: row.unitId as number | null,
+  hasPhoto: row.hasPhoto === true,
   quantity: row.quantity as string,
   documentDate: iso(row.documentDate as Date | string | null),
   details: row.details as string | null,
@@ -82,7 +89,13 @@ export class InventoryInwardRepository extends BaseRepository {
       return undefined;
     }
     const pattern = `%${search}%`;
-    return or(ilike(items.name, pattern), ilike(units.name, pattern), ilike(inventoryInward.details, pattern));
+    return or(
+      ilike(items.name, pattern),
+      ilike(inventoryItems.name, pattern),
+      ilike(units.name, pattern),
+      ilike(inventoryItems.unit, pattern),
+      ilike(inventoryInward.details, pattern),
+    );
   }
 
   /**
@@ -150,9 +163,12 @@ export class InventoryInwardRepository extends BaseRepository {
         siteId: inventoryInward.siteId,
         siteName: sites.name,
         itemId: inventoryInward.itemId,
-        itemName: items.name,
+        inventoryItemId: inventoryInward.inventoryItemId,
+        // An inventory item's own name and unit; an arrival from before, its Items-master item's.
+        itemName: sql<string>`coalesce(${inventoryItems.name}, ${items.name}, ${inventoryInward.itemName}, '')`,
         unitId: inventoryInward.unitId,
-        unitName: units.name,
+        unitName: sql<string>`coalesce(${inventoryItems.unit}, ${units.name}, '')`,
+        hasPhoto: sql<boolean>`${inventoryInward.photoKey} is not null`,
         quantity: inventoryInward.quantity,
         documentDate: inventoryInward.documentDate,
         details: inventoryInward.details,
@@ -161,8 +177,9 @@ export class InventoryInwardRepository extends BaseRepository {
         sortValue: sql<string>`${sortColumn}::text`,
       })
       .from(inventoryInward)
-      .innerJoin(items, eq(inventoryInward.itemId, items.id))
-      .innerJoin(units, eq(inventoryInward.unitId, units.id))
+      .leftJoin(items, eq(inventoryInward.itemId, items.id))
+      .leftJoin(units, eq(inventoryInward.unitId, units.id))
+      .leftJoin(inventoryItems, eq(inventoryInward.inventoryItemId, inventoryItems.id))
       // LEFT, not INNER: `site_id` is null on every imported row, and an inner
       // join would return nothing at all for the whole table.
       .leftJoin(sites, eq(inventoryInward.siteId, sites.id))
@@ -188,8 +205,9 @@ export class InventoryInwardRepository extends BaseRepository {
     const [row] = await this.db
       .select({ value: count() })
       .from(inventoryInward)
-      .innerJoin(items, eq(inventoryInward.itemId, items.id))
-      .innerJoin(units, eq(inventoryInward.unitId, units.id))
+      .leftJoin(items, eq(inventoryInward.itemId, items.id))
+      .leftJoin(units, eq(inventoryInward.unitId, units.id))
+      .leftJoin(inventoryItems, eq(inventoryInward.inventoryItemId, inventoryItems.id))
       .where(and(...this.baseFilters(search, filters)));
     return row?.value ?? 0;
   }
@@ -230,20 +248,18 @@ export class InventoryInwardRepository extends BaseRepository {
   async create(input: CreateInventoryInward & { isApproved?: boolean }, actorId: string): Promise<InventoryInwardDetail> {
     const row = await writing(() =>
       this.db.transaction(async (tx) => {
-        const [item] = await tx
-          .select({ name: items.name })
-          .from(items)
-          .where(eq(items.id, input.itemId))
-          .limit(1);
-
-        if (!item) {
-          throw new NotFoundException("Item not found");
-        }
+        const item = await resolveInventoryItem(tx as unknown as Database, input, actorId);
 
         const [created] = await tx
           .insert(inventoryInward)
           .values({
-            ...input,
+            siteId: input.siteId,
+            inventoryItemId: item.id,
+            itemId: null,
+            unitId: null,
+            quantity: input.quantity,
+            details: input.details,
+            photoKey: input.photoKey ?? null,
             itemName: item.name,
             documentDate: input.documentDate ? new Date(input.documentDate) : null,
             isApproved: false,
@@ -263,20 +279,32 @@ export class InventoryInwardRepository extends BaseRepository {
     input: UpdateInventoryInward & { isApproved?: boolean },
     actorId: string,
   ): Promise<InventoryInwardDetail> {
-    const { documentDate, ...rest } = input;
+    const { documentDate } = input;
 
     const [row] = await writing(() =>
-      this.db
-        .update(inventoryInward)
-        .set({
-          ...rest,
-          ...(documentDate === undefined
-            ? {}
-            : { documentDate: documentDate ? new Date(documentDate) : null }),
-          ...updatedBy(actorId),
-        })
-        .where(and(eq(inventoryInward.id, id), eq(inventoryInward.isDeleted, false)))
-        .returning(DETAIL_COLUMNS),
+      this.db.transaction(async (tx) => {
+        // An arrival keyed before 26 Oct 2026 becomes one of an inventory item when it is edited.
+        const item = await resolveInventoryItem(tx as unknown as Database, input, actorId);
+        return tx
+          .update(inventoryInward)
+          .set({
+            siteId: input.siteId ?? undefined,
+            inventoryItemId: item.id,
+            itemId: null,
+            unitId: null,
+            itemName: item.name,
+            quantity: input.quantity,
+            details: input.details,
+            ...(input.photoKey === undefined ? {} : { photoKey: input.photoKey }),
+            ...(input.isApproved === undefined ? {} : { isApproved: input.isApproved }),
+            ...(documentDate === undefined
+              ? {}
+              : { documentDate: documentDate ? new Date(documentDate) : null }),
+            ...updatedBy(actorId),
+          })
+          .where(and(eq(inventoryInward.id, id), eq(inventoryInward.isDeleted, false)))
+          .returning(DETAIL_COLUMNS);
+      }),
     );
 
     if (!row) {

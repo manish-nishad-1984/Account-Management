@@ -20,6 +20,7 @@ import { PurchaseOrdersModule } from "./modules/purchase-orders/purchase-orders.
 import { PurchaseInvoicesModule } from "./modules/purchase-invoices/purchase-invoices.module";
 import { SalesInvoicesModule } from "./modules/sales-invoices/sales-invoices.module";
 import { InventoryInwardModule } from "./modules/inventory-inward/inventory-inward.module";
+import { InventoryStockModule } from "./modules/inventory-stock/inventory-stock.module";
 import { PaymentsModule } from "./modules/payments/payments.module";
 import { ReportsModule } from "./modules/reports/reports.module";
 import { InwardChallansModule } from "./modules/inward-challans/inward-challans.module";
@@ -65,6 +66,7 @@ const env = loadEnv();
     PurchaseInvoicesModule,
     SalesInvoicesModule,
     InventoryInwardModule,
+    InventoryStockModule,
     InwardChallansModule,
     PaymentsModule,
     ReportsModule,

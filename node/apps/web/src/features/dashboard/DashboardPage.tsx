@@ -22,6 +22,8 @@ import { useItemList } from "../items/api";
 import { useSupplierList } from "../suppliers/api";
 import { ApprovalQueue, type QueueColumn, type QueueRow } from "./ApprovalQueue";
 import { formatMoney } from "../../lib/format";
+import { hasPermission } from "@accountmanagement/contracts";
+import { ToReceiveBack } from "../inventory/IssueLists";
 
 /**
  * The approval cockpit — `/Home/Index` in the source.
@@ -266,6 +268,9 @@ export function DashboardPage() {
           <QueueInFull key={current.key} queue={current} />
         </div>
       )}
+
+      {/* Items given out today and to be taken back this evening (client, 26 Oct 2026). */}
+      {hasPermission(user?.permissions ?? [], "inventory-inward", "view") && <ToReceiveBack />}
     </>
   );
 }
