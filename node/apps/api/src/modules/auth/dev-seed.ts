@@ -858,10 +858,10 @@ export class DevSeed implements OnModuleInit {
       (n: number) => String(10 + n).padStart(3, "0"),
       (n: number) => `AE/26-27/${String(800 + n).padStart(5, "0")}`,
       (n: number) => `BE-2026-27-${4700 + n}`,
-      // Deliberately CONSTANT: several suppliers all issue an invoice numbered
-      // "016". No uniqueness is claimed across suppliers or within one, and the
-      // list must stay usable when the number is not a key.
-      () => "016",
+      // Deliberately the SAME across suppliers: several suppliers all issue an
+      // invoice numbered "016". Once per supplier only, though: a supplier's bill
+      // number is unique in a financial year, and the seed must respect that.
+      (n: number) => (n < 30 ? "016" : `016/${n}`),
     ];
 
     insertedCompanies.forEach((company, companyIndex) => {

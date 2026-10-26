@@ -29,8 +29,12 @@ export function SiteDeleteDialog({ site, onClose }: { site: { id: string; name: 
   const purge = useMutation({
     mutationFn: (body: { password: string }) =>
       apiRequest<SiteContents>(`/sites/${site!.id}/delete-everything`, { method: "POST", body, schema: siteContentsSchema }),
-    // Every list may have held something of the site.
-    onSuccess: () => client.invalidateQueries(),
+    // Every list may have held something of the site; but not this site's contents,
+    // which are gone, and asking again would only answer 404.
+    onSuccess: () => {
+      client.removeQueries({ queryKey: ["sites", "contents", site?.id] });
+      return client.invalidateQueries({ predicate: (query) => !(query.queryKey[0] === "sites" && query.queryKey[1] === "contents") });
+    },
   });
 
   const submit = async (event: FormEvent) => {
