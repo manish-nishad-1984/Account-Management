@@ -123,7 +123,7 @@ describe("the Balance Sheet with details, in Excel", () => {
       const call = vi.mocked(globalThis.fetch).mock.calls.find(([input]) => String(input).includes("/grid-exports/workbook"))!;
       const body = JSON.parse(String((call[1] as RequestInit).body)) as { sheets: { sheetName: string; rows: string[][] }[] };
       expect(body.sheets.map((sheet) => sheet.sheetName)).toEqual(["Summary", "Details"]);
-      expect(body.sheets[1]!.rows.filter((row) => row[0].startsWith("SITE "))).toHaveLength(31);
+      expect(body.sheets[1]!.rows.filter((row) => (row[0] ?? "").startsWith("SITE "))).toHaveLength(31);
     });
   });
 });
