@@ -1,14 +1,15 @@
 import { Fragment, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ChevronDown, ChevronRight, List, Plus, Upload } from "lucide-react";
-import { hasPermission, type BalanceSheetRow } from "@accountmanagement/contracts";
+import { ChevronDown, ChevronRight, FileSpreadsheet, List, Plus, Upload } from "lucide-react";
+import { formatExportDate, hasPermission, type BalanceSheetRow } from "@accountmanagement/contracts";
 import { ExportExcelButton } from "../../components/DataGrid";
 import { Alert, Button, PageHeader, SelectField, TextField } from "../../components/ui";
 import { useAuth } from "../../contexts/AuthContext";
 import { useScopedSiteId, useSiteScope } from "../../contexts/SiteScopeContext";
 import { ApiError } from "../../lib/api-client";
 import { formatMoney } from "../../lib/format";
-import { exportAmount, type ExportColumn } from "../../lib/grid-export";
+import { exportAmount, workbookSheet, type ExportColumn } from "../../lib/grid-export";
+import { exportBalanceSheetDetails } from "./detailExport";
 import { useCompanyOptions } from "../purchase-orders/api";
 import { useBalanceSheet, type BalanceSheetFilters } from "./api";
 import { ProjectDetail } from "./ProjectDetail";
@@ -63,6 +64,9 @@ export function BalanceSheetPage() {
   const [addingIncome, setAddingIncome] = useState<{ siteId?: string } | null>(null);
   // Many entries from Excel, beside Add income (client, 26 Oct 2026).
   const [importingIncome, setImportingIncome] = useState(false);
+  // The sheet with every income, payment and salary behind it (client, 27 Oct 2026).
+  const [exportingDetails, setExportingDetails] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const filters = useMemo<BalanceSheetFilters>(
     () => ({ siteId, companyId, fromDate, toDate }),
@@ -125,8 +129,34 @@ export function BalanceSheetPage() {
             sheetName="Balance Sheet"
             fileName="Balance-Sheet"
           />
+          <Button
+            variant="secondary"
+            icon={FileSpreadsheet}
+            loading={exportingDetails}
+            loadingLabel="Exporting…"
+            disabled={sheet.isLoading || rows.length === 0}
+            onClick={() => {
+              setExportingDetails(true);
+              setExportError(null);
+              const companyName = (companies.data?.rows ?? []).find((row) => row.id === companyId)?.name ?? "All companies";
+              const dates = fromDate || toDate ? `${formatExportDate(fromDate) || "start"} to ${formatExportDate(toDate) || "today"}` : "All dates";
+              exportBalanceSheetDetails({
+                rows,
+                summary: workbookSheet(totals ? [...rows, { siteId: null, siteName: "Total", ...totals }] : rows, EXPORT_COLUMNS, "Summary"),
+                filters: detailFilters,
+                heading: [`Company: ${companyName}`, `Dates: ${dates}`],
+                fileName: `Balance-Sheet-Details${scope.siteName ? `-${scope.siteName}` : ""}`,
+              })
+                .catch((error: unknown) => setExportError(error instanceof Error ? error.message : "The export could not be produced."))
+                .finally(() => setExportingDetails(false));
+            }}
+          >
+            Excel with details
+          </Button>
         </div>
       </div>
+
+      {exportError && <Alert className="mb-3">{exportError}</Alert>}
 
       {sheet.error && (
         <Alert className="mb-3">
