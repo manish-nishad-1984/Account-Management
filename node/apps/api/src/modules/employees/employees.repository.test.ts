@@ -114,7 +114,7 @@ describe("EmployeesRepository (real PostgreSQL)", () => {
     const sheet = await new BalanceSheetService(new ClientIncomesRepository(db), new ReportsRepository(db), repo).sheet({});
     expect(sheet.rows).toEqual([expect.objectContaining({ siteName: "Akwada", salary: "19000.00", cashBalance: "-19000.00", projectResult: "-19000.00" })]);
     const detail = await new BalanceSheetService(new ClientIncomesRepository(db), new ReportsRepository(db), repo).detail(siteId, {});
-    expect(detail.salaries).toEqual([expect.objectContaining({ employeeName: "Ramesh Patel", month, paymentDate: listDate, amount: "19000.00" })]);
+    expect(detail.salaries).toEqual([expect.objectContaining({ employeeName: "Ramesh Patel", companyName: "DH PATEL", month, paymentDate: listDate, amount: "19000.00" })]);
 
     // Paid, so the employee cannot be deleted.
     await expect(repo.remove(made.id, ACTOR)).rejects.toBeInstanceOf(ConflictException);

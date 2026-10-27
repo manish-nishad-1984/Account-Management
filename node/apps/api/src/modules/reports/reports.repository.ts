@@ -460,14 +460,15 @@ export class ReportsRepository extends BaseRepository {
    */
   async supplierPayments(
     filter: Omit<ReportFilter, "direction">,
-  ): Promise<{ id: string; partyId: string; partyName: string; paymentDate: string | null; amount: string }[]> {
+  ): Promise<{ id: string; partyId: string; partyName: string; companyName: string; paymentDate: string | null; amount: string }[]> {
     const full: ReportFilter = { ...filter, direction: "out" };
-    const rows = rawRows<{ document_id: string; party_id: string; party_name: string; document_date: unknown; amount: string }>(
+    const rows = rawRows<{ document_id: string; party_id: string; party_name: string; company_name: string | null; document_date: unknown; amount: string }>(
       await this.db.execute(sql`
         with entries as (${this.entries(full)})
-        select e.document_id, e.party_id, s.name as party_name, e.document_date, e.amount::text as amount
+        select e.document_id, e.party_id, s.name as party_name, c.name as company_name, e.document_date, e.amount::text as amount
         from entries e
         join suppliers s on s.id = e.party_id
+        left join companies c on c.id = e.company_id
         where ${this.where(full)} and e.source_kind = 'payment'
         order by e.document_date asc nulls first, e.created_at asc, e.document_id
       `),
@@ -476,6 +477,7 @@ export class ReportsRepository extends BaseRepository {
       id: String(row.document_id),
       partyId: String(row.party_id),
       partyName: String(row.party_name),
+      companyName: row.company_name ?? "",
       paymentDate: row.document_date === null ? null : new Date(String(row.document_date)).toISOString(),
       amount: this.money(row.amount),
     }));

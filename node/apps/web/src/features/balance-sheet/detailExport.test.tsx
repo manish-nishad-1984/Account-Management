@@ -17,18 +17,20 @@ const DETAIL: BalanceSheetDetail = {
     { id: "i3", incomeDate: "2026-10-07", clientName: "JHM", companyName: "DH PATEL INFRA", total: "25000.50" },
   ],
   suppliers: [
-    { id: "p2", partyId: "s2", partyName: "SHAH ENTERPRISE", paymentDate: "2026-10-09T00:00:00.000Z", amount: "30000.00" },
-    { id: "p1", partyId: "s1", partyName: "AL BURHAN", paymentDate: "2026-10-02T00:00:00.000Z", amount: "40000.00" },
+    { id: "p2", partyId: "s2", partyName: "SHAH ENTERPRISE", companyName: "DH PATEL", paymentDate: "2026-10-09T00:00:00.000Z", amount: "30000.00" },
+    { id: "p1", partyId: "s1", partyName: "AL BURHAN", companyName: "DH PATEL", paymentDate: "2026-10-02T00:00:00.000Z", amount: "40000.00" },
+    { id: "p3", partyId: "s1", partyName: "AL BURHAN", companyName: "DH PATEL INFRA", paymentDate: "2026-10-01T00:00:00.000Z", amount: "5000.00" },
   ],
   salaries: [
-    { id: "x2", employeeName: "RAMESH", month: "2026-09", paymentDate: "2026-10-07", amount: "15000.00" },
-    { id: "x1", employeeName: "AMIT", month: "2026-09", paymentDate: "2026-10-07", amount: "12000.00" },
-    { id: "x3", employeeName: "AMIT", month: "2026-08", paymentDate: "2026-09-07", amount: "12000.00" },
+    { id: "x2", employeeName: "RAMESH", companyName: "DH PATEL", month: "2026-09", paymentDate: "2026-10-07", amount: "15000.00" },
+    { id: "x1", employeeName: "AMIT", companyName: "DH PATEL", month: "2026-09", paymentDate: "2026-10-07", amount: "12000.00" },
+    { id: "x3", employeeName: "AMIT", companyName: "DH PATEL", month: "2026-08", paymentDate: "2026-09-07", amount: "12000.00" },
+    { id: "x4", employeeName: "SURESH", companyName: "DH PATEL INFRA", month: "2026-09", paymentDate: "2026-10-08", amount: "8000.00" },
   ],
 } as BalanceSheetDetail;
 
 describe("the Balance Sheet with details, in Excel", () => {
-  it("puts income company by company, then supplier payments, then salary month by month, then the balance", () => {
+  it("puts income and supplier payments company by company, then salary by company and month, then the balance", () => {
     const rows = projectBlock("Akwada", DETAIL, ["Company: All companies", "Dates: All dates"]);
     const lines = rows.map((row) => row.filter(Boolean).join(" | "));
     const at = (text: string) => lines.indexOf(text);
@@ -44,30 +46,37 @@ describe("the Balance Sheet with details, in Excel", () => {
       "Total DH PATEL INFRA | 25000.50",
       "TOTAL INCOME | 175000.50",
     ]);
-    // Then the supplier payments by date.
-    expect(lines.slice(at("SUPPLIER PAYMENTS"), at("SUPPLIER PAYMENTS") + 4)).toEqual([
+    // Then the supplier payments, company by company, the same way.
+    expect(lines.slice(at("SUPPLIER PAYMENTS"), at("SUPPLIER PAYMENTS") + 7)).toEqual([
       "SUPPLIER PAYMENTS",
-      "02-10-2026 | AL BURHAN | 40000.00",
-      "09-10-2026 | SHAH ENTERPRISE | 30000.00",
-      "TOTAL SUPPLIER PAYMENTS | 70000.00",
+      "02-10-2026 | AL BURHAN | DH PATEL | 40000.00",
+      "09-10-2026 | SHAH ENTERPRISE | DH PATEL | 30000.00",
+      "Total DH PATEL | 70000.00",
+      "01-10-2026 | AL BURHAN | DH PATEL INFRA | 5000.00",
+      "Total DH PATEL INFRA | 5000.00",
+      "TOTAL SUPPLIER PAYMENTS | 75000.00",
     ]);
-    // Then salary month by month.
-    expect(lines.slice(at("SALARY"), at("SALARY") + 7)).toEqual([
+    // Then salary, company by company and month by month.
+    expect(lines.slice(at("SALARY"), at("SALARY") + 11)).toEqual([
       "SALARY",
-      "Aug 2026 | AMIT | Paid 07-09-2026 | 12000.00",
+      "Aug 2026 | AMIT | DH PATEL | 07-09-2026 | 12000.00",
       "Total Aug 2026 | 12000.00",
-      "Sep 2026 | AMIT | Paid 07-10-2026 | 12000.00",
-      "Sep 2026 | RAMESH | Paid 07-10-2026 | 15000.00",
+      "Sep 2026 | AMIT | DH PATEL | 07-10-2026 | 12000.00",
+      "Sep 2026 | RAMESH | DH PATEL | 07-10-2026 | 15000.00",
       "Total Sep 2026 | 27000.00",
-      "TOTAL SALARY | 39000.00",
+      "Total DH PATEL | 39000.00",
+      "Sep 2026 | SURESH | DH PATEL INFRA | 08-10-2026 | 8000.00",
+      "Total Sep 2026 | 8000.00",
+      "Total DH PATEL INFRA | 8000.00",
+      "TOTAL SALARY | 47000.00",
     ]);
     // Balance = income - supplier payments - salary.
     expect(lines.slice(at("BALANCE"))).toEqual([
       "BALANCE",
       "Income | 175000.50",
-      "Less: supplier payments | -70000.00",
-      "Less: salary | -39000.00",
-      "BALANCE (income - payments - salary) | 66000.50",
+      "Less: supplier payments | -75000.00",
+      "Less: salary | -47000.00",
+      "BALANCE (income - payments - salary) | 53000.50",
     ]);
     expect(at("INCOME")).toBeLessThan(at("SUPPLIER PAYMENTS"));
     expect(at("SUPPLIER PAYMENTS")).toBeLessThan(at("SALARY"));
@@ -75,7 +84,7 @@ describe("the Balance Sheet with details, in Excel", () => {
 
   describe("the button", () => {
     const SITE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-    const FIG = { income: "175000.50", billed: "90000.00", paid: "70000.00", stillToPay: "20000.00", salary: "39000.00", cashBalance: "66000.50", projectResult: "46000.50" };
+    const FIG = { income: "175000.50", billed: "90000.00", paid: "75000.00", stillToPay: "15000.00", salary: "47000.00", cashBalance: "53000.50", projectResult: "38000.50" };
     beforeEach(() => {
       save.mockClear();
       vi.stubGlobal(
@@ -101,9 +110,9 @@ describe("the Balance Sheet with details, in Excel", () => {
       const call = vi.mocked(globalThis.fetch).mock.calls.find(([input]) => String(input).includes("/grid-exports/workbook"))!;
       const body = JSON.parse(String((call[1] as RequestInit).body)) as { sheets: { sheetName: string; rows: string[][] }[] };
       expect(body.sheets.map((sheet) => sheet.sheetName)).toEqual(["Summary", "Akwada"]);
-      expect(body.sheets[1]!.rows.at(-1)).toEqual(["", "BALANCE (income - payments - salary)", "", "66000.50"]);
+      expect(body.sheets[1]!.rows.at(-1)).toEqual(["", "BALANCE (income - payments - salary)", "", "", "53000.50"]);
       // The same balance as the sheet's own Cash balance.
-      expect(body.sheets[0]!.rows[0]).toContain("66000.50");
+      expect(body.sheets[0]!.rows[0]).toContain("53000.50");
     });
 
     it("stacks the projects in one Details sheet past what one file may hold", async () => {

@@ -33,7 +33,7 @@ describe("BalanceSheetFormDialog", () => {
           json({
             incomes: [{ id: "i1", incomeDate: "2026-10-13", clientName: "GUJARAT JHM HOTEL", companyName: "DH PATEL", total: "1000000.00" }],
             salaries: [],
-            suppliers: [{ id: "pay1", partyId: "p1", partyName: "A.K. TIMBER TRADERS", paymentDate: "2026-10-08T00:00:00.000Z", amount: "300000.00" }],
+            suppliers: [{ id: "pay1", partyId: "p1", partyName: "A.K. TIMBER TRADERS", companyName: "DH PATEL", paymentDate: "2026-10-08T00:00:00.000Z", amount: "300000.00" }],
           }),
         );
       }

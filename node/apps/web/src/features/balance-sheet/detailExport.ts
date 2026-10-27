@@ -14,12 +14,12 @@ import type { BalanceSheetDetailFilters } from "./api";
  * THE BALANCE SHEET IN EXCEL, WITH ITS DETAIL (client, 27 Oct 2026). For each
  * project, top to bottom:
  *
- *   INCOME          every entry, company by company, with its date; each company's
- *                   total, then the income total
- *   SUPPLIER PAYMENTS  every payment with its date, and their total
- *   SALARY          month by month, each employee with the day paid; each month's
- *                   total, then the salary total
- *   BALANCE         income - supplier payments - salary
+ *   INCOME             company by company, every entry with its date; each
+ *                      company's total, then the income total
+ *   SUPPLIER PAYMENTS  the same, company by company (client, 27 Oct 2026)
+ *   SALARY             company by company, month by month, each employee with the
+ *                      day paid; each month's and company's total, then the total
+ *   BALANCE            income - supplier payments - salary
  *
  * The balance is the sheet's Cash balance, worked out the same way. A Summary
  * sheet of every project comes first. One sheet per project; past what one file
@@ -32,9 +32,11 @@ const MAX_PROJECT_SHEETS = 29;
 const COLUMNS: GridWorkbookSheet["columns"] = [
   { header: "Date / Month", width: 16, align: "left" },
   { header: "Client / Supplier / Employee", width: 36, align: "left" },
-  { header: "Company / Paid on", width: 26, align: "left" },
+  { header: "Company", width: 26, align: "left" },
+  { header: "Paid on", width: 14, align: "left" },
   { header: "Amount", width: 18, align: "right" },
 ];
+const WIDTH = COLUMNS.length;
 
 /** Exact money on whole paise; a detail amount may be negative after deductions. */
 const paise = (value: string): bigint => {
@@ -50,56 +52,64 @@ const rupees = (value: bigint): string => {
 };
 const sum = (values: string[]) => values.reduce((total, value) => total + paise(value), 0n);
 const byDate = (a: string | null, b: string | null) => (a ?? "").localeCompare(b ?? "");
+/** The companies among the entries, by name. */
+const companiesOf = (entries: { companyName: string }[]) => [...new Set(entries.map((one) => one.companyName))].sort((a, b) => a.localeCompare(b));
 
 /** One project's rows, as the sheet reads top to bottom. */
 export function projectBlock(projectName: string, detail: BalanceSheetDetail, heading: string[]): string[][] {
   const rows: string[][] = [];
-  const blank = () => rows.push(["", "", "", ""]);
-  rows.push([projectName.toUpperCase(), "", "", ""]);
-  for (const line of heading) rows.push([line, "", "", ""]);
-  blank();
+  const line = (first: string, label = "", company = "", paidOn = "", amount = "") => rows.push([first, label, company, paidOn, amount]);
+  const total = (label: string, amount: bigint) => line("", label, "", "", rupees(amount));
+  line(projectName.toUpperCase());
+  for (const text of heading) line(text);
+  line("");
 
   // ---- income, company by company ----
-  rows.push(["INCOME", "", "", ""]);
-  const companies = [...new Set(detail.incomes.map((one) => one.companyName))].sort((a, b) => a.localeCompare(b));
-  for (const company of companies) {
+  line("INCOME");
+  for (const company of companiesOf(detail.incomes)) {
     const entries = detail.incomes.filter((one) => one.companyName === company).sort((a, b) => byDate(a.incomeDate, b.incomeDate));
-    for (const one of entries) rows.push([formatExportDate(one.incomeDate), one.clientName, company, one.total]);
-    rows.push(["", `Total ${company}`, "", rupees(sum(entries.map((one) => one.total)))]);
+    for (const one of entries) line(formatExportDate(one.incomeDate), one.clientName, company, "", one.total);
+    total(`Total ${company}`, sum(entries.map((one) => one.total)));
   }
-  if (companies.length === 0) rows.push(["", "No income", "", ""]);
+  if (detail.incomes.length === 0) line("", "No income");
   const income = sum(detail.incomes.map((one) => one.total));
-  rows.push(["", "TOTAL INCOME", "", rupees(income)]);
-  blank();
+  total("TOTAL INCOME", income);
+  line("");
 
-  // ---- supplier payments ----
-  rows.push(["SUPPLIER PAYMENTS", "", "", ""]);
-  const payments = [...detail.suppliers].sort((a, b) => byDate(a.paymentDate, b.paymentDate));
-  for (const one of payments) rows.push([formatExportDate(one.paymentDate), one.partyName, "", one.amount]);
-  if (payments.length === 0) rows.push(["", "No payments", "", ""]);
-  const paid = sum(payments.map((one) => one.amount));
-  rows.push(["", "TOTAL SUPPLIER PAYMENTS", "", rupees(paid)]);
-  blank();
-
-  // ---- salary, month by month ----
-  rows.push(["SALARY", "", "", ""]);
-  const months = [...new Set(detail.salaries.map((one) => one.month))].sort();
-  for (const month of months) {
-    const entries = detail.salaries.filter((one) => one.month === month).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
-    for (const one of entries) rows.push([monthLabel(month), one.employeeName, `Paid ${formatExportDate(one.paymentDate)}`, one.amount]);
-    rows.push(["", `Total ${monthLabel(month)}`, "", rupees(sum(entries.map((one) => one.amount)))]);
+  // ---- supplier payments, company by company ----
+  line("SUPPLIER PAYMENTS");
+  for (const company of companiesOf(detail.suppliers)) {
+    const entries = detail.suppliers.filter((one) => one.companyName === company).sort((a, b) => byDate(a.paymentDate, b.paymentDate));
+    for (const one of entries) line(formatExportDate(one.paymentDate), one.partyName, company, "", one.amount);
+    total(`Total ${company}`, sum(entries.map((one) => one.amount)));
   }
-  if (months.length === 0) rows.push(["", "No salary", "", ""]);
+  if (detail.suppliers.length === 0) line("", "No payments");
+  const paid = sum(detail.suppliers.map((one) => one.amount));
+  total("TOTAL SUPPLIER PAYMENTS", paid);
+  line("");
+
+  // ---- salary, company by company, month by month ----
+  line("SALARY");
+  for (const company of companiesOf(detail.salaries)) {
+    const ofCompany = detail.salaries.filter((one) => one.companyName === company);
+    for (const month of [...new Set(ofCompany.map((one) => one.month))].sort()) {
+      const entries = ofCompany.filter((one) => one.month === month).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+      for (const one of entries) line(monthLabel(month), one.employeeName, company, formatExportDate(one.paymentDate), one.amount);
+      total(`Total ${monthLabel(month)}`, sum(entries.map((one) => one.amount)));
+    }
+    total(`Total ${company}`, sum(ofCompany.map((one) => one.amount)));
+  }
+  if (detail.salaries.length === 0) line("", "No salary");
   const salary = sum(detail.salaries.map((one) => one.amount));
-  rows.push(["", "TOTAL SALARY", "", rupees(salary)]);
-  blank();
+  total("TOTAL SALARY", salary);
+  line("");
 
   // ---- balance ----
-  rows.push(["BALANCE", "", "", ""]);
-  rows.push(["", "Income", "", rupees(income)]);
-  rows.push(["", "Less: supplier payments", "", rupees(-paid)]);
-  rows.push(["", "Less: salary", "", rupees(-salary)]);
-  rows.push(["", "BALANCE (income - payments - salary)", "", rupees(income - paid - salary)]);
+  line("BALANCE");
+  total("Income", income);
+  total("Less: supplier payments", -paid);
+  total("Less: salary", -salary);
+  total("BALANCE (income - payments - salary)", income - paid - salary);
   return rows;
 }
 
@@ -148,7 +158,7 @@ export async function exportBalanceSheetDetails({
       sheets.push({ sheetName: name, columns: COLUMNS, rows: block.rows });
     }
   } else {
-    const stacked = blocks.flatMap((block, i) => (i === 0 ? block.rows : [["", "", "", ""], ["", "", "", ""], ...block.rows]));
+    const stacked = blocks.flatMap((block, i) => (i === 0 ? block.rows : [Array<string>(WIDTH).fill(""), Array<string>(WIDTH).fill(""), ...block.rows]));
     sheets.push({ sheetName: "Details", columns: COLUMNS, rows: stacked });
   }
   await downloadWorkbook(sheets, fileName);

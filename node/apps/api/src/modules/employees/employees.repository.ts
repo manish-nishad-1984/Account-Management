@@ -276,12 +276,14 @@ export class EmployeesRepository extends BaseRepository {
       .select({
         id: salaryPayments.id,
         employeeName: employees.name,
+        companyName: companies.name,
         month: sql<string>`to_char(${salaryPayments.salaryMonth}, 'YYYY-MM')`,
         paymentDate: sql<string>`to_char(${salaryPayments.paymentDate} at time zone 'UTC', 'YYYY-MM-DD')`,
         amount: sql<string>`${salaryPayments.amount}::text`,
       })
       .from(salaryPayments)
       .innerJoin(employees, eq(employees.id, salaryPayments.employeeId))
+      .innerJoin(companies, eq(companies.id, salaryPayments.companyId))
       .where(and(...this.paidWhere(filter)))
       .orderBy(asc(salaryPayments.paymentDate), asc(employees.name));
   }

@@ -192,7 +192,7 @@ describe("BalanceSheetService (real PostgreSQL)", () => {
     expect(detail.incomes.map((one) => [one.clientName, one.companyName, one.total])).toEqual([
       ["Shah Developers", "DH Patel", "1000.00"],
     ]);
-    expect(detail.suppliers.map((one) => [one.partyId, one.partyName, one.amount])).toEqual([[supplierId, "AL BURHAN PIPES", "150.00"]]);
+    expect(detail.suppliers.map((one) => [one.partyId, one.partyName, one.companyName, one.amount])).toEqual([[supplierId, "AL BURHAN PIPES", "DH Patel", "150.00"]]);
     expect(detail.suppliers[0]!.paymentDate).not.toBeNull();
 
     // Oldest payment first (client, 22 Oct 2026).

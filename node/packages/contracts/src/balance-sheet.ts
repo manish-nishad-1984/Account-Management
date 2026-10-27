@@ -84,6 +84,8 @@ export const balanceSheetDetailSchema = z.object({
       id: z.string(),
       partyId: z.string(),
       partyName: z.string(),
+      /** The company that paid, so the Excel can group payments by it (client, 27 Oct 2026). */
+      companyName: z.string(),
       paymentDate: z.string().nullable(),
       amount: z.string(),
     }),
@@ -94,6 +96,7 @@ export const balanceSheetDetailSchema = z.object({
       z.object({
         id: z.string(),
         employeeName: z.string(),
+        companyName: z.string(),
         month: z.string(),
         paymentDate: z.string(),
         amount: z.string(),

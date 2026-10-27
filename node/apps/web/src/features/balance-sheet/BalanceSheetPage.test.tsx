@@ -52,8 +52,8 @@ describe("the Balance Sheet", () => {
           incomes: [{ id: "i1", incomeDate: "2026-10-05", clientName: "Shah Developers", companyName: "DH Patel", total: "900000.00" }],
           salaries: [],
           suppliers: [
-            { id: "pay1", partyId: "p1", partyName: "AL BURHAN PIPES", paymentDate: "2026-10-01T00:00:00.000Z", amount: "300000.00" },
-            { id: "pay2", partyId: "p2", partyName: "SHAH ENTERPRISE", paymentDate: "2026-10-05T00:00:00.000Z", amount: "50000.00" },
+            { id: "pay1", partyId: "p1", partyName: "AL BURHAN PIPES", companyName: "DH PATEL", paymentDate: "2026-10-01T00:00:00.000Z", amount: "300000.00" },
+            { id: "pay2", partyId: "p2", partyName: "SHAH ENTERPRISE", companyName: "DH PATEL", paymentDate: "2026-10-05T00:00:00.000Z", amount: "50000.00" },
           ],
         },
       ],
@@ -117,10 +117,10 @@ describe("the Balance Sheet", () => {
         /\/balance-sheet\/site\//,
         {
           incomes: [],
-          salaries: [{ id: "s1", employeeName: "RAMESH PATEL", month: "2026-09", paymentDate: "2026-10-03", amount: "25000.00" }],
+          salaries: [{ id: "s1", employeeName: "RAMESH PATEL", companyName: "DH PATEL", month: "2026-09", paymentDate: "2026-10-03", amount: "25000.00" }],
           suppliers: [
-            { id: "pay1", partyId: "p1", partyName: "AL BURHAN PIPES", paymentDate: "2026-10-01T00:00:00.000Z", amount: "300000.00" },
-            { id: "pay2", partyId: "p2", partyName: "SHAH ENTERPRISE", paymentDate: "2026-10-05T00:00:00.000Z", amount: "50000.00" },
+            { id: "pay1", partyId: "p1", partyName: "AL BURHAN PIPES", companyName: "DH PATEL", paymentDate: "2026-10-01T00:00:00.000Z", amount: "300000.00" },
+            { id: "pay2", partyId: "p2", partyName: "SHAH ENTERPRISE", companyName: "DH PATEL", paymentDate: "2026-10-05T00:00:00.000Z", amount: "50000.00" },
           ],
         },
       ],
