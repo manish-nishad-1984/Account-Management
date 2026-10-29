@@ -104,6 +104,24 @@ export const discountPercentOf = (line: InvoiceLineValues | undefined): string =
 };
 
 /**
+ * "50%" TYPED IN DISC/UNIT (client, 29 Oct 2026): a percent of the price, turned
+ * into rupees per unit when the box is left, rounded to paise half up as the
+ * import's Discount % column does. The box then holds rupees, the one form a line
+ * stores, and the label beside it shows the percent back.
+ *
+ * Null when there is nothing to turn: no "%", not a percent from 0 to 100, or no
+ * price yet - the price box turns it once a price is there.
+ */
+export const discountFromPercent = (discount: unknown, price: unknown): string | null => {
+  const text = String(discount ?? "").trim();
+  if (!text.endsWith("%")) return null;
+  const percent = text.slice(0, -1).trim();
+  const rate = previewNumber(price);
+  if (!/^\d{1,3}(\.\d{1,2})?$/.test(percent) || Number(percent) > 100 || Number(rate) === 0) return null;
+  return money.format(money.round(money.percentOf(money.decimal(percent), money.decimal(rate))));
+};
+
+/**
  * Quantity is not money, so summing it for a footer display is safe as a number.
  * Three places: a purchase invoice line can carry 1.327 (19 Oct 2026); the footer
  * drops trailing zeros, so a two-place sum still reads as before.
@@ -245,6 +263,20 @@ export function InvoiceLineGrid({
               const itemField = `items.${index}.itemId`;
               const nameField = `items.${index}.itemName`;
               const percent = discountPercentOf(line);
+              const priceField = register(`items.${index}.unitPrice`);
+              const discountField = register(`items.${index}.discountPerUnit`);
+              /**
+               * A "50%" discount, in rupees once both it and the price are there.
+               * The box is written as well as the form: a registered input is
+               * uncontrolled, so the form's value alone would leave "50%" on screen.
+               */
+              const turnPercent = (box: Element | RadioNodeList | null | undefined, price: unknown) => {
+                if (!(box instanceof HTMLInputElement)) return;
+                const rupees = discountFromPercent(box.value, price);
+                if (rupees === null) return;
+                box.value = rupees;
+                void discountField.onChange(changeOf(discountField.name, rupees));
+              };
 
               return (
                 <tr key={field.id} className="border-b border-slate-100 align-top">
@@ -325,7 +357,11 @@ export function InvoiceLineGrid({
                       inputMode="decimal"
                       style={{ paddingRight: "1.75rem" }}
                       error={lineError(index, "unitPrice")}
-                      {...register(`items.${index}.unitPrice`)}
+                      {...priceField}
+                      onBlur={(event) => {
+                        turnPercent(event.target.form?.elements.namedItem(discountField.name), event.target.value);
+                        return priceField.onBlur(event);
+                      }}
                     />
                     {/* Tracks the cell's own padding — see the row-height note. */}
                     <div className="absolute right-3.5 top-[0.7rem] flex">{priceHint?.(index)}</div>
@@ -337,7 +373,11 @@ export function InvoiceLineGrid({
                       inputMode="decimal"
                       style={{ paddingRight: percent ? "3.25rem" : undefined }}
                       error={lineError(index, "discountPerUnit")}
-                      {...register(`items.${index}.discountPerUnit`)}
+                      {...discountField}
+                      onBlur={(event) => {
+                        turnPercent(event.target, line?.unitPrice);
+                        return discountField.onBlur(event);
+                      }}
                     />
                     {percent && (
                       <span
