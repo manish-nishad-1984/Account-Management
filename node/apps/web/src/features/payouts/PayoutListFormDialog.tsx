@@ -1078,6 +1078,7 @@ export function PayoutListFormDialog({
               <PartyBillFilterDialog
                 partyName={row ? row.partyName : null}
                 bills={(row?.bills ?? []).filter((bill) => (toPaise(bill.pending) ?? 0n) > 0n)}
+                ticked={row ? Object.keys(bills[row.partyId] ?? {}) : []}
                 onApply={(keys) => row && applyBillFilter(row, keys)}
                 onClose={() => setFilterFor(null)}
               />

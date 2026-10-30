@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql, type SQL } from "drizzle-orm";
 import type {
   AgencyPerson,
   CreateAgencyPerson,
@@ -41,6 +41,24 @@ const fromHundredths = (value: bigint): string => {
   const absolute = value < 0n ? -value : value;
   return `${sign}${absolute / 100n}.${String(absolute % 100n).padStart(2, "0")}`;
 };
+
+/**
+ * AN ITEM'S PHOTO (client, 30 Oct 2026): its own, or else the latest taken on an
+ * arrival of it - the arrival's photo, then its pieces' in order - so an item
+ * shows as a picture in the stock and the issues once any arrival of it has one.
+ */
+const itemPhotoKey = (itemId: SQL) => sql`coalesce(
+  (select photo_key from inventory_items where id = ${itemId}),
+  (select k.key from inventory_inward a
+    cross join lateral (
+      select a.photo_key as key, 0::bigint as n
+      union all
+      select p.value->>'photoKey', p.n from jsonb_array_elements(a.pieces) with ordinality as p(value, n)
+    ) k
+    where a.inventory_item_id = ${itemId} and a.is_deleted = false and k.key is not null
+    order by a.created_at desc, k.n
+    limit 1)
+)`;
 
 const iso = (value: unknown): string | null => (value === null || value === undefined ? null : new Date(String(value)).toISOString());
 
@@ -97,7 +115,7 @@ export class InventoryStockRepository extends BaseRepository {
     const site = siteId ?? null;
     const rows = rawRows<Record<string, unknown>>(
       await this.db.execute(sql`
-        select ii.id, ii.name, ii.unit, ii.note, ii.photo_key is not null as has_photo,
+        select ii.id, ii.name, ii.unit, ii.note, ${itemPhotoKey(sql`ii.id`)} is not null as has_photo,
           coalesce((
             select sum(a.quantity) from inventory_inward a
             where a.inventory_item_id = ii.id and a.is_deleted = false
@@ -176,8 +194,12 @@ export class InventoryStockRepository extends BaseRepository {
   }
 
   async itemPhotoKey(id: string): Promise<string | null> {
-    const [row] = await this.db.select({ key: inventoryItems.photoKey }).from(inventoryItems).where(eq(inventoryItems.id, id));
-    if (!row) throw new NotFoundException("Inventory item not found");
+    const [row] = rawRows<{ found: boolean | string; key: string | null }>(
+      await this.db.execute(sql`
+        select exists(select 1 from inventory_items where id = ${id}::uuid) as found, ${itemPhotoKey(sql`${id}::uuid`)} as key
+      `),
+    );
+    if (!row || !(row.found === true || row.found === "t")) throw new NotFoundException("Inventory item not found");
     return row.key;
   }
 
@@ -307,6 +329,7 @@ export class InventoryStockRepository extends BaseRepository {
         select i.*, s.name as site_name, a.name as agency_name,
           c.name as contact_name, c.mobile as contact_mobile,
           p.name as person_name, p.mobile as person_mobile, p.photo_key is not null as person_has_photo,
+          i.source = 'inventory' and ${itemPhotoKey(sql`i.inventory_item_id`)} is not null as item_has_photo,
           i.quantity::text as quantity_text, i.returned_quantity::text as returned_text
         from inventory_issues i
         join agencies a on a.id = i.agency_id
@@ -345,6 +368,7 @@ export class InventoryStockRepository extends BaseRepository {
       personName: String(row.person_name),
       personMobile: text("person_mobile"),
       personHasPhoto: row.person_has_photo === true || row.person_has_photo === "t",
+      itemHasPhoto: row.item_has_photo === true || row.item_has_photo === "t",
       issuedAt: iso(row.issued_at)!,
       note: text("note"),
       returnedQuantity: row.returned_text === null ? null : fromHundredths(toHundredths(String(row.returned_text))),
@@ -360,6 +384,7 @@ export class InventoryStockRepository extends BaseRepository {
         select i.*, s.name as site_name, a.name as agency_name,
           c.name as contact_name, c.mobile as contact_mobile,
           p.name as person_name, p.mobile as person_mobile, p.photo_key is not null as person_has_photo,
+          i.source = 'inventory' and ${itemPhotoKey(sql`i.inventory_item_id`)} is not null as item_has_photo,
           i.quantity::text as quantity_text, i.returned_quantity::text as returned_text
         from inventory_issues i
         join agencies a on a.id = i.agency_id

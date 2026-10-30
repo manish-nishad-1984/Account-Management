@@ -91,7 +91,8 @@ const SORTS: { value: Sort; label: string }[] = [
  * wider with more ways to choose, 19 Oct 2026, for a party with some 300 bills).
  *
  * The bills that pass the filters (dates, age, site, type, bill number, pending
- * amount) are shown and start ticked; the person can untick any, tick or untick all
+ * amount) are shown, ticked as the party's bills are ticked now - all of them when
+ * none is (client, 30 Oct 2026: a saved choice must not come back as "all"); the person can untick any, tick or untick all
  * shown at once, shift-click a range, or tick the oldest shown bills that fit a
  * sum to pay. OK ticks exactly the shown, ticked bills on the party in the builder
  * (and unticks the party's others). Cancel changes nothing.
@@ -99,6 +100,7 @@ const SORTS: { value: Sort; label: string }[] = [
 export function PartyBillFilterDialog({
   partyName,
   bills,
+  ticked = [],
   onApply,
   onClose,
 }: {
@@ -106,6 +108,8 @@ export function PartyBillFilterDialog({
   partyName: string | null;
   /** The party's bills that can still be paid. */
   bills: FilterableBill[];
+  /** The party's bills ticked in the builder now; none means start with all. */
+  ticked?: string[];
   onApply: (keys: string[]) => void;
   onClose: () => void;
 }) {
@@ -123,7 +127,13 @@ export function PartyBillFilterDialog({
   const [off, setOff] = useState<Set<string>>(new Set());
   const lastClicked = useRef<string | null>(null);
 
-  const reset = () => {
+  /** The ticks as the builder has them: the bills not ticked there start unticked. */
+  const startingOff = () => {
+    const now = new Set(ticked);
+    return new Set(now.size === 0 ? [] : bills.filter((bill) => !now.has(bill.key)).map((bill) => bill.key));
+  };
+
+  const clearFilters = () => {
     setFrom("");
     setTo("");
     setSearch("");
@@ -134,12 +144,15 @@ export function PartyBillFilterDialog({
     setMaxAmount("");
     setSort("old");
     setBudget("");
-    setOff(new Set());
     lastClicked.current = null;
   };
 
   useEffect(() => {
-    if (open) reset();
+    if (!open) return;
+    clearFilters();
+    setOff(startingOff());
+    // Once per opening: a refetch of the bills must not undo the person's ticks.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const sites = useMemo(
@@ -334,7 +347,7 @@ export function PartyBillFilterDialog({
           <Button size="sm" variant="secondary" disabled={chosen.length === 0} onClick={() => setTicked(shown.map((bill) => bill.key), false)}>
             Untick all shown
           </Button>
-          <Button size="sm" variant="ghost" onClick={reset}>
+          <Button size="sm" variant="ghost" onClick={clearFilters}>
             Clear filters
           </Button>
         </div>

@@ -133,9 +133,16 @@ function IssueTable({
                 {showSite && issue.siteName && <div className="text-xs text-slate-400">{issue.siteName}</div>}
               </td>
               <td className="px-3 py-2">
-                <div className="font-medium text-slate-900">{issue.itemName}</div>
-                <div className="text-xs text-slate-500">
-                  {formatQuantity(issue.quantity)} {issue.unitName ?? ""} · {issue.source === "inventory" ? "Inventory item" : "Purchase item"}
+                <div className="flex items-center gap-2">
+                  {issue.itemHasPhoto && issue.inventoryItemId && (
+                    <AuthedPhoto path={`/inventory-items/${issue.inventoryItemId}/photo`} alt={issue.itemName} className="size-9" />
+                  )}
+                  <div>
+                    <div className="font-medium text-slate-900">{issue.itemName}</div>
+                    <div className="text-xs text-slate-500">
+                      {formatQuantity(issue.quantity)} {issue.unitName ?? ""} · {issue.source === "inventory" ? "Inventory item" : "Purchase item"}
+                    </div>
+                  </div>
                 </div>
               </td>
               <td className="px-3 py-2">

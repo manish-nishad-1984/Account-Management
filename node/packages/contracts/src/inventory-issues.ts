@@ -112,6 +112,8 @@ export const inventoryIssueRowSchema = z.object({
   personName: z.string(),
   personMobile: z.string().nullable(),
   personHasPhoto: z.boolean(),
+  /** An inventory item with a photo of its own or from an arrival. */
+  itemHasPhoto: z.boolean(),
   issuedAt: z.string(),
   note: z.string().nullable(),
   returnedQuantity: z.string().nullable(),

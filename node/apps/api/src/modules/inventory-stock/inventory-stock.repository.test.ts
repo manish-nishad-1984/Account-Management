@@ -73,6 +73,30 @@ describe("InventoryStockRepository (real PostgreSQL)", () => {
     await expect(repo.receive(out.id, { quantity: "1", note: null }, ACTOR)).rejects.toBeInstanceOf(ConflictException);
   });
 
+  // Client, 30 Oct 2026: the item shows as a picture in the stock and the issues.
+  it("gives an item without a photo of its own the latest photo of its arrivals", async () => {
+    const PIECE = "inventory/00000000-0000-4000-8000-000000000001.jpg";
+    expect(await stockOf(drillId)).toMatchObject({ hasPhoto: false });
+    expect(await repo.itemPhotoKey(drillId)).toBeNull();
+
+    const arrivals = new InventoryInwardRepository(db);
+    await arrivals.create(
+      createInventoryInwardSchema.parse({ siteId, inventoryItemId: drillId, quantity: "2", pieces: [{ tag: "D-1" }, { tag: "D-2", photoKey: PIECE }] }),
+      ACTOR,
+    );
+    expect(await stockOf(drillId)).toMatchObject({ hasPhoto: true });
+    expect(await repo.itemPhotoKey(drillId)).toBe(PIECE);
+
+    const out = await issue({ quantity: "1" });
+    expect(out.itemHasPhoto).toBe(true);
+    expect((await repo.issues({ limit: 100 }))[0]).toMatchObject({ itemHasPhoto: true });
+
+    // The item's own photo, once it has one, is the one shown.
+    const OWN = "inventory/00000000-0000-4000-8000-000000000002.png";
+    await db.update(schema.inventoryItems).set({ photoKey: OWN });
+    expect(await repo.itemPhotoKey(drillId)).toBe(OWN);
+  });
+
   it("refuses more than is in stock at the site", async () => {
     await expect(issue({ quantity: "6" })).rejects.toThrow("Only 5.00 Nos of Drill Machine is in stock at this site.");
     await expect(issue({ siteId: otherSiteId })).rejects.toBeInstanceOf(ConflictException);

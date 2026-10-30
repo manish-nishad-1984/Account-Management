@@ -189,6 +189,24 @@ describe("PayoutListFormDialog - bills", () => {
     expect(screen.getByText("Total").parentElement).toHaveTextContent("40,000.00");
   });
 
+  // Client, 30 Oct 2026: the bills chosen came back all ticked on the next Filter.
+  it("opens the filter again with the bills chosen before, not all of them", async () => {
+    const user = userEvent.setup();
+    open();
+    const filterButton = await screen.findByRole("button", { name: /^filter the bills of ambica steel traders by date$/i });
+    await user.click(filterButton);
+    let dialog = await filterPopup();
+    await user.click(within(dialog).getByLabelText("Pay bill BE-1"));
+    await user.click(within(dialog).getByRole("button", { name: /^ok$/i }));
+    expect(screen.getByLabelText("Pay bill BE-1 of Ambica Steel Traders")).not.toBeChecked();
+
+    await user.click(filterButton);
+    dialog = await filterPopup();
+    expect(within(dialog).getByLabelText("Pay bill BE-1")).not.toBeChecked();
+    expect(within(dialog).getByLabelText("Pay bill BE-2")).toBeChecked();
+    expect(within(dialog).getByText(/1 of 2 bills will be ticked/i)).toBeInTheDocument();
+  });
+
   // Client, 19 Oct 2026: a wider popup with more ways to choose among many bills.
   it("ticks the oldest bills that fit a sum, and OK ticks only those", async () => {
     const user = userEvent.setup();

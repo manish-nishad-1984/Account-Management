@@ -16,7 +16,7 @@ const caps = { canEdit: true, canDelete: true, canApprove: false };
 const OUT = {
   id: ISSUE, siteId: SITE, siteName: "Akwada", source: "inventory", inventoryItemId: DRILL, itemId: null, itemName: "Drill Machine",
   unitName: "Nos", quantity: "2.00", returnable: true, agencyId: AGENCY, agencyName: "RAM SHUTTERING", contactName: "Ramesh",
-  contactMobile: "9876543210", personId: PERSON, personName: "Suresh", personMobile: "9000000001", personHasPhoto: false,
+  contactMobile: "9876543210", personId: PERSON, personName: "Suresh", personMobile: "9000000001", personHasPhoto: false, itemHasPhoto: false,
   issuedAt: "2026-10-26T04:30:00.000Z", note: null, returnedQuantity: null, returnedAt: null, returnNote: null, status: "out", capabilities: caps,
 };
 
