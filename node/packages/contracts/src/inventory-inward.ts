@@ -41,6 +41,8 @@ export const inventoryInwardRowSchema = z.object({
   unitName: z.string(),
   /** The arrival has a photo of what came. */
   hasPhoto: z.boolean(),
+  /** Each piece's tag name and whether it has a photo, in order (client, 30 Oct 2026). */
+  pieces: z.array(z.object({ tag: z.string(), hasPhoto: z.boolean() })),
 
   /** A decimal STRING. Never parse it to a number. */
   quantity: z.string(),
@@ -88,6 +90,19 @@ export type InventoryInwardDetail = z.infer<typeof inventoryInwardDetailSchema>;
  * picked, or named for the first time (and then added to the master with its
  * unit), with the quantity and a photo. It adds to that item's stock at the site.
  */
+/** At most this many pieces are tagged one by one on an arrival. */
+export const INVENTORY_ARRIVAL_MAX_PIECES = 100;
+
+/**
+ * One piece of what arrived: its tag name and photo (client, 30 Oct 2026). On an
+ * edit a photo left out keeps the one the piece has; null takes it off.
+ */
+export const arrivalPieceSchema = z.object({
+  tag: z.string().trim().max(100),
+  photoKey: photoKeySchema.nullable().optional(),
+});
+export type ArrivalPiece = z.infer<typeof arrivalPieceSchema>;
+
 export const createInventoryInwardSchema = z
   .object({
     siteId: uuidId
@@ -104,10 +119,16 @@ export const createInventoryInwardSchema = z
     details: optionalText(500),
     /** A new photo; leave out to keep the one there is. */
     photoKey: photoKeySchema.nullable().optional(),
+    /** A tag name and photo for each piece, in order; no more than the quantity. */
+    pieces: z.array(arrivalPieceSchema).max(INVENTORY_ARRIVAL_MAX_PIECES).default([]),
   })
   .refine((arrival) => !!arrival.inventoryItemId || !!arrival.newItemName, {
     message: "Choose the item, or type a new one",
     path: ["inventoryItemId"],
+  })
+  .refine((arrival) => arrival.pieces.length <= Math.max(0, Math.floor(Number(arrival.quantity) || 0)), {
+    message: "More tags than the quantity",
+    path: ["pieces"],
   });
 export type CreateInventoryInward = z.infer<typeof createInventoryInwardSchema>;
 

@@ -108,6 +108,43 @@ describe("InventoryInwardRepository (real PostgreSQL)", () => {
     });
   });
 
+  describe("a tag name and photo for each piece (client, 30 Oct 2026)", () => {
+    const PHOTO_A = "inventory/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg";
+    const PHOTO_B = "inventory/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.jpg";
+
+    it("keeps them in order, and the list shows the tags and which have photos", async () => {
+      const created = await repo.create(
+        input({ quantity: "3", pieces: [{ tag: "DRILL-01", photoKey: PHOTO_A }, { tag: "DRILL-02" }, { tag: "DRILL-03", photoKey: null }] }),
+        ACTOR,
+      );
+      const expected = [
+        { tag: "DRILL-01", hasPhoto: true },
+        { tag: "DRILL-02", hasPhoto: false },
+        { tag: "DRILL-03", hasPhoto: false },
+      ];
+      expect(created.pieces).toEqual(expected);
+      const page = await repo.list(query());
+      expect(page.rows.find((row) => row.id === created.id)!.pieces).toEqual(expected);
+    });
+
+    it("keeps a piece's photo on an edit that leaves it out, and takes it off on null", async () => {
+      const created = await repo.create(input({ quantity: "2", pieces: [{ tag: "A", photoKey: PHOTO_A }, { tag: "B", photoKey: PHOTO_B }] }), ACTOR);
+      const edited = await repo.update(
+        created.id,
+        input({ inventoryItemId: created.inventoryItemId, quantity: "2", pieces: [{ tag: "A1" }, { tag: "B", photoKey: null }] }),
+        ACTOR,
+      );
+      expect(edited.pieces).toEqual([
+        { tag: "A1", hasPhoto: true },
+        { tag: "B", hasPhoto: false },
+      ]);
+    });
+
+    it("refuses more tags than the quantity", () => {
+      expect(() => input({ quantity: "1", pieces: [{ tag: "A" }, { tag: "B" }] })).toThrow(/More tags than the quantity/);
+    });
+  });
+
   describe("the list", () => {
     it("reads the item's CURRENT name, not the snapshot taken when it was keyed", async () => {
       const created = await repo.create(input(), ACTOR);

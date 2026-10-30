@@ -190,6 +190,16 @@ export class InventoryStockRepository extends BaseRepository {
     return row.key;
   }
 
+  /** The photo of piece `n` (from 0) of an arrival. */
+  async arrivalPiecePhotoKey(id: string, n: number): Promise<string | null> {
+    const [row] = await this.db
+      .select({ pieces: inventoryInward.pieces })
+      .from(inventoryInward)
+      .where(and(eq(inventoryInward.id, id), eq(inventoryInward.isDeleted, false)));
+    if (!row) throw new NotFoundException("Inventory record not found");
+    return row.pieces[n]?.photoKey ?? null;
+  }
+
   // ---- purchase item stock -------------------------------------------------------
 
   /** The purchase items a site has received on its inward challans, with what is in stock. */

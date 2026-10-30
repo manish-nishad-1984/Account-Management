@@ -4,6 +4,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   numeric,
   pgTable,
   text,
@@ -95,6 +96,12 @@ export const inventoryInward = pgTable(
     inventoryItemId: uuid("inventory_item_id").references(() => inventoryItems.id),
     /** The arrival's photo, in document storage. */
     photoKey: text("photo_key"),
+    /**
+     * ONE TAG NAME AND ONE PHOTO FOR EACH PIECE that arrived (client, 30 Oct
+     * 2026): a quantity of 3 has three, in order. Empty for a quantity that is
+     * not whole, and on arrivals from before.
+     */
+    pieces: jsonb("pieces").$type<{ tag: string; photoKey: string | null }[]>().notNull().default([]),
 
     /**
      * `Item` in the source — the item's name as it was when the row was keyed.

@@ -6,6 +6,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
   Patch,
   Post,
@@ -233,5 +234,16 @@ export class InventoryIssuesController {
   @Permissions("inventory-inward.view")
   async arrivalPhoto(@Param("id", ParseUUIDPipe) id: string, @Res() reply: FastifyReply): Promise<void> {
     await sendPhoto(reply, await this.photos.read(await this.stock.arrivalPhotoKey(id)));
+  }
+
+  /** The photo of one piece of a New Arrival, counted from 0 (client, 30 Oct 2026). */
+  @Get("arrivals/:id/pieces/:n/photo")
+  @Permissions("inventory-inward.view")
+  async arrivalPiecePhoto(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("n", ParseIntPipe) n: number,
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
+    await sendPhoto(reply, await this.photos.read(await this.stock.arrivalPiecePhotoKey(id, n)));
   }
 }

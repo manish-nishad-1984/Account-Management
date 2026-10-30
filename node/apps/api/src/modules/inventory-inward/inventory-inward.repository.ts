@@ -37,6 +37,7 @@ export interface InventoryInwardListRow {
   unitId: number | null;
   unitName: string;
   hasPhoto: boolean;
+  pieces: { tag: string; hasPhoto: boolean }[];
   quantity: string;
   documentDate: string | null;
   details: string | null;
@@ -51,12 +52,17 @@ const DETAIL_COLUMNS = {
   inventoryItemId: inventoryInward.inventoryItemId,
   unitId: inventoryInward.unitId,
   hasPhoto: sql<boolean>`${inventoryInward.photoKey} is not null`,
+  pieces: inventoryInward.pieces,
   quantity: inventoryInward.quantity,
   documentDate: inventoryInward.documentDate,
   details: inventoryInward.details,
   isApproved: inventoryInward.isApproved,
   createdAt: inventoryInward.createdAt,
 } as const;
+
+type StoredPiece = { tag: string; photoKey: string | null };
+/** What the screens see of the pieces: the tag, and whether there is a photo. */
+const shownPieces = (pieces: unknown) => ((pieces ?? []) as StoredPiece[]).map((piece) => ({ tag: piece.tag, hasPhoto: !!piece.photoKey }));
 
 const iso = (value: Date | string | null): string | null =>
   value === null ? null : value instanceof Date ? value.toISOString() : value;
@@ -70,6 +76,7 @@ const toDetail = (row: DetailRow): InventoryInwardDetail => ({
   inventoryItemId: row.inventoryItemId as string | null,
   unitId: row.unitId as number | null,
   hasPhoto: row.hasPhoto === true,
+  pieces: shownPieces(row.pieces),
   quantity: row.quantity as string,
   documentDate: iso(row.documentDate as Date | string | null),
   details: row.details as string | null,
@@ -169,6 +176,7 @@ export class InventoryInwardRepository extends BaseRepository {
         unitId: inventoryInward.unitId,
         unitName: sql<string>`coalesce(${inventoryItems.unit}, ${units.name}, '')`,
         hasPhoto: sql<boolean>`${inventoryInward.photoKey} is not null`,
+        pieces: inventoryInward.pieces,
         quantity: inventoryInward.quantity,
         documentDate: inventoryInward.documentDate,
         details: inventoryInward.details,
@@ -191,6 +199,7 @@ export class InventoryInwardRepository extends BaseRepository {
     return {
       rows: page.rows.map(({ sortValue: _ignored, ...row }) => ({
         ...row,
+        pieces: shownPieces(row.pieces),
         documentDate: iso(row.documentDate),
         createdAt: iso(row.createdAt) as string,
       })),
@@ -260,6 +269,7 @@ export class InventoryInwardRepository extends BaseRepository {
             quantity: input.quantity,
             details: input.details,
             photoKey: input.photoKey ?? null,
+            pieces: input.pieces.map((piece) => ({ tag: piece.tag, photoKey: piece.photoKey ?? null })),
             itemName: item.name,
             documentDate: input.documentDate ? new Date(input.documentDate) : null,
             isApproved: false,
@@ -285,6 +295,12 @@ export class InventoryInwardRepository extends BaseRepository {
       this.db.transaction(async (tx) => {
         // An arrival keyed before 26 Oct 2026 becomes one of an inventory item when it is edited.
         const item = await resolveInventoryItem(tx as unknown as Database, input, actorId);
+        // A piece's photo left out keeps the one that piece had.
+        const [before] = await tx
+          .select({ pieces: inventoryInward.pieces })
+          .from(inventoryInward)
+          .where(and(eq(inventoryInward.id, id), eq(inventoryInward.isDeleted, false)));
+        const had = (before?.pieces ?? []) as StoredPiece[];
         return tx
           .update(inventoryInward)
           .set({
@@ -296,6 +312,10 @@ export class InventoryInwardRepository extends BaseRepository {
             quantity: input.quantity,
             details: input.details,
             ...(input.photoKey === undefined ? {} : { photoKey: input.photoKey }),
+            pieces: input.pieces.map((piece, n) => ({
+              tag: piece.tag,
+              photoKey: piece.photoKey === undefined ? (had[n]?.photoKey ?? null) : piece.photoKey,
+            })),
             ...(input.isApproved === undefined ? {} : { isApproved: input.isApproved }),
             ...(documentDate === undefined
               ? {}

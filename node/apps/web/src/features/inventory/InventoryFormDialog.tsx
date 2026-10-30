@@ -1,9 +1,10 @@
-import { PackageCheck } from "lucide-react";
+import { PackageCheck, Tags } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
 import {
+  INVENTORY_ARRIVAL_MAX_PIECES,
   createInventoryInwardSchema,
   type InventoryInwardDetail,
 } from "@accountmanagement/contracts";
@@ -17,6 +18,7 @@ import {
 } from "./api";
 import { useInventoryItems } from "./stock-api";
 import { PhotoInput } from "./photos";
+import { useAllUnits } from "../items/api";
 import { useSiteScope } from "../../contexts/SiteScopeContext";
 import { todayInput } from "../../lib/dates";
 
@@ -39,6 +41,18 @@ type Submitted = z.output<typeof createInventoryInwardSchema>;
 /** The picker's choice that opens the name and unit of a new item. */
 const NEW_ITEM = "__new__";
 
+/**
+ * ONE ROW FOR EACH PIECE THAT CAME (client, 30 Oct 2026): its tag name and its
+ * photo. `photoKey` undefined keeps the photo the piece has on an edit.
+ */
+type Piece = { tag: string; photoKey?: string | null; saved: boolean };
+
+/** How many pieces a quantity is: a whole number, or none. */
+export const pieceCount = (quantity: unknown): number => {
+  const text = String(quantity ?? "").trim();
+  return /^\d+(\.0+)?$/.test(text) ? Number.parseInt(text, 10) : 0;
+};
+
 export function InventoryFormDialog({
   open,
   recordId,
@@ -57,6 +71,10 @@ export function InventoryFormDialog({
   const [formError, setFormError] = useState<string | null>(null);
   // "+ New item" chosen: the name and unit open.
   const [typingNew, setTypingNew] = useState(false);
+  const units = useAllUnits();
+  const [pieces, setPieces] = useState<Piece[]>([]);
+  // A new opening starts the photo boxes afresh.
+  const [opening, setOpening] = useState(0);
 
   const {
     register,
@@ -75,12 +93,15 @@ export function InventoryFormDialog({
     if (!open) return;
     setFormError(null);
     setTypingNew(false);
+    setOpening((n) => n + 1);
     if (!isEdit) {
+      setPieces([]);
       // Dated today unless the person says otherwise. Computed on open, never at
       // module load: a tab left open overnight would otherwise offer yesterday.
       reset({ ...EMPTY, documentDate: todayInput(), siteId: scope.siteId ?? null });
     } else if (detail.data) {
       reset(toFormValues(detail.data));
+      setPieces(detail.data.pieces.map((piece) => ({ tag: piece.tag, photoKey: undefined, saved: piece.hasPhoto })));
     }
   }, [open, isEdit, detail.data, reset, scope.siteId]);
 
@@ -89,11 +110,19 @@ export function InventoryFormDialog({
   const onSubmit = handleSubmit(
     async (values) => {
       setFormError(null);
+      // As many pieces as the quantity, in order.
+      const body = {
+        ...values,
+        pieces: pieces.slice(0, Math.min(pieceCount(values.quantity), INVENTORY_ARRIVAL_MAX_PIECES)).map((piece) => ({
+          tag: piece.tag.trim(),
+          photoKey: piece.photoKey,
+        })),
+      };
       try {
         if (isEdit) {
-          await update.mutateAsync({ id: recordId, body: values });
+          await update.mutateAsync({ id: recordId, body });
         } else {
-          await create.mutateAsync(values);
+          await create.mutateAsync(body);
         }
         onClose();
       } catch (error) {
@@ -104,6 +133,17 @@ export function InventoryFormDialog({
   );
 
   const inventoryItemId = useWatch({ control, name: "inventoryItemId" });
+  const quantity = useWatch({ control, name: "quantity" });
+  const count = pieceCount(quantity);
+  const shownPieces = Math.min(count, INVENTORY_ARRIVAL_MAX_PIECES);
+  const pieceAt = (n: number): Piece => pieces[n] ?? { tag: "", photoKey: undefined, saved: false };
+  const setPiece = (n: number, change: Partial<Piece>) =>
+    setPieces((current) => {
+      const next = [...current];
+      for (let i = next.length; i <= n; i++) next.push({ tag: "", photoKey: undefined, saved: false });
+      next[n] = { ...next[n]!, ...change };
+      return next;
+    });
   const items = itemsQuery.data?.rows ?? [];
   const picked = items.find((item) => item.id === inventoryItemId);
 
@@ -165,7 +205,13 @@ export function InventoryFormDialog({
                 error={errors.inventoryItemId?.message ?? errors.newItemName?.message}
                 {...register("newItemName")}
               />
-              <TextField label="Unit" placeholder="Nos" error={errors.unit?.message} {...register("unit")} />
+              <SelectField
+                label="Unit"
+                placeholder={units.isLoading ? "Loading units…" : "Choose a unit"}
+                options={(units.data?.rows ?? []).map((unit) => ({ value: unit.name, label: unit.name }))}
+                error={errors.unit?.message}
+                {...register("unit")}
+              />
             </>
           )}
 
@@ -189,13 +235,57 @@ export function InventoryFormDialog({
             {...register("details")}
           />
 
-          <div className="sm:col-span-3">
-            <PhotoInput
-              label="Photo"
-              currentPath={isEdit && detail.data?.hasPhoto ? `/inventory-issues/arrivals/${recordId}/photo` : null}
-              onChange={(photoKey) => setValue("photoKey", photoKey, { shouldDirty: true })}
-            />
-          </div>
+          {/* The one photo of an arrival from before the pieces had their own. */}
+          {isEdit && detail.data?.hasPhoto && (
+            <div className="sm:col-span-3">
+              <PhotoInput
+                label="Photo"
+                currentPath={`/inventory-issues/arrivals/${recordId}/photo`}
+                onChange={(photoKey) => setValue("photoKey", photoKey, { shouldDirty: true })}
+              />
+            </div>
+          )}
+        </FormSection>
+      )}
+
+      {!(isEdit && detail.isLoading) && (
+        <FormSection icon={Tags} title="Tag name and photo of each piece" columns={1}>
+          {shownPieces === 0 ? (
+            <p className="text-sm text-slate-500">
+              {String(quantity ?? "").trim() && count === 0
+                ? "Tags and photos are for a whole quantity."
+                : "Type the quantity: a row for each piece opens here."}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {count > INVENTORY_ARRIVAL_MAX_PIECES && (
+                <p className="text-xs text-slate-500">The first {INVENTORY_ARRIVAL_MAX_PIECES} pieces are tagged here.</p>
+              )}
+              {Array.from({ length: shownPieces }, (_, n) => {
+                const piece = pieceAt(n);
+                return (
+                  <div key={`${opening}-${n}`} className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 sm:grid-cols-[2rem_minmax(12rem,24rem)_minmax(0,1fr)]">
+                    <span className="tabular text-sm text-slate-500">{n + 1}</span>
+                    <TextField
+                      label={`Tag name of piece ${n + 1}`}
+                      labelHidden
+                      placeholder={`Tag name ${n + 1}`}
+                      value={piece.tag}
+                      onChange={(event) => setPiece(n, { tag: event.target.value })}
+                    />
+                    <div className="col-start-2 sm:col-start-3">
+                      <PhotoInput
+                        label={`Photo of piece ${n + 1}`}
+                        hideLabel
+                        currentPath={isEdit && piece.saved ? `/inventory-issues/arrivals/${recordId}/pieces/${n}/photo` : null}
+                        onChange={(photoKey) => setPiece(n, { photoKey })}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </FormSection>
       )}
     </FormDialog>
@@ -211,6 +301,7 @@ const EMPTY: FormValues = {
   documentDate: "",
   details: "",
   photoKey: undefined,
+  pieces: [],
 };
 
 /** `<input type="date">` wants `yyyy-mm-dd`; the API sends a full ISO timestamp. */
@@ -231,4 +322,5 @@ const toFormValues = (detail: InventoryInwardDetail): FormValues => ({
   documentDate: dateInput(detail.documentDate),
   details: text(detail.details),
   photoKey: undefined,
+  pieces: [],
 });

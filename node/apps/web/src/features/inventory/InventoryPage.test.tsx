@@ -22,6 +22,7 @@ const row = (overrides: Record<string, unknown> = {}) => ({
   itemName: "HELMET YELLOW LABOUR",
   inventoryItemId: null,
   hasPhoto: false,
+  pieces: [],
   unitId: 1,
   unitName: "Nos",
   quantity: "1000.00",

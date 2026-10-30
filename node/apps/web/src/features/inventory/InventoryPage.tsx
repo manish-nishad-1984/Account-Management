@@ -145,6 +145,32 @@ function ArrivalsView() {
                   {row.original.details}
                 </div>
               )}
+              {/* Each piece's tag and photo (client, 30 Oct 2026). */}
+              {row.original.pieces.some((piece) => piece.tag) && (
+                <div className="text-xs text-slate-500">
+                  Tags: {row.original.pieces.map((piece) => piece.tag).filter(Boolean).join(", ")}
+                </div>
+              )}
+              {row.original.pieces.some((piece) => piece.hasPhoto) && (
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  {/* The first few; the rest are on the arrival itself. */}
+                  {row.original.pieces
+                    .map((piece, n) => ({ ...piece, n }))
+                    .filter((piece) => piece.hasPhoto)
+                    .slice(0, 6)
+                    .map((piece) => (
+                      <AuthedPhoto
+                        key={piece.n}
+                        path={`/inventory-issues/arrivals/${row.original.id}/pieces/${piece.n}/photo`}
+                        alt={`${row.original.itemName} ${piece.tag || piece.n + 1}`}
+                        className="size-8"
+                      />
+                    ))}
+                  {row.original.pieces.filter((piece) => piece.hasPhoto).length > 6 && (
+                    <span className="text-xs text-slate-500">+{row.original.pieces.filter((piece) => piece.hasPhoto).length - 6}</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ),

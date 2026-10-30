@@ -111,6 +111,7 @@ export class InventoryInwardController {
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<InventoryInwardDetail> {
     await this.photos.assertUploaded(body.photoKey);
+    for (const piece of body.pieces) await this.photos.assertUploaded(piece.photoKey);
     return this.inventory.create(
       { ...body, isApproved: approvedOnCreate(caller, SUBJECT) },
       actorId(caller),
@@ -125,6 +126,7 @@ export class InventoryInwardController {
     @CurrentUser() caller: AccessTokenClaims | undefined,
   ): Promise<InventoryInwardDetail> {
     await this.photos.assertUploaded(body.photoKey);
+    for (const piece of body.pieces) await this.photos.assertUploaded(piece.photoKey);
     return this.inventory.update(
       id,
       { ...body, ...approvalOnUpdate(caller, SUBJECT) },
