@@ -46,6 +46,17 @@ export function formatMoney(value: string): string {
 }
 
 /**
+ * A rate (client, 2 Nov 2026): two places like money, and the third when it is
+ * there - "75.300" is 75.30, "75.325" stays 75.325. `formatMoney` would cut the
+ * third place off, not round it, so a rate never goes through it.
+ */
+export function formatRate(value: string): string {
+  const [, fraction = ""] = value.split(".");
+  const third = fraction.slice(2, 3);
+  return third && third !== "0" ? `${formatMoney(value)}${third}` : formatMoney(value);
+}
+
+/**
  * A quantity, grouped like money but WITHOUT forced decimal places.
  *
  * Money always shows two — 10.00 is a price. A quantity does not: "10.00 Bag"

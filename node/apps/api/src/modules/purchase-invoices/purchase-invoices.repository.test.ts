@@ -155,6 +155,26 @@ describe("PurchaseInvoicesRepository (real PostgreSQL)", () => {
       expect(created.totalAmount).toBe("1062.00");
     });
 
+    // Client, 2 Nov 2026: steel is priced to three places.
+    it("keeps a rate's third place, and rounds the line to the paise", async () => {
+      const created = await repo.create(
+        input({
+          items: [
+            { itemId, unitId, quantity: "3", unitPrice: "75.325", gstPercent: "18" },
+            { itemId, unitId, quantity: "1", unitPrice: "100", gstPercent: "18" },
+          ],
+        }),
+        ACTOR,
+      );
+
+      // 75.325 x 3 = 225.975 -> 225.98; plus 100 = 325.98 net.
+      const again = await repo.findById(created.id);
+      expect(again.items[0]!.unitPrice).toBe("75.325");
+      // An ordinary price reads back with two places, as before the column took three.
+      expect(again.items[1]!.unitPrice).toBe("100.00");
+      expect(again.subtotal).toBe("325.98");
+    });
+
     /**
      * B-2(b): the running calculator iterates `.product` and the rows the page
      * was built with are `.productRow`, so it sums half the table. A two-line

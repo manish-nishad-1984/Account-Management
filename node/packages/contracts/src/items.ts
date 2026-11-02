@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { rowCapabilitiesSchema } from "./pagination";
-import { hsnCode, money, optionalMoney, optionalPercent, requiredText } from "./fields";
+import { hsnCode, optionalMoney, optionalPercent, rate, requiredText } from "./fields";
 
 /**
  * Items — `ItemMaster` in SQL Server.
@@ -72,7 +72,7 @@ export const normalizeItemName = (name: string): string => name.trim().replace(/
 export const createItemSchema = z.object({
   name: requiredText("Item name", 200).transform(normalizeItemName),
   unitId: z.coerce.number().int().positive("Choose a unit"),
-  pricePerUnit: money("Price per unit"),
+  pricePerUnit: rate("Price per unit"),
   gstPercent: optionalPercent("GST percentage"),
   gstAmount: optionalMoney("GST amount"),
   hsnCode,

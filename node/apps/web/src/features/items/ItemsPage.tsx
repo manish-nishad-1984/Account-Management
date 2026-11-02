@@ -25,7 +25,7 @@ import { ItemImportDialog } from "./ItemImportDialog";
 import { UnitsDialog } from "./UnitsDialog";
 import { usePermission } from "../../lib/permissions";
 import { useMasterScreen } from "../../lib/use-master-screen";
-import { formatMoney, formatPercent } from "../../lib/format";
+import { formatMoney, formatPercent, formatRate } from "../../lib/format";
 
 export function ItemsPage() {
   const canAdd = usePermission("item", "add");
@@ -103,7 +103,7 @@ export function ItemsPage() {
         meta: { align: "right" },
         cell: ({ row }) => (
           <span className="tabular block text-right text-slate-800">
-            {formatMoney(row.original.pricePerUnit)}
+            {formatRate(row.original.pricePerUnit)}
           </span>
         ),
       },

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { money, optionalMoney, phoneNumbers } from "./fields";
+import { formatRate } from "./format";
+import { money, optionalMoney, phoneNumbers, rate } from "./fields";
 
 /**
  * THE PHONE FIELD MUST ACCEPT WHAT THE BUSINESS ALREADY HAS.
@@ -97,5 +98,28 @@ describe("money", () => {
     expect(money("Price").parse("75.3")).toBe("75.3");
     expect(money("Price").parse("1200")).toBe("1200");
     expect(optionalMoney("GST amount").parse("")).toBeNull();
+  });
+});
+
+// Client, 2 Nov 2026: steel is priced to three places, 75.325 a kilo.
+describe("rate", () => {
+  it("takes up to three decimal places", () => {
+    expect(rate("Price").parse("75.325")).toBe("75.325");
+    expect(rate("Price").parse("75.3")).toBe("75.3");
+    expect(rate("Price").parse("75.3250")).toBe("75.325");
+  });
+
+  it("refuses a fourth place, a negative and a blank", () => {
+    expect(rate("Price").safeParse("75.3251").success).toBe(false);
+    expect(rate("Price").safeParse("-1").success).toBe(false);
+    expect(rate("Price").safeParse("").success).toBe(false);
+  });
+
+  it("shows two places, and the third only when it is there", () => {
+    expect(formatRate("75.325")).toBe("75.325");
+    expect(formatRate("75.300")).toBe("75.30");
+    expect(formatRate("75.3")).toBe("75.30");
+    expect(formatRate("125000.5")).toBe("1,25,000.50");
+    expect(formatRate("125000.125")).toBe("1,25,000.125");
   });
 });

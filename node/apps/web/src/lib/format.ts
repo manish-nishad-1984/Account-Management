@@ -11,7 +11,7 @@
  * to look. Read the contracts file for why each rule is what it is — including
  * the regex that turns 10% into 1%, and why nothing here parses.
  */
-export { formatMoney, formatPercent, formatQuantity } from "@accountmanagement/contracts";
+export { formatMoney, formatPercent, formatQuantity, formatRate } from "@accountmanagement/contracts";
 
 /**
  * An ISO timestamp as a plain Indian-format date, for the SCREEN.

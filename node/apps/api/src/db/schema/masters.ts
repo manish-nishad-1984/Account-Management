@@ -10,6 +10,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { rateNumeric } from "./rate-column";
 
 /**
  * Suppliers, units and items — the three masters that feed procurement.
@@ -200,7 +201,7 @@ export const items = pgTable(
       .notNull()
       .references(() => units.id),
 
-    pricePerUnit: numeric("price_per_unit", { precision: 18, scale: 2 }).notNull(),
+    pricePerUnit: rateNumeric("price_per_unit").notNull(),
 
     /**
      * SUPERSEDED, 17 Sep 2026 — nothing reads or writes this any more.
@@ -262,8 +263,8 @@ export const itemPriceChanges = pgTable(
       .notNull()
       .references(() => items.id),
     source: text("source").notNull(),
-    oldPrice: numeric("old_price", { precision: 18, scale: 2 }),
-    newPrice: numeric("new_price", { precision: 18, scale: 2 }).notNull(),
+    oldPrice: rateNumeric("old_price"),
+    newPrice: rateNumeric("new_price").notNull(),
     oldGstPercent: numeric("old_gst_percent", { precision: 5, scale: 2 }),
     newGstPercent: numeric("new_gst_percent", { precision: 5, scale: 2 }),
     changedBy: uuid("changed_by"),

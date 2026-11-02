@@ -179,7 +179,7 @@ describe("ItemFormDialog", () => {
     expect(bodyOfMethod("POST").gstAmount).toBeNull();
   });
 
-  it("refuses a price with more than two decimal places", async () => {
+  it("refuses a price with more than three decimal places", async () => {
     routeFetch({ rows: [], nextCursor: null, total: 0 });
     renderWith(<ItemFormDialog open itemId={null} onClose={vi.fn()} />);
 
@@ -187,10 +187,10 @@ describe("ItemFormDialog", () => {
 
     await userEvent.type(screen.getByLabelText(/item name/i), "Test Item");
     await userEvent.selectOptions(screen.getByLabelText(/^unit/i), "1");
-    await userEvent.type(screen.getByLabelText(/price per unit/i), "100.005");
+    await userEvent.type(screen.getByLabelText(/price per unit/i), "100.0005");
     await userEvent.click(screen.getByRole("button", { name: /create item/i }));
 
-    expect(await screen.findByText(/at most 2 decimal places/i)).toBeInTheDocument();
+    expect(await screen.findByText("Price per unit must be an amount with at most 3 decimal places")).toBeInTheDocument();
     expect(bodyOfMethod("POST")).toBeUndefined();
   });
 

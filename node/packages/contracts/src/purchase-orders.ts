@@ -2,7 +2,7 @@ import { z } from "zod";
 import { rowCapabilitiesSchema } from "./pagination";
 import { TERMS_MAX_LENGTH, termsTemplateRef } from "./purchase-order-terms";
 import {
-  money,
+  rate,
   optionalDate,
   optionalMoney,
   optionalPercent,
@@ -212,7 +212,7 @@ export const purchaseOrderLineInputSchema = z
     itemDescription: optionalText(500),
     unitId: z.coerce.number().int().positive("Choose a unit"),
     quantity: quantity("Quantity"),
-    unitPrice: money("Price"),
+    unitPrice: rate("Price"),
     gstPercent: optionalPercent("GST %"),
     /** Accepted, stored, and deliberately not used in the arithmetic. */
     discount: optionalMoney("Discount"),

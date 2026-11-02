@@ -222,9 +222,9 @@ describe("ItemsRepository and UnitsRepository (real PostgreSQL)", () => {
       expect(parsed).not.toHaveProperty("isWithGst");
     });
 
-    it("refuses a price with more than two decimal places", () => {
+    it("refuses a price with more than three decimal places", () => {
       expect(() =>
-        createItemSchema.parse({ name: "X", unitId: 1, pricePerUnit: "100.005" }),
+        createItemSchema.parse({ name: "X", unitId: 1, pricePerUnit: "100.0005" }),
       ).toThrow();
     });
 

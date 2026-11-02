@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { rowCapabilitiesSchema } from "./pagination";
 import {
-  money,
+  rate,
   optionalDate,
   optionalMoney,
   optionalPercent,
@@ -142,7 +142,7 @@ export const salesInvoiceLineInputSchema = z
     itemDescription: optionalText(500),
     unitId: z.coerce.number().int().positive("Choose a unit"),
     quantity: quantity("Quantity"),
-    unitPrice: money("Price"),
+    unitPrice: rate("Price"),
     discountPerUnit: optionalMoney("Discount"),
     gstPercent: optionalPercent("GST %"),
   })

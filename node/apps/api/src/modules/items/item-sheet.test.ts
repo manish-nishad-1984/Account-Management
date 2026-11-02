@@ -144,8 +144,9 @@ describe("parseRows", () => {
     expect(rows.map((row) => row.gstAmount)).toEqual(["71.10", "4.86", "68.59", "1.01"]);
   });
 
-  it("still refuses a price with more than two decimals", () => {
-    const { errors } = parse([["Item", "Nos", "395.123", "18", "", ""]]);
+  it("takes a price to three decimals and refuses a fourth (client, 2 Nov 2026)", () => {
+    expect(parse([["Item", "Nos", "395.123", "18", "", ""]]).errors).toEqual([]);
+    const { errors } = parse([["Item", "Nos", "395.1234", "18", "", ""]]);
     expect(errors[0]).toMatchObject({ column: "Price Per Unit" });
   });
 

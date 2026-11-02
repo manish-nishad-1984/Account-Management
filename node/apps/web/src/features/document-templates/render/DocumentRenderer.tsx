@@ -15,7 +15,7 @@ import {
   type TemplatePage,
 } from "@accountmanagement/contracts";
 import { money } from "@accountmanagement/domain";
-import { formatDate } from "../../../lib/format";
+import { formatDate, formatRate } from "../../../lib/format";
 
 /**
  * Draws a document from a template layout.
@@ -174,7 +174,7 @@ function cell(line: PrintLine, column: ItemColumn, showDescription: boolean): Re
     case "unit":
       return line.unitName;
     case "rate":
-      return m(line.unitPrice);
+      return formatRate(line.unitPrice);
     case "discount":
       return isZero(line.discountPerUnit) ? "" : m(line.discountPerUnit);
     case "discount-percent":

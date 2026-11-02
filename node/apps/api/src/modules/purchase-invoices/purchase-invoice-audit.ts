@@ -35,7 +35,7 @@ export async function purchaseInvoiceView(db: Database, id: string): Promise<Aud
   const lines = rawRows<Record<string, string | number | null>>(
     await db.execute(sql`
       select l.line_number, coalesce(i.name, l.item_name, '') as item, l.item_description, u.name as unit,
-             l.quantity::text as quantity, l.unit_price::text as price, l.discount_per_unit::text as discount,
+             l.quantity::text as quantity, regexp_replace(l.unit_price::text, '(\\.\\d\\d)0$', '\\1') as price, l.discount_per_unit::text as discount,
              l.gst_percent::text as gst, l.line_total::text as total
       from purchase_invoice_items l
       join units u on u.id = l.unit_id

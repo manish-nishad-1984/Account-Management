@@ -21,7 +21,7 @@ import { useInwardChallanList } from "../inward-challans/api";
 import { useItemList } from "../items/api";
 import { useSupplierList } from "../suppliers/api";
 import { ApprovalQueue, type QueueColumn, type QueueRow } from "./ApprovalQueue";
-import { formatMoney } from "../../lib/format";
+import { formatMoney, formatRate } from "../../lib/format";
 import { hasPermission } from "@accountmanagement/contracts";
 import { ToReceiveBack } from "../inventory/IssueLists";
 
@@ -103,7 +103,7 @@ const ITEM_COLUMNS: QueueColumn<ItemRow>[] = [
     key: "pricePerUnit",
     header: "Price",
     numeric: true,
-    cell: (row) => formatMoney(row.pricePerUnit),
+    cell: (row) => formatRate(row.pricePerUnit),
   },
 ];
 

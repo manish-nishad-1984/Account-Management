@@ -209,7 +209,7 @@ describe("PurchaseInvoiceImportService (real PostgreSQL)", () => {
         row({ ...BASE, "Invoice no": "F1", Quantity: "1", Rate: "10", Supplier: "NOBODY LTD" }),
         row({ ...BASE, "Invoice no": "F2", Quantity: "1", Rate: "10", Date: "31-02-2026" }),
         row({ ...BASE, "Invoice no": "F3", Quantity: "1", Rate: "10", Item: "Gold bars" }),
-        row({ ...BASE, "Invoice no": "F4", Quantity: "1", Rate: "10.123" }),
+        row({ ...BASE, "Invoice no": "F4", Quantity: "1", Rate: "10.1234" }),
         row({ ...BASE, "Invoice no": "F5", Quantity: "1", Rate: "10", Site: "Akwada" }),
         row({ ...BASE, "Invoice no": "F5", Quantity: "1", Rate: "10", Site: "Other site" }),
         row({ ...BASE, "Invoice no": "F6", Quantity: "1", Rate: "10", "Site location": "Block Z" }),

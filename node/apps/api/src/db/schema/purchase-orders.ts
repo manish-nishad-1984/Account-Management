@@ -8,6 +8,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { rateNumeric } from "./rate-column";
 import { companies, sites } from "./users";
 import { items, suppliers, units } from "./masters";
 import { siteGroups } from "./site-groups";
@@ -272,7 +273,7 @@ export const purchaseOrderItems = pgTable(
       .references(() => units.id),
 
     quantity: numeric("quantity", { precision: 18, scale: 2 }).notNull(),
-    unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull(),
+    unitPrice: rateNumeric("unit_price").notNull(),
 
     /** Percentage, e.g. "18.00". `Gstper` in the source. */
     gstPercent: numeric("gst_percent", { precision: 5, scale: 2 }),

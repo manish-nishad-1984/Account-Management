@@ -8,6 +8,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { rateNumeric } from "./rate-column";
 import { companies, sites } from "./users";
 import { items, suppliers, units } from "./masters";
 
@@ -219,7 +220,7 @@ export const salesInvoiceItems = pgTable(
      * roll-up — see the table comment above. Storing one value makes that
      * disagreement unrepresentable.
      */
-    unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull(),
+    unitPrice: rateNumeric("unit_price").notNull(),
 
     /** Rupees per unit. The percent is derived — see `purchase_invoice_items`. */
     discountPerUnit: numeric("discount_per_unit", { precision: 18, scale: 2 })

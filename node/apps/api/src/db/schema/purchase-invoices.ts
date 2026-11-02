@@ -11,6 +11,7 @@ import {
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import { rateNumeric } from "./rate-column";
 import { companies, sites } from "./users";
 import { items, suppliers, units } from "./masters";
 import { siteGroups } from "./site-groups";
@@ -282,7 +283,7 @@ export const purchaseInvoiceItems = pgTable(
     quantity: numeric("quantity", { precision: 18, scale: 3 }).notNull(),
 
     /** Price of one unit BEFORE discount — the source's hidden `.productamount`. */
-    unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull(),
+    unitPrice: rateNumeric("unit_price").notNull(),
 
     /**
      * DISCOUNT IS STORED ONCE, IN RUPEES PER UNIT — and this is a departure.

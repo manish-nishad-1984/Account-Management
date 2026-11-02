@@ -150,7 +150,7 @@ export function ItemFormDialog({
       setValue("gstAmount", "", { shouldDirty: true });
       return;
     }
-    if (!/^\d+(\.\d{1,2})?$/.test(price) || !/^\d{1,3}(\.\d{1,2})?$/.test(percent)) return;
+    if (!/^\d+(\.\d{1,3})?$/.test(price) ||!/^\d{1,3}(\.\d{1,2})?$/.test(percent)) return;
     const amount = money.format(money.round(money.percentOf(money.decimal(percent), money.decimal(price)), 2));
     setValue("gstAmount", amount, { shouldDirty: true, shouldValidate: true });
   };
@@ -354,7 +354,7 @@ export function ItemFormDialog({
               label="Price per unit"
               required
               inputMode="decimal"
-              hint="Amount with at most 2 decimal places"
+              hint="Amount with at most 3 decimal places"
               error={errors.pricePerUnit?.message}
               {...register("pricePerUnit", { onChange: fillGstAmount("pricePerUnit") })}
             />

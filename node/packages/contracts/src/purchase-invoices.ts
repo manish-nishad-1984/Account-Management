@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { rowCapabilitiesSchema } from "./pagination";
 import {
-  money,
+  rate,
   optionalDate,
   optionalMoney,
   optionalPercent,
@@ -203,7 +203,7 @@ export const purchaseInvoiceLineInputSchema = z
     unitId: z.coerce.number().int().positive("Choose a unit"),
     /** Up to 3 decimals here only (client, 19 Oct 2026: 1.327 CBM of timber). */
     quantity: quantity("Quantity", 3),
-    unitPrice: money("Price"),
+    unitPrice: rate("Price"),
     /** Rupees PER UNIT, as the legacy screen holds it — not per line. */
     discountPerUnit: optionalMoney("Discount"),
     gstPercent: optionalPercent("GST %"),

@@ -170,6 +170,25 @@ export const money = (label: string) =>
         .regex(MONEY_PATTERN, `${label} must be an amount with at most 2 decimal places`),
     );
 
+/**
+ * A RATE - the price of one unit - takes three decimal places (client, 2 Nov
+ * 2026: steel at 75.325 a kilo). A line's amount is still rounded to the paise,
+ * so only the rate itself carries the third place. Zeros past it are dropped.
+ */
+const RATE_PATTERN = /^\d{1,15}(\.\d{1,3})?$/;
+
+export const rate = (label: string) =>
+  z
+    .string()
+    .trim()
+    .transform((value) => value.replace(/^(\d+\.\d{3})0+$/, "$1"))
+    .pipe(
+      z
+        .string()
+        .min(1, `${label} is required`)
+        .regex(RATE_PATTERN, `${label} must be an amount with at most 3 decimal places`),
+    );
+
 export const optionalMoney = (label: string) =>
   z
     .string()

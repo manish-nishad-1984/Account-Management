@@ -5,7 +5,7 @@ import {
   normaliseHeader,
   optionalMoney,
   optionalPercent,
-  money as moneySchema,
+  rate as rateSchema,
   normalizeItemName,
   requiredText,
   type ItemSheetColumn,
@@ -171,7 +171,7 @@ export function parseRows(sheet: SheetData, index: Map<ItemSheetKey, number>): P
 
     const price = check(
       "pricePerUnit",
-      moneySchema("Price per unit"),
+      rateSchema("Price per unit"),
       stripDecoration(at(row.cells, "pricePerUnit")),
     );
 

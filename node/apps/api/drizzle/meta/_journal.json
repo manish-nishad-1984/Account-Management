@@ -253,6 +253,13 @@
       "when": 1793358713105,
       "tag": "0035_arrival_pieces",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793606897126,
+      "tag": "0036_rates_to_three_places",
+      "breakpoints": true
     }
   ]
 }

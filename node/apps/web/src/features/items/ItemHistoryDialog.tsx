@@ -1,7 +1,7 @@
 import { AlertTriangle, Clock, Loader2 } from "lucide-react";
 import type { ItemPriceChangeRow, ItemPriceHistoryRow } from "@accountmanagement/contracts";
 import { Alert, Badge, EmptyState, Modal } from "../../components/ui";
-import { formatDate, formatDateTime, formatMoney, formatPercent, formatQuantity } from "../../lib/format";
+import { formatDate, formatDateTime, formatMoney, formatPercent, formatQuantity, formatRate } from "../../lib/format";
 import { describeLoadError } from "../../lib/load-error";
 import { useItemPriceChanges, useItemPriceHistory } from "./api";
 
@@ -116,10 +116,10 @@ function MasterPriceChanges({ itemId }: { itemId: string | null }) {
                       </Badge>
                     </td>
                     <td className="tabular px-3 py-2 text-right text-slate-500">
-                      {row.oldPrice === null ? <Absent /> : formatMoney(row.oldPrice)}
+                      {row.oldPrice === null ? <Absent /> : formatRate(row.oldPrice)}
                     </td>
                     <td className="tabular px-3 py-2 text-right font-medium text-slate-900">
-                      {formatMoney(row.newPrice)}
+                      {formatRate(row.newPrice)}
                     </td>
                     <td className="tabular px-3 py-2 text-right text-slate-600">
                       {row.oldGstPercent !== row.newGstPercent && row.oldPrice !== null ? (
@@ -181,7 +181,7 @@ export function ItemHistoryDialog({
       {pricePerUnit !== null && (
         <p className="mb-3 text-xs text-slate-500">
           The item master price is{" "}
-          <span className="tabular font-medium text-slate-700">{formatMoney(pricePerUnit)}</span>{" "}
+          <span className="tabular font-medium text-slate-700">{formatRate(pricePerUnit)}</span>{" "}
           per unit. The prices below are what was invoiced, which is a different
           number and the reason this panel exists.
         </p>
@@ -251,7 +251,7 @@ export function ItemHistoryDialog({
                       {formatQuantity(row.quantity)}
                     </td>
                     <td className="tabular px-3 py-2 text-right text-slate-700">
-                      {formatMoney(row.unitPrice)}
+                      {formatRate(row.unitPrice)}
                       {row.discountPerUnit !== "0.00" && (
                         <div className="text-xs text-slate-400">
                           less {formatMoney(row.discountPerUnit)}

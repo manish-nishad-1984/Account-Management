@@ -337,7 +337,7 @@ export class PurchaseInvoiceImportService extends BaseRepository {
         }
         const rate = figure(r.rate);
         // A rate that is not an amount is reported by its own column.
-        if (!/^\d{1,15}(\.\d{1,2})?$/.test(rate)) return "";
+        if (!/^\d{1,15}(\.\d{1,3})?$/.test(rate)) return "";
         return format(money.round(money.percentOf(decimal(percent), decimal(rate))));
       };
 
