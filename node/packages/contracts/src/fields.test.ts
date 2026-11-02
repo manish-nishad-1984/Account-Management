@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { phoneNumbers } from "./fields";
+import { money, optionalMoney, phoneNumbers } from "./fields";
 
 /**
  * THE PHONE FIELD MUST ACCEPT WHAT THE BUSINESS ALREADY HAS.
@@ -77,5 +77,25 @@ describe("phoneNumbers", () => {
   it("keeps the value exactly as it was written", () => {
     expect(parse("+91 98250-12345")).toBe("+91 98250-12345");
     expect(parse("  9825012345  ")).toBe("9825012345");
+  });
+});
+
+// Client, 2 Nov 2026: "75.300" was refused as a price.
+describe("money", () => {
+  it("takes zeros past the paise and drops them", () => {
+    expect(money("Price").parse("75.300")).toBe("75.30");
+    expect(money("Price").parse("75.000")).toBe("75.00");
+    expect(optionalMoney("GST amount").parse("13.550")).toBe("13.55");
+  });
+
+  it("still refuses a third place that is not a zero", () => {
+    expect(money("Price").safeParse("75.325").success).toBe(false);
+    expect(optionalMoney("GST amount").safeParse("13.554").success).toBe(false);
+  });
+
+  it("leaves an ordinary amount as it is", () => {
+    expect(money("Price").parse("75.3")).toBe("75.3");
+    expect(money("Price").parse("1200")).toBe("1200");
+    expect(optionalMoney("GST amount").parse("")).toBeNull();
   });
 });

@@ -152,18 +152,29 @@ export const hsnCode = optionalText(8).superRefine((value, ctx) => {
  */
 const MONEY_PATTERN = /^-?\d{1,15}(\.\d{1,2})?$/;
 
+/**
+ * "75.300" is 75.30 (client, 2 Nov 2026: a price typed with three places was
+ * refused). Only zeros past the paise go; 75.325 is still refused.
+ */
+const dropExtraZeros = (value: string) => value.replace(/^(-?\d+\.\d{2})0+$/, "$1");
+
 export const money = (label: string) =>
   z
     .string()
     .trim()
-    .min(1, `${label} is required`)
-    .regex(MONEY_PATTERN, `${label} must be an amount with at most 2 decimal places`);
+    .transform(dropExtraZeros)
+    .pipe(
+      z
+        .string()
+        .min(1, `${label} is required`)
+        .regex(MONEY_PATTERN, `${label} must be an amount with at most 2 decimal places`),
+    );
 
 export const optionalMoney = (label: string) =>
   z
     .string()
     .trim()
-    .transform((value) => (value === "" ? null : value))
+    .transform((value) => (value === "" ? null : dropExtraZeros(value)))
     .nullable()
     .optional()
     .transform((value) => value ?? null)
