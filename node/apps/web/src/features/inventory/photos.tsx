@@ -10,7 +10,18 @@ import { uploadInventoryPhoto } from "./stock-api";
  * A photo the API serves behind sign-in: fetched with the token and shown from
  * memory, since an <img src> cannot carry it. A click opens it large.
  */
-export function AuthedPhoto({ path, alt, className }: { path: string; alt: string; className?: string }) {
+export function AuthedPhoto({
+  path,
+  alt,
+  className,
+  fill = false,
+}: {
+  path: string;
+  alt: string;
+  className?: string;
+  /** As wide as its box - a card's photo - rather than its own size. */
+  fill?: boolean;
+}) {
   const [large, setLarge] = useState(false);
   const photo = useQuery({
     queryKey: ["photo", path],
@@ -33,7 +44,7 @@ export function AuthedPhoto({ path, alt, className }: { path: string; alt: strin
           event.stopPropagation();
           setLarge(true);
         }}
-        className="shrink-0"
+        className={clsx("shrink-0", fill && "block w-full")}
         aria-label={`Show the photo of ${alt}`}
       >
         <img src={photo.data} alt={alt} className={clsx("rounded object-cover ring-1 ring-slate-200", className)} />

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import clsx from "clsx";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -6,7 +6,7 @@ import {
   INVENTORY_INWARD_SORT_FIELDS,
   type InventoryInwardRow,
 } from "@accountmanagement/contracts";
-import { Check, HandHelping, Info, Plus, Undo2 } from "lucide-react";
+import { Check, HandHelping, Info, LayoutGrid, List, Package, Pencil, Plus, Undo2 } from "lucide-react";
 import { DataGrid, ExportExcelButton, RowActions } from "../../components/DataGrid";
 import { exportDate, exportYesNo, type ExportColumn } from "../../lib/grid-export";
 import {
@@ -53,6 +53,24 @@ const APPROVAL_OPTIONS = [
   { value: "pending", label: "Awaiting approval" },
   { value: "approved", label: "Approved" },
 ];
+
+/** The list as a table or as thumbnails (client, 2 Nov 2026); remembered in this browser. */
+type ArrivalsLook = "list" | "thumbs";
+const LOOK_KEY = "inventory-arrivals-look";
+const readLook = (): ArrivalsLook => {
+  try {
+    return window.localStorage.getItem(LOOK_KEY) === "thumbs" ? "thumbs" : "list";
+  } catch {
+    return "list";
+  }
+};
+
+/** The arrival's first photo: its own, else its first piece's. Null when it has none. */
+export const arrivalPhotoPath = (row: InventoryInwardRow): string | null => {
+  if (row.hasPhoto) return `/inventory-issues/arrivals/${row.id}/photo`;
+  const n = row.pieces.findIndex((piece) => piece.hasPhoto);
+  return n >= 0 ? `/inventory-issues/arrivals/${row.id}/pieces/${n}/photo` : null;
+};
 
 type Tab = "arrivals" | "stock" | "issues";
 const TABS: { key: Tab; label: string }[] = [
@@ -115,6 +133,30 @@ function ArrivalsView() {
   });
 
   const [approval, setApproval] = useState<ApprovalFilter>("all");
+  const [look, setLookState] = useState<ArrivalsLook>(readLook);
+  const setLook = (next: ArrivalsLook) => {
+    setLookState(next);
+    try {
+      window.localStorage.setItem(LOOK_KEY, next);
+    } catch {
+      // Private window: the choice lasts until the page is left.
+    }
+  };
+  // ISSUE FROM THE ARRIVAL (client, 2 Nov 2026): its item at its site, ready to issue.
+  const [issueFor, setIssueFor] = useState<{ inventoryItemId: string; siteId: string | null } | null>(null);
+  const issueButton = (row: InventoryInwardRow, label = false) =>
+    canAdd && row.inventoryItemId ? (
+      <Button
+        variant={label ? "secondary" : "ghost"}
+        size={label ? "sm" : undefined}
+        icon={HandHelping}
+        title={`Issue ${row.itemName}`}
+        aria-label={`Issue ${row.itemName}`}
+        onClick={() => setIssueFor({ inventoryItemId: row.inventoryItemId!, siteId: row.siteId })}
+      >
+        {label ? "Issue" : undefined}
+      </Button>
+    ) : null;
 
   const scope = useSiteScope();
   const listFilters = {
@@ -241,6 +283,7 @@ function ArrivalsView() {
         header: "",
         cell: ({ row }) => (
           <div className="flex items-center justify-end gap-1">
+            {issueButton(row.original)}
             {row.original.capabilities.canApprove && (
               <Button
                 variant="ghost"
@@ -270,7 +313,8 @@ function ArrivalsView() {
         ),
       },
     ],
-    [openEdit, askDelete, setApprovalMutation],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [openEdit, askDelete, setApprovalMutation, canAdd],
   );
 
   const unallocated = query.data?.unallocated ?? 0;
@@ -300,15 +344,57 @@ function ArrivalsView() {
         // One row above the grid (client request, 18 Sep 2026): the screen's
         // filters beside the search box and its actions at the right-hand end.
         filters={
-          <SelectField
-            labelHidden
-            label="Status"
-            value={approval}
-            options={APPROVAL_OPTIONS}
-            onChange={(event) =>
-              setApproval(event.target.value as ApprovalFilter)
-            }
-          />
+          <div className="flex items-center gap-2">
+            <SelectField
+              labelHidden
+              label="Status"
+              value={approval}
+              options={APPROVAL_OPTIONS}
+              onChange={(event) =>
+                setApproval(event.target.value as ApprovalFilter)
+              }
+            />
+            <div role="radiogroup" aria-label="Show as" className="inline-flex rounded-md ring-1 ring-inset ring-slate-300">
+              {(
+                [
+                  ["list", "List", List],
+                  ["thumbs", "Thumbnails", LayoutGrid],
+                ] as const
+              ).map(([value, label, Icon]) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={look === value}
+                  title={label}
+                  onClick={() => setLook(value)}
+                  className={clsx(
+                    "inline-flex h-9 items-center gap-1.5 px-2.5 text-xs font-medium first:rounded-l-md last:rounded-r-md",
+                    look === value ? "bg-brand-600 text-white" : "bg-white text-slate-700 hover:bg-slate-50",
+                  )}
+                >
+                  <Icon aria-hidden className="size-4" />
+                  <span className="hidden sm:inline">{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        }
+        cards={
+          look === "thumbs"
+            ? (rows) => (
+                <ul aria-label="Arrivals" className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+                  {rows.map((row) => (
+                    <ArrivalCard
+                      key={row.id}
+                      row={row}
+                      issue={issueButton(row, true)}
+                      onEdit={row.capabilities.canEdit ? () => openEdit(row.id) : undefined}
+                    />
+                  ))}
+                </ul>
+              )
+            : undefined
         }
         actions={
           <>
@@ -337,6 +423,8 @@ function ArrivalsView() {
         {...screen.gridProps(query)}
         isLoading={query.isLoading || !scope.isReady}
       />
+
+      <IssueDialog open={issueFor !== null} preset={issueFor} onClose={() => setIssueFor(null)} />
 
       <InventoryFormDialog
         open={screen.isFormOpen}
@@ -368,5 +456,54 @@ function ArrivalsView() {
         }
       />
     </>
+  );
+}
+
+/** One arrival as a thumbnail: its photo, name, quantity, site and date, and Issue. */
+function ArrivalCard({
+  row,
+  issue,
+  onEdit,
+}: {
+  row: InventoryInwardRow;
+  issue: ReactNode;
+  onEdit?: () => void;
+}) {
+  const photo = arrivalPhotoPath(row);
+  const tags = row.pieces.map((piece) => piece.tag).filter(Boolean);
+  return (
+    <li className="flex flex-col overflow-hidden rounded-lg bg-white ring-1 ring-slate-200">
+      {photo ? (
+        <AuthedPhoto path={photo} alt={row.itemName} className="aspect-square w-full rounded-none" fill />
+      ) : (
+        <span className="flex aspect-square w-full items-center justify-center bg-slate-50 text-slate-300" title="No photo">
+          <Package aria-hidden className="size-10" />
+        </span>
+      )}
+      <div className="flex flex-1 flex-col gap-0.5 p-2">
+        <div className="truncate text-sm font-medium text-slate-900" title={row.itemName}>
+          {row.itemName}
+        </div>
+        <div className="tabular text-xs text-slate-600">
+          {formatQuantity(row.quantity)} {row.unitName}
+          {row.documentDate && <> · {formatDate(row.documentDate)}</>}
+        </div>
+        {row.siteName && <div className="truncate text-xs text-slate-500">{row.siteName}</div>}
+        {tags.length > 0 && (
+          <div className="truncate text-xs text-slate-500" title={tags.join(", ")}>
+            Tags: {tags.join(", ")}
+          </div>
+        )}
+        <div className="mt-auto flex items-center justify-between gap-1 pt-1.5">
+          <Badge dot tone={row.isApproved ? "success" : "warning"}>
+            {row.isApproved ? "Approved" : "Awaiting"}
+          </Badge>
+          {onEdit && (
+            <Button variant="ghost" size="sm" icon={Pencil} aria-label={`Edit ${row.itemName}`} title="Edit" onClick={onEdit} />
+          )}
+        </div>
+        {issue && <div className="pt-1.5 [&>button]:w-full">{issue}</div>}
+      </div>
+    </li>
   );
 }

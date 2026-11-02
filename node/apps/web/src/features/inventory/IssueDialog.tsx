@@ -22,8 +22,19 @@ const NEW_PERSON = "__new__";
  * agency's main contact. The person is picked, or added here with a photo and a
  * mobile and kept for the next time. Returnable items wait on the dashboard to
  * be received back in the evening.
+ *
+ * `preset` opens it on one inventory item at its site - "Issue" on a New Arrival
+ * (client, 2 Nov 2026).
  */
-export function IssueDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function IssueDialog({
+  open,
+  onClose,
+  preset,
+}: {
+  open: boolean;
+  onClose: () => void;
+  preset?: { inventoryItemId: string; siteId: string | null } | null;
+}) {
   const scope = useSiteScope();
   const [siteId, setSiteId] = useState("");
   const [source, setSource] = useState<IssueSource>("inventory");
@@ -39,9 +50,9 @@ export function IssueDialog({ open, onClose }: { open: boolean; onClose: () => v
 
   useEffect(() => {
     if (!open) return;
-    setSiteId(scope.siteId ?? "");
+    setSiteId(preset?.siteId ?? scope.siteId ?? "");
     setSource("inventory");
-    setItemId("");
+    setItemId(preset?.inventoryItemId ?? "");
     setQuantity("");
     setReturnable(true);
     setAgencyId("");
@@ -50,6 +61,8 @@ export function IssueDialog({ open, onClose }: { open: boolean; onClose: () => v
     setNewPerson({ name: "", mobile: "", photoKey: null });
     setNote("");
     setError(null);
+    // Once per opening; the preset is read as it is when the dialog opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, scope.siteId]);
 
   const inventoryItems = useInventoryItems(siteId || null);
@@ -61,8 +74,8 @@ export function IssueDialog({ open, onClose }: { open: boolean; onClose: () => v
 
   const options =
     source === "inventory"
-      ? (inventoryItems.data?.rows ?? []).map((row) => ({ id: row.id, name: row.name, unit: row.unit, stock: row.stock }))
-      : (purchaseItems.data ?? []).map((row) => ({ id: row.itemId, name: row.itemName, unit: row.unitName ?? "", stock: row.stock }));
+      ? (inventoryItems.data?.rows ?? []).map((row) => ({ id: row.id, name: row.name, unit: row.unit, stock: row.stock, hasPhoto: row.hasPhoto }))
+      : (purchaseItems.data ?? []).map((row) => ({ id: row.itemId, name: row.itemName, unit: row.unitName ?? "", stock: row.stock, hasPhoto: false }));
   const picked = options.find((row) => row.id === itemId);
   const agency = (agencies.data ?? []).find((row) => row.id === agencyId);
   const person = (persons.data ?? []).find((row) => row.id === personId);
@@ -192,6 +205,14 @@ export function IssueDialog({ open, onClose }: { open: boolean; onClose: () => v
           checked={returnable}
           onChange={(event) => setReturnable(event.target.checked)}
         />
+
+        {/* What is being handed over, as a picture (client, 2 Nov 2026). */}
+        {source === "inventory" && picked?.hasPhoto && (
+          <div className="flex items-center gap-2 text-sm text-slate-600">
+            <AuthedPhoto path={`/inventory-items/${picked.id}/photo`} alt={picked.name} className="size-16" />
+            {picked.name}
+          </div>
+        )}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <SelectField

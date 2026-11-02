@@ -113,6 +113,13 @@ export interface DataGridProps<T> {
 
   /** The row currently open beside the list, so it can be marked as such. */
   selectedRowId?: string | number | null;
+
+  /**
+   * The rows as cards instead of a table (client, 2 Nov 2026: inventory arrivals
+   * as thumbnails). The search, filters, actions and pager stay as they are;
+   * only the body changes.
+   */
+  cards?: (rows: T[]) => ReactNode;
 }
 
 /**
@@ -175,6 +182,7 @@ export function DataGrid<T>({
   selectedRowId = null,
   filters,
   actions,
+  cards,
 }: DataGridProps<T>) {
   // The label and the select are two elements in a grid that may be on screen
   // more than once, so the id cannot be a constant.
@@ -388,6 +396,15 @@ export function DataGrid<T>({
           the 44px rows they started at meant eight records to a laptop screen -
           for a screen whose whole job is comparing one row with another.
         */}
+        {cards ? (
+          isLoading ? (
+            <p className="py-10 text-center text-sm text-slate-500">Loading…</p>
+          ) : rows.length === 0 ? (
+            <EmptyState icon={Inbox} title={emptyMessage} />
+          ) : (
+            cards(rows)
+          )
+        ) : (
         <table className="min-w-full text-sm">
           <thead className="border-b border-slate-200 bg-surface-muted">
             {table.getHeaderGroups().map((group) => (
@@ -548,6 +565,7 @@ export function DataGrid<T>({
             </tfoot>
           )}
         </table>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-slate-200 bg-surface-muted px-4 py-2">
