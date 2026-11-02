@@ -21,7 +21,7 @@ const arrival = {
   itemName: "Drill Machine",
   inventoryItemId: DRILL,
   hasPhoto: false,
-  pieces: [{ tag: "DR-1", hasPhoto: true }],
+  pieces: [{ tag: "DR-1", hasPhoto: true, out: false }],
   unitId: null,
   unitName: "Nos",
   quantity: "1.00",
@@ -100,5 +100,46 @@ describe("New arrivals as thumbnails", () => {
     await user.click(screen.getByRole("button", { name: "Issue Drill Machine" }));
     const item = (await screen.findByLabelText(/^Item/)) as HTMLSelectElement;
     await waitFor(() => expect(item.value).toBe(DRILL));
+  });
+
+  // Client, 2 Nov 2026: "click the electric board and its five boards show".
+  it("opens a card to its pieces, and issues the pieces ticked", async () => {
+    const boards = {
+      ...arrival,
+      itemName: "Electric Board",
+      quantity: "3.00",
+      pieces: [
+        { tag: "EB-1", hasPhoto: false, out: false },
+        { tag: "EB-2", hasPhoto: false, out: true },
+        { tag: "EB-3", hasPhoto: false, out: false },
+      ],
+    };
+    routeFetch([
+      [/\/inventory-inward$/, { rows: [boards], nextCursor: null, total: 1, unallocated: 0 }],
+      [/\/inventory-items$/, { rows: [{ id: DRILL, name: "Electric Board", unit: "Nos", note: null, hasPhoto: false, stock: "2.00", out: "1.00", capabilities: { canEdit: true, canDelete: true, canApprove: false } }] }],
+      [/\/inventory-issues\/agencies$/, []],
+    ]);
+    const user = userEvent.setup();
+    renderWithAuth(<InventoryPage />, { permissions: ALL_RIGHTS, scope: SCOPE });
+    await screen.findByText("Electric Board");
+    await user.click(screen.getByRole("radio", { name: /thumbnails/i }));
+
+    await user.click(screen.getByRole("button", { name: "Open Electric Board" }));
+    const pieces = await screen.findByRole("list", { name: "Pieces" });
+    expect(within(pieces).getByText("EB-1")).toBeInTheDocument();
+    // The one out on an issue cannot be ticked.
+    expect(within(pieces).getByLabelText("Issue EB-2")).toBeDisabled();
+    expect(within(pieces).getByText("Issued")).toBeInTheDocument();
+
+    await user.click(within(pieces).getByLabelText("Issue EB-1"));
+    await user.click(within(pieces).getByLabelText("Issue EB-3"));
+    await user.click(screen.getByRole("button", { name: "Issue 2 selected" }));
+
+    const chosen = await screen.findByRole("list", { name: "Pieces to issue" });
+    expect(within(chosen).getByText("EB-1")).toBeInTheDocument();
+    expect(within(chosen).getByText("EB-3")).toBeInTheDocument();
+    const quantity = screen.getByLabelText(/^Quantity/) as HTMLInputElement;
+    expect(quantity.value).toBe("2");
+    expect(quantity.readOnly).toBe(true);
   });
 });

@@ -225,6 +225,8 @@ export const inventoryIssues = pgTable(
       .references(() => agencyPersons.id),
     issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
     note: text("note"),
+    /** The tagged pieces handed over, when chosen one by one (client, 2 Nov 2026). */
+    pieces: jsonb("pieces").$type<{ arrivalId: string; n: number; tag: string }[]>().notNull().default([]),
     returnedQuantity: numeric("returned_quantity", { precision: 18, scale: 2 }),
     returnedAt: timestamp("returned_at", { withTimezone: true }),
     returnedBy: uuid("returned_by"),

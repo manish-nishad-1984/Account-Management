@@ -260,6 +260,13 @@
       "when": 1793606897126,
       "tag": "0036_rates_to_three_places",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1793611606817,
+      "tag": "0037_issue_pieces",
+      "breakpoints": true
     }
   ]
 }

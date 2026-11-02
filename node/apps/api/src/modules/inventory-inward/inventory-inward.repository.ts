@@ -14,6 +14,7 @@ import { resolveInventoryItem } from "../inventory-stock/inventory-stock.reposit
 import { decodeCursor, keysetOrder, keysetWhere, toPage } from "../../common/keyset";
 import { BaseRepository, createdBy, updatedBy } from "../../common/base.repository";
 import { writing } from "../../common/db-errors";
+import { rawRows } from "../../common/raw-rows";
 
 /**
  * `item` is NOT sortable: it lives on the joined master, and keyset paging needs
@@ -37,7 +38,7 @@ export interface InventoryInwardListRow {
   unitId: number | null;
   unitName: string;
   hasPhoto: boolean;
-  pieces: { tag: string; hasPhoto: boolean }[];
+  pieces: { tag: string; hasPhoto: boolean; out: boolean }[];
   quantity: string;
   documentDate: string | null;
   details: string | null;
@@ -62,7 +63,12 @@ const DETAIL_COLUMNS = {
 
 type StoredPiece = { tag: string; photoKey: string | null };
 /** What the screens see of the pieces: the tag, and whether there is a photo. */
-const shownPieces = (pieces: unknown) => ((pieces ?? []) as StoredPiece[]).map((piece) => ({ tag: piece.tag, hasPhoto: !!piece.photoKey }));
+const shownPieces = (pieces: unknown, out: Set<string> = new Set(), arrivalId = "") =>
+  ((pieces ?? []) as StoredPiece[]).map((piece, n) => ({
+    tag: piece.tag,
+    hasPhoto: !!piece.photoKey,
+    out: out.has(`${arrivalId}:${n}`),
+  }));
 
 const iso = (value: Date | string | null): string | null =>
   value === null ? null : value instanceof Date ? value.toISOString() : value;
@@ -196,15 +202,33 @@ export class InventoryInwardRepository extends BaseRepository {
       .limit(query.limit + 1);
 
     const page = toPage(rows, query.limit, (row) => ({ value: row.sortValue, id: row.id }));
+    const out = await this.piecesOut(page.rows.map((row) => row.id));
     return {
       rows: page.rows.map(({ sortValue: _ignored, ...row }) => ({
         ...row,
-        pieces: shownPieces(row.pieces),
+        pieces: shownPieces(row.pieces, out, row.id),
         documentDate: iso(row.documentDate),
         createdAt: iso(row.createdAt) as string,
       })),
       nextCursor: page.nextCursor,
     };
+  }
+
+  /**
+   * The pieces of these arrivals that are OUT: on an issue not deleted and not
+   * received back (a gift is never received back, so it stays out). "arrival:n".
+   */
+  private async piecesOut(arrivalIds: string[]): Promise<Set<string>> {
+    if (arrivalIds.length === 0) return new Set();
+    const rows = rawRows<{ arrival_id: string; n: number | string }>(
+      await this.db.execute(sql`
+        select p->>'arrivalId' as arrival_id, (p->>'n')::int as n
+        from inventory_issues i cross join lateral jsonb_array_elements(i.pieces) p
+        where i.is_deleted = false and i.returned_at is null
+          and p->>'arrivalId' in (${sql.join(arrivalIds.map((id) => sql`${id}`), sql`, `)})
+      `),
+    );
+    return new Set(rows.map((row) => `${row.arrival_id}:${Number(row.n)}`));
   }
 
   async total(
@@ -240,7 +264,8 @@ export class InventoryInwardRepository extends BaseRepository {
     if (!row) {
       throw new NotFoundException("Inventory record not found");
     }
-    return toDetail(row);
+    const detail = toDetail(row);
+    return { ...detail, pieces: shownPieces(row.pieces, await this.piecesOut([id]), id) };
   }
 
   /**

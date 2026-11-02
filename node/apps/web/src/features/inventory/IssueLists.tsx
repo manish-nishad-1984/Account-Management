@@ -142,6 +142,11 @@ function IssueTable({
                     <div className="text-xs text-slate-500">
                       {formatQuantity(issue.quantity)} {issue.unitName ?? ""} · {issue.source === "inventory" ? "Inventory item" : "Purchase item"}
                     </div>
+                    {issue.pieces.length > 0 && (
+                      <div className="text-xs text-slate-500">
+                        Tags: {issue.pieces.map((piece) => piece.tag || `Piece ${piece.n + 1}`).join(", ")}
+                      </div>
+                    )}
                   </div>
                 </div>
               </td>

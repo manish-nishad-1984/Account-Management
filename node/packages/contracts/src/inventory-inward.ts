@@ -41,8 +41,12 @@ export const inventoryInwardRowSchema = z.object({
   unitName: z.string(),
   /** The arrival has a photo of what came. */
   hasPhoto: z.boolean(),
-  /** Each piece's tag name and whether it has a photo, in order (client, 30 Oct 2026). */
-  pieces: z.array(z.object({ tag: z.string(), hasPhoto: z.boolean() })),
+  /**
+   * Each piece's tag name and whether it has a photo, in order (client, 30 Oct
+   * 2026), and whether it is OUT now - issued and not received back, or given for
+   * good (client, 2 Nov 2026: pieces are chosen one by one to issue).
+   */
+  pieces: z.array(z.object({ tag: z.string(), hasPhoto: z.boolean(), out: z.boolean() })),
 
   /** A decimal STRING. Never parse it to a number. */
   quantity: z.string(),

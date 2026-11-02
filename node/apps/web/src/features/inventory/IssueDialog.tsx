@@ -33,7 +33,12 @@ export function IssueDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  preset?: { inventoryItemId: string; siteId: string | null } | null;
+  preset?: {
+    inventoryItemId: string;
+    siteId: string | null;
+    /** The pieces chosen on the arrival (client, 2 Nov 2026); the quantity is how many. */
+    pieces?: { arrivalId: string; n: number; tag: string; hasPhoto: boolean }[];
+  } | null;
 }) {
   const scope = useSiteScope();
   const [siteId, setSiteId] = useState("");
@@ -47,13 +52,15 @@ export function IssueDialog({
   const [newPerson, setNewPerson] = useState({ name: "", mobile: "", photoKey: null as string | null });
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [pieces, setPieces] = useState<NonNullable<NonNullable<typeof preset>["pieces"]>>([]);
 
   useEffect(() => {
     if (!open) return;
     setSiteId(preset?.siteId ?? scope.siteId ?? "");
     setSource("inventory");
     setItemId(preset?.inventoryItemId ?? "");
-    setQuantity("");
+    setPieces(preset?.pieces ?? []);
+    setQuantity(preset?.pieces?.length ? String(preset.pieces.length) : "");
     setReturnable(true);
     setAgencyId("");
     setContactId("");
@@ -77,6 +84,9 @@ export function IssueDialog({
       ? (inventoryItems.data?.rows ?? []).map((row) => ({ id: row.id, name: row.name, unit: row.unit, stock: row.stock, hasPhoto: row.hasPhoto }))
       : (purchaseItems.data ?? []).map((row) => ({ id: row.itemId, name: row.itemName, unit: row.unitName ?? "", stock: row.stock, hasPhoto: false }));
   const picked = options.find((row) => row.id === itemId);
+  // The pieces hold only while the item and site are the ones they were chosen for.
+  const chosen =
+    preset && source === "inventory" && itemId === preset.inventoryItemId && siteId === (preset.siteId ?? siteId) ? pieces : [];
   const agency = (agencies.data ?? []).find((row) => row.id === agencyId);
   const person = (persons.data ?? []).find((row) => row.id === personId);
 
@@ -110,6 +120,7 @@ export function IssueDialog({
         agencyContactId: contactId || null,
         personId: who,
         note,
+        pieces: chosen.map((piece) => ({ arrivalId: piece.arrivalId, n: piece.n })),
       });
       if (!parsed.success) return setError(parsed.error.issues[0]?.message ?? "Check the form.");
       await issue.mutateAsync(parsed.data);
@@ -195,8 +206,15 @@ export function IssueDialog({
             label="Quantity"
             required
             inputMode="decimal"
-            value={quantity}
-            hint={picked ? `In stock: ${Number(picked.stock)} ${picked.unit}` : undefined}
+            value={chosen.length > 0 ? String(chosen.length) : quantity}
+            readOnly={chosen.length > 0}
+            hint={
+              chosen.length > 0
+                ? "The pieces chosen"
+                : picked
+                  ? `In stock: ${Number(picked.stock)} ${picked.unit}`
+                  : undefined
+            }
             onChange={(event) => setQuantity(event.target.value)}
           />
         </div>
@@ -206,8 +224,22 @@ export function IssueDialog({
           onChange={(event) => setReturnable(event.target.checked)}
         />
 
+        {/* The pieces handed over, each with its photo and tag (client, 2 Nov 2026). */}
+        {chosen.length > 0 && (
+          <ul aria-label="Pieces to issue" className="flex flex-wrap gap-2">
+            {chosen.map((piece) => (
+              <li key={`${piece.arrivalId}:${piece.n}`} className="flex items-center gap-1.5 rounded-md bg-slate-50 px-1.5 py-1 text-xs text-slate-700 ring-1 ring-slate-200">
+                {piece.hasPhoto && (
+                  <AuthedPhoto path={`/inventory-issues/arrivals/${piece.arrivalId}/pieces/${piece.n}/photo`} alt={piece.tag || `Piece ${piece.n + 1}`} className="size-10" />
+                )}
+                {piece.tag || `Piece ${piece.n + 1}`}
+              </li>
+            ))}
+          </ul>
+        )}
+
         {/* What is being handed over, as a picture (client, 2 Nov 2026). */}
-        {source === "inventory" && picked?.hasPhoto && (
+        {chosen.length === 0 && source === "inventory" && picked?.hasPhoto && (
           <div className="flex items-center gap-2 text-sm text-slate-600">
             <AuthedPhoto path={`/inventory-items/${picked.id}/photo`} alt={picked.name} className="size-16" />
             {picked.name}

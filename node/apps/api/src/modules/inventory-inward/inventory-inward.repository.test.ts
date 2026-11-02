@@ -118,9 +118,9 @@ describe("InventoryInwardRepository (real PostgreSQL)", () => {
         ACTOR,
       );
       const expected = [
-        { tag: "DRILL-01", hasPhoto: true },
-        { tag: "DRILL-02", hasPhoto: false },
-        { tag: "DRILL-03", hasPhoto: false },
+        { tag: "DRILL-01", hasPhoto: true, out: false },
+        { tag: "DRILL-02", hasPhoto: false, out: false },
+        { tag: "DRILL-03", hasPhoto: false, out: false },
       ];
       expect(created.pieces).toEqual(expected);
       const page = await repo.list(query());
@@ -135,8 +135,8 @@ describe("InventoryInwardRepository (real PostgreSQL)", () => {
         ACTOR,
       );
       expect(edited.pieces).toEqual([
-        { tag: "A1", hasPhoto: true },
-        { tag: "B", hasPhoto: false },
+        { tag: "A1", hasPhoto: true, out: false },
+        { tag: "B", hasPhoto: false, out: false },
       ]);
     });
 

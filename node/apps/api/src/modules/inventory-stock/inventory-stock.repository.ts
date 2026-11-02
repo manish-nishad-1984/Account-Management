@@ -369,6 +369,9 @@ export class InventoryStockRepository extends BaseRepository {
       personMobile: text("person_mobile"),
       personHasPhoto: row.person_has_photo === true || row.person_has_photo === "t",
       itemHasPhoto: row.item_has_photo === true || row.item_has_photo === "t",
+      pieces: ((typeof row.pieces === "string" ? JSON.parse(row.pieces) : (row.pieces ?? [])) as { arrivalId: string; n: number; tag: string }[]).map(
+        (piece) => ({ arrivalId: piece.arrivalId, n: piece.n, tag: piece.tag }),
+      ),
       issuedAt: iso(row.issued_at)!,
       note: text("note"),
       returnedQuantity: row.returned_text === null ? null : fromHundredths(toHundredths(String(row.returned_text))),
@@ -449,6 +452,7 @@ export class InventoryStockRepository extends BaseRepository {
         );
         stock = toHundredths(row!.received) - toHundredths(row!.gone);
       }
+      const pieces = input.source === "inventory" ? await this.checkPieces(db, input) : [];
       if (toHundredths(input.quantity) > stock) {
         throw new ConflictException(
           `Only ${fromHundredths(stock < 0n ? 0n : stock)} ${unitName ?? ""} of ${itemName} is in stock at this site.`.replace(/\s+/g, " "),
@@ -480,12 +484,50 @@ export class InventoryStockRepository extends BaseRepository {
           agencyContactId: input.agencyContactId ?? null,
           personId: input.personId,
           note: input.note,
+          pieces,
           ...createdBy(actorId),
         })
         .returning({ id: inventoryIssues.id });
       return created!.id;
     });
     return this.issueById(id);
+  }
+
+  /**
+   * THE PIECES CHOSEN (client, 2 Nov 2026): each must be a piece of an arrival of
+   * this item at this site, chosen once, and not out on another issue. Read inside
+   * the issue's transaction, after the item's row is locked, so two people cannot
+   * hand out the same board at once.
+   */
+  private async checkPieces(db: Database, input: CreateInventoryIssue): Promise<{ arrivalId: string; n: number; tag: string }[]> {
+    if (input.pieces.length === 0) return [];
+    const keys = input.pieces.map((piece) => `${piece.arrivalId}:${piece.n}`);
+    if (new Set(keys).size !== keys.length) throw new BadRequestException("A piece is chosen twice.");
+    const ids = [...new Set(input.pieces.map((piece) => piece.arrivalId))];
+    const arrivals = await db
+      .select({ id: inventoryInward.id, pieces: inventoryInward.pieces, siteId: inventoryInward.siteId, itemId: inventoryInward.inventoryItemId })
+      .from(inventoryInward)
+      .where(and(eq(inventoryInward.isDeleted, false), sql`${inventoryInward.id} in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})`));
+    const byId = new Map(arrivals.map((arrival) => [arrival.id, arrival]));
+    const out = rawRows<{ key: string }>(
+      await db.execute(sql`
+        select (p->>'arrivalId') || ':' || (p->>'n') as key
+        from inventory_issues i cross join lateral jsonb_array_elements(i.pieces) p
+        where i.is_deleted = false and i.returned_at is null
+          and p->>'arrivalId' in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+      `),
+    ).map((row) => row.key);
+    return input.pieces.map((piece) => {
+      const arrival = byId.get(piece.arrivalId);
+      if (!arrival || arrival.itemId !== input.inventoryItemId || arrival.siteId !== input.siteId) {
+        throw new BadRequestException("A chosen piece is not of this item at this site.");
+      }
+      const stored = arrival.pieces[piece.n];
+      if (!stored) throw new BadRequestException("A chosen piece is not on its arrival.");
+      const tag = stored.tag || `Piece ${piece.n + 1}`;
+      if (out.includes(`${piece.arrivalId}:${piece.n}`)) throw new ConflictException(`${tag} is already issued.`);
+      return { arrivalId: piece.arrivalId, n: piece.n, tag: stored.tag };
+    });
   }
 
   /** What came back of a returnable issue goes back into the stock it left. */

@@ -15,12 +15,15 @@ export function AuthedPhoto({
   alt,
   className,
   fill = false,
+  onClick,
 }: {
   path: string;
   alt: string;
   className?: string;
   /** As wide as its box - a card's photo - rather than its own size. */
   fill?: boolean;
+  /** In place of showing it large: a card's photo opens the card's pieces. */
+  onClick?: () => void;
 }) {
   const [large, setLarge] = useState(false);
   const photo = useQuery({
@@ -42,10 +45,11 @@ export function AuthedPhoto({
         type="button"
         onClick={(event) => {
           event.stopPropagation();
-          setLarge(true);
+          if (onClick) onClick();
+          else setLarge(true);
         }}
         className={clsx("shrink-0", fill && "block w-full")}
-        aria-label={`Show the photo of ${alt}`}
+        aria-label={onClick ? `Open ${alt}` : `Show the photo of ${alt}`}
       >
         <img src={photo.data} alt={alt} className={clsx("rounded object-cover ring-1 ring-slate-200", className)} />
       </button>

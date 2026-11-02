@@ -97,6 +97,26 @@ describe("InventoryStockRepository (real PostgreSQL)", () => {
     expect(await repo.itemPhotoKey(drillId)).toBe(OWN);
   });
 
+  // Client, 2 Nov 2026: the pieces are chosen one by one, and one out cannot go out again.
+  it("issues the pieces chosen, and refuses one that is already out until it is back", async () => {
+    const arrivals = new InventoryInwardRepository(db);
+    const boards = await arrivals.create(
+      createInventoryInwardSchema.parse({ siteId, inventoryItemId: drillId, quantity: "3", pieces: [{ tag: "EB-1" }, { tag: "EB-2" }, { tag: "EB-3" }] }),
+      ACTOR,
+    );
+    const out = await issue({ quantity: "2", pieces: [{ arrivalId: boards.id, n: 0 }, { arrivalId: boards.id, n: 2 }] });
+    expect(out.pieces.map((piece) => piece.tag)).toEqual(["EB-1", "EB-3"]);
+    expect((await arrivals.findById(boards.id)).pieces.map((piece) => piece.out)).toEqual([true, false, true]);
+
+    await expect(issue({ quantity: "1", pieces: [{ arrivalId: boards.id, n: 2 }] })).rejects.toThrow("EB-3 is already issued.");
+    await expect(issue({ quantity: "1", pieces: [{ arrivalId: boards.id, n: 7 }] })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(issue({ siteId: otherSiteId, quantity: "1", pieces: [{ arrivalId: boards.id, n: 1 }] })).rejects.toThrow();
+
+    await repo.receive(out.id, { quantity: "2", note: null }, ACTOR);
+    expect((await arrivals.findById(boards.id)).pieces.map((piece) => piece.out)).toEqual([false, false, false]);
+    expect((await issue({ quantity: "1", pieces: [{ arrivalId: boards.id, n: 2 }] })).pieces).toEqual([{ arrivalId: boards.id, n: 2, tag: "EB-3" }]);
+  });
+
   it("refuses more than is in stock at the site", async () => {
     await expect(issue({ quantity: "6" })).rejects.toThrow("Only 5.00 Nos of Drill Machine is in stock at this site.");
     await expect(issue({ siteId: otherSiteId })).rejects.toBeInstanceOf(ConflictException);

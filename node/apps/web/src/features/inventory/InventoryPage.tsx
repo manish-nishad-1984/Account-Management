@@ -24,6 +24,7 @@ import {
 } from "./api";
 import { InventoryFormDialog } from "./InventoryFormDialog";
 import { IssueDialog } from "./IssueDialog";
+import { ArrivalPiecesDialog } from "./ArrivalPiecesDialog";
 import { IssuesView } from "./IssueLists";
 import { StockView } from "./StockView";
 import { AuthedPhoto } from "./photos";
@@ -143,7 +144,9 @@ function ArrivalsView() {
     }
   };
   // ISSUE FROM THE ARRIVAL (client, 2 Nov 2026): its item at its site, ready to issue.
-  const [issueFor, setIssueFor] = useState<{ inventoryItemId: string; siteId: string | null } | null>(null);
+  const [issueFor, setIssueFor] = useState<Parameters<typeof IssueDialog>[0]["preset"]>(null);
+  // An arrival opened to its pieces (client, 2 Nov 2026).
+  const [piecesOf, setPiecesOf] = useState<InventoryInwardRow | null>(null);
   const issueButton = (row: InventoryInwardRow, label = false) =>
     canAdd && row.inventoryItemId ? (
       <Button
@@ -188,6 +191,12 @@ function ArrivalsView() {
                 </div>
               )}
               {/* Each piece's tag and photo (client, 30 Oct 2026). */}
+              {row.original.pieces.length > 0 && (
+                <button type="button" onClick={() => setPiecesOf(row.original)} className="text-xs font-medium text-brand-700 hover:underline">
+                  {row.original.pieces.length} {row.original.pieces.length === 1 ? "piece" : "pieces"}
+                  {row.original.pieces.some((piece) => piece.out) && ` · ${row.original.pieces.filter((piece) => piece.out).length} issued`}
+                </button>
+              )}
               {row.original.pieces.some((piece) => piece.tag) && (
                 <div className="text-xs text-slate-500">
                   Tags: {row.original.pieces.map((piece) => piece.tag).filter(Boolean).join(", ")}
@@ -390,6 +399,7 @@ function ArrivalsView() {
                       row={row}
                       issue={issueButton(row, true)}
                       onEdit={row.capabilities.canEdit ? () => openEdit(row.id) : undefined}
+                      onOpen={() => setPiecesOf(row)}
                     />
                   ))}
                 </ul>
@@ -424,7 +434,16 @@ function ArrivalsView() {
         isLoading={query.isLoading || !scope.isReady}
       />
 
-      <IssueDialog open={issueFor !== null} preset={issueFor} onClose={() => setIssueFor(null)} />
+      <IssueDialog open={!!issueFor} preset={issueFor} onClose={() => setIssueFor(null)} />
+      <ArrivalPiecesDialog
+        arrival={piecesOf}
+        canIssue={canAdd}
+        onClose={() => setPiecesOf(null)}
+        onIssue={(arrival, chosen) => {
+          setPiecesOf(null);
+          setIssueFor({ inventoryItemId: arrival.inventoryItemId!, siteId: arrival.siteId, pieces: chosen });
+        }}
+      />
 
       <InventoryFormDialog
         open={screen.isFormOpen}
@@ -464,21 +483,30 @@ function ArrivalCard({
   row,
   issue,
   onEdit,
+  onOpen,
 }: {
   row: InventoryInwardRow;
   issue: ReactNode;
   onEdit?: () => void;
+  /** The photo opens the arrival's pieces, each with its own photo. */
+  onOpen: () => void;
 }) {
   const photo = arrivalPhotoPath(row);
   const tags = row.pieces.map((piece) => piece.tag).filter(Boolean);
   return (
     <li className="flex flex-col overflow-hidden rounded-lg bg-white ring-1 ring-slate-200">
       {photo ? (
-        <AuthedPhoto path={photo} alt={row.itemName} className="aspect-square w-full rounded-none" fill />
+        <AuthedPhoto path={photo} alt={row.itemName} className="aspect-square w-full rounded-none" fill onClick={onOpen} />
       ) : (
-        <span className="flex aspect-square w-full items-center justify-center bg-slate-50 text-slate-300" title="No photo">
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label={`Open ${row.itemName}`}
+          className="flex aspect-square w-full items-center justify-center bg-slate-50 text-slate-300 hover:bg-slate-100"
+          title="No photo"
+        >
           <Package aria-hidden className="size-10" />
-        </span>
+        </button>
       )}
       <div className="flex flex-1 flex-col gap-0.5 p-2">
         <div className="truncate text-sm font-medium text-slate-900" title={row.itemName}>
@@ -493,6 +521,12 @@ function ArrivalCard({
           <div className="truncate text-xs text-slate-500" title={tags.join(", ")}>
             Tags: {tags.join(", ")}
           </div>
+        )}
+        {row.pieces.length > 0 && (
+          <button type="button" onClick={onOpen} className="self-start text-xs font-medium text-brand-700 hover:underline">
+            {row.pieces.length} {row.pieces.length === 1 ? "piece" : "pieces"}
+            {row.pieces.some((piece) => piece.out) && ` · ${row.pieces.filter((piece) => piece.out).length} issued`}
+          </button>
         )}
         <div className="mt-auto flex items-center justify-between gap-1 pt-1.5">
           <Badge dot tone={row.isApproved ? "success" : "warning"}>

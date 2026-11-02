@@ -114,6 +114,8 @@ export const inventoryIssueRowSchema = z.object({
   personHasPhoto: z.boolean(),
   /** An inventory item with a photo of its own or from an arrival. */
   itemHasPhoto: z.boolean(),
+  /** The pieces handed over, when they were chosen one by one: arrival, piece number (from 0), tag. */
+  pieces: z.array(z.object({ arrivalId: z.string(), n: z.number().int(), tag: z.string() })),
   issuedAt: z.string(),
   note: z.string().nullable(),
   returnedQuantity: z.string().nullable(),
@@ -148,10 +150,22 @@ export const createInventoryIssueSchema = z
     agencyContactId: uuidId.nullable().optional(),
     personId: uuidId,
     note: optionalText(500),
+    /**
+     * THE PIECES CHOSEN (client, 2 Nov 2026): which tagged pieces of the item's
+     * arrivals go out. With them, the quantity is how many there are.
+     */
+    pieces: z
+      .array(z.object({ arrivalId: uuidId, n: z.number().int().min(0).max(99) }))
+      .max(100)
+      .default([]),
   })
   .refine((issue) => (issue.source === "inventory" ? !!issue.inventoryItemId : !!issue.itemId), {
     message: "Choose the item",
     path: ["inventoryItemId"],
+  })
+  .refine((issue) => issue.pieces.length === 0 || (issue.source === "inventory" && Number(issue.quantity) === issue.pieces.length), {
+    message: "The quantity is the number of pieces chosen",
+    path: ["quantity"],
   });
 export type CreateInventoryIssue = z.infer<typeof createInventoryIssueSchema>;
 
